@@ -8,7 +8,7 @@ import { ROLE_LABELS, canManage } from '@/lib/roles';
 import toast from 'react-hot-toast';
 interface User {
     id: number;
-    username: string;
+    email: string;
     role: string;
     createdAt: string;
 }
@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
     // User Management State
     const [users, setUsers] = useState<User[]>([]);
-    const [newUsername, setNewUsername] = useState('');
+    const [newEmail, setNewEmail] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState('CASHIER');
     const [loadingUsers, setLoadingUsers] = useState(false);
@@ -120,19 +120,19 @@ export default function SettingsPage() {
 
     const handleAddUser = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newUsername || !newPassword) return;
+        if (!newEmail || !newPassword) return;
 
         setAddingUser(true);
         try {
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+                body: JSON.stringify({ email: newEmail, password: newPassword, role: newRole }),
             });
 
             if (res.ok) {
                 toast.success('تم إضافة المستخدم بنجاح ✅');
-                setNewUsername('');
+                setNewEmail('');
                 setNewPassword('');
                 fetchUsers();
             } else {
@@ -146,8 +146,8 @@ export default function SettingsPage() {
         }
     };
 
-    const handleDeleteUser = async (userId: number, username: string) => {
-        if (!confirm(`هل أنت متأكد من حذف المستخدم "${username}"؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+    const handleDeleteUser = async (userId: number, email: string) => {
+        if (!confirm(`هل أنت متأكد من حذف المستخدم "${email}"؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
         try {
             const res = await fetch(`/api/users?id=${userId}`, { method: 'DELETE' });
             const data = await res.json();
@@ -163,7 +163,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-8" dir="rtl">
+        <div className="min-h-screen p-8" dir="rtl" style={{ background: 'var(--bg-page)' }}>
             <div className="max-w-5xl mx-auto space-y-8">
 
                 {/* Header */}
@@ -347,12 +347,13 @@ export default function SettingsPage() {
                             <div className="p-8">
                                 <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                                     <div className="md:col-span-1">
-                                        <label className="block text-sm font-bold text-gray-600 mb-2">اسم المستخدم</label>
+                                        <label className="block text-sm font-bold text-gray-600 mb-2">البريد الإلكتروني</label>
                                         <input
                                             required
-                                            type="text"
-                                            value={newUsername}
-                                            onChange={(e) => setNewUsername(e.target.value)}
+                                            type="email"
+                                            value={newEmail}
+                                            onChange={(e) => setNewEmail(e.target.value)}
+                                            placeholder="user@example.com"
                                             className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-black"
                                         />
                                     </div>
@@ -402,7 +403,7 @@ export default function SettingsPage() {
                                     <thead className="bg-gray-50 text-gray-500 text-sm uppercase">
                                         <tr>
                                             <th className="px-6 py-4 font-bold">#</th>
-                                            <th className="px-6 py-4 font-bold">اسم المستخدم</th>
+                                            <th className="px-6 py-4 font-bold">البريد الإلكتروني</th>
                                             <th className="px-6 py-4 font-bold">الدور</th>
                                             <th className="px-6 py-4 font-bold">تاريخ الإنشاء</th>
                                             <th className="px-6 py-4 font-bold text-center">إجراءات</th>
@@ -417,7 +418,7 @@ export default function SettingsPage() {
                                             users.map((user, idx) => (
                                                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="px-6 py-4 text-gray-400">{idx + 1}</td>
-                                                    <td className="px-6 py-4 font-bold text-gray-800">{user.username}</td>
+                                                    <td className="px-6 py-4 font-bold text-gray-800">{user.email}</td>
                                                     <td className="px-6 py-4">
                                                         <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${(ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || ROLE_LABELS.CASHIER).bg} ${(ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || ROLE_LABELS.CASHIER).color}`}>
                                                             {user.role === 'SUPER_ADMIN' && <Crown size={12} />}
@@ -430,7 +431,7 @@ export default function SettingsPage() {
                                                     <td className="px-6 py-4 text-center">
                                                         {(isSuperAdmin || user.role !== 'SUPER_ADMIN') && (
                                                             <button
-                                                                onClick={() => handleDeleteUser(user.id, user.username)}
+                                                                onClick={() => handleDeleteUser(user.id, user.email)}
                                                                 className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
                                                                 title="حذف المستخدم"
                                                             >

@@ -33,15 +33,16 @@ export default function OrdersPage() {
     const [pagination, setPagination] = useState({ total: 0, pages: 1, page: 1 });
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [printReceipt, setPrintReceipt] = useState<ReceiptData | null>(null);
-    const { selectedBranch } = useBranch();
+    const { selectedBranch, loading: branchLoading } = useBranch();
 
     // Return Logic State
     const [isReturnMode, setIsReturnMode] = useState(false);
     const [returnItems, setReturnItems] = useState<{ [key: number]: number }>({});
 
     useEffect(() => {
+        if (branchLoading) return;
         fetchOrders();
-    }, [page, search, selectedBranch?.id]);
+    }, [page, search, selectedBranch?.id, branchLoading]);
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -169,7 +170,7 @@ export default function OrdersPage() {
                             type="text"
                             placeholder="بحث برقم الفاتورة..."
                             className="w-full pr-10 pl-4 py-2.5 rounded-xl outline-none transition-all font-semibold text-sm"
-                            style={{ background: 'white', border: '1.5px solid var(--border-color)', color: '#0f172a', boxShadow: 'var(--shadow-sm)' }}
+                            style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-color)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-sm)' }}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -177,7 +178,7 @@ export default function OrdersPage() {
                 </div>
 
                 {/* Orders List */}
-                <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
+                <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
                     <div className="overflow-x-auto">
                         <table className="data-table">
                             <thead>
@@ -282,8 +283,8 @@ export default function OrdersPage() {
             {/* Order Details Modal */}
             {selectedOrder && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl animate-fade-in-up max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-3xl">
+                    <div className="rounded-3xl w-full max-w-2xl shadow-2xl animate-fade-in-up max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-card)' }}>
+                        <div className="p-6 border-b flex justify-between items-center rounded-t-3xl" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-page)' }}>
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">تفاصيل الفاتورة #{(selectedOrder as any).receiptNumber || selectedOrder.id}</h2>
                                 <p className="text-sm text-gray-500 mt-1">{new Date(selectedOrder.date).toLocaleString('ar-IQ')}</p>
@@ -361,7 +362,7 @@ export default function OrdersPage() {
                             </div>
                         )}
 
-                        <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-3xl flex justify-between items-center">
+                        <div className="p-6 border-t rounded-b-3xl flex justify-between items-center" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-page)' }}>
                             <div className="text-xl font-bold text-gray-900">
                                 الإجمالي النهائي: <span className="text-blue-600">{formatCurrency(Number(selectedOrder.totalAmount))}</span>
                             </div>

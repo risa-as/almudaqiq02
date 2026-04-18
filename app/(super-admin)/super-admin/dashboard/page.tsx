@@ -92,7 +92,7 @@ export default function SuperAdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard title="إجمالي المستأجرين" value={stats.totalTenants} icon={Building2} colorClass="text-indigo-600" bgClass="bg-indigo-500" />
+        <StatCard title="إجمالي المنظمات" value={stats.totalTenants} icon={Building2} colorClass="text-indigo-600" bgClass="bg-indigo-500" />
         <StatCard title="نشط" value={stats.activeTenants} sub={`${stats.trialTenants} في فترة تجربة`} icon={TrendingUp} colorClass="text-emerald-600" bgClass="bg-emerald-500" />
         <StatCard title="الفروع النشطة" value={stats.totalBranches} icon={Building2} colorClass="text-violet-600" bgClass="bg-violet-500" />
         <StatCard title="معلق" value={stats.suspendedTenants} icon={AlertTriangle} colorClass="text-rose-500" bgClass="bg-rose-500" />

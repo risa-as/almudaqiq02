@@ -1,0 +1,135 @@
+﻿app/api/categories/route.ts(29,17): error TS2322: Type 'number | null' is not assignable to type 'string | null | undefined'.
+  Type 'number' is not assignable to type 'string'.
+app/api/categories/route.ts(44,22): error TS2322: Type 'number' is not assignable to type 'string | (CategoryTenantIdNameCompoundUniqueInput & string) | undefined'.
+app/api/categories/route.ts(48,17): error TS2322: Type 'number | null' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+  Type 'number' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+app/api/categories/route.ts(68,22): error TS2322: Type 'number' is not assignable to type 'string | (CategoryTenantIdNameCompoundUniqueInput & string) | undefined'.
+app/api/customers/[id]/history/route.ts(19,22): error TS2322: Type 'number' is not assignable to type 'string | StringNullableFilter<"Transaction"> | null | undefined'.
+app/api/customers/payment/route.ts(23,21): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/customers/payment/route.ts(31,26): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/customers/route.ts(35,13): error TS2322: Type '{ name: any; phone: any; address: any; balance: number; }' is not assignable to type '(Without<CustomerCreateInput, CustomerUncheckedCreateInput> & CustomerUncheckedCreateInput) | (Without<...> & CustomerCreateInput)'.
+  Type '{ name: any; phone: any; address: any; balance: number; }' is not assignable to type 'Without<CustomerUncheckedCreateInput, CustomerCreateInput> & CustomerCreateInput'.
+    Property 'tenant' is missing in type '{ name: any; phone: any; address: any; balance: number; }' but required in type 'CustomerCreateInput'.
+app/api/customers/route.ts(56,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/customers/route.ts(74,70): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/customers/route.ts(78,26): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/expenses/route.ts(45,13): error TS2322: Type '{ title: any; amount: number; category: any; description: any; date: Date; }' is not assignable to type '(Without<ExpenseCreateInput, ExpenseUncheckedCreateInput> & ExpenseUncheckedCreateInput) | (Without<...> & ExpenseCreateInput)'.
+  Type '{ title: any; amount: number; category: any; description: any; date: Date; }' is not assignable to type 'Without<ExpenseUncheckedCreateInput, ExpenseCreateInput> & ExpenseCreateInput'.
+    Type '{ title: any; amount: number; category: any; description: any; date: Date; }' is missing the following properties from type 'ExpenseCreateInput': tenant, branch
+app/api/expenses/route.ts(67,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/expenses/route.ts(82,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(21,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(29,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(44,21): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(74,26): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(92,25): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(103,29): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(114,34): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/inventory/batch/route.ts(121,34): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/license/activate/route.ts(32,29): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateManyMutationInput, StoreSettingsUncheckedUpdateManyInput> & StoreSettingsUncheckedUpdateManyInput) | (Without<...> & StoreSettingsUpdateManyMutationInput)'.
+app/api/license/activate/route.ts(47,29): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateManyMutationInput, StoreSettingsUncheckedUpdateManyInput> & StoreSettingsUncheckedUpdateManyInput) | (Without<...> & StoreSettingsUpdateManyMutationInput)'.
+app/api/license/activate/route.ts(71,21): error TS2353: Object literal may only specify known properties, and 'activationKey' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/license/activate/route.ts(79,21): error TS2353: Object literal may only specify known properties, and 'activationKey' does not exist in type '(Without<StoreSettingsCreateInput, StoreSettingsUncheckedCreateInput> & StoreSettingsUncheckedCreateInput) | (Without<...> & StoreSettingsCreateInput)'.
+app/api/license/status/route.ts(12,24): error TS2339: Property 'activationKey' does not exist on type '{ tenantId: string; branchId: string; id: string; updatedAt: Date; storeName: string; storeAddress: string | null; storePhone: string | null; taxNumber: string | null; footerMessage: string | null; autoPrint: boolean; }'.
+app/api/license/status/route.ts(27,22): error TS2339: Property 'lastActiveDate' does not exist on type '{ tenantId: string; branchId: string; id: string; updatedAt: Date; storeName: string; storeAddress: string | null; storePhone: string | null; taxNumber: string | null; footerMessage: string | null; autoPrint: boolean; }'.
+app/api/license/status/route.ts(28,50): error TS2339: Property 'lastActiveDate' does not exist on type '{ tenantId: string; branchId: string; id: string; updatedAt: Date; storeName: string; storeAddress: string | null; storePhone: string | null; taxNumber: string | null; footerMessage: string | null; autoPrint: boolean; }'.
+app/api/license/status/route.ts(35,29): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/license/status/route.ts(47,53): error TS2339: Property 'activationKey' does not exist on type '{ tenantId: string; branchId: string; id: string; updatedAt: Date; storeName: string; storeAddress: string | null; storePhone: string | null; taxNumber: string | null; footerMessage: string | null; autoPrint: boolean; }'.
+app/api/license/status/route.ts(53,25): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/license/status/route.ts(65,29): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/license/status/route.ts(79,29): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/license/status/route.ts(91,21): error TS2353: Object literal may only specify known properties, and 'systemStatus' does not exist in type '(Without<StoreSettingsUpdateInput, StoreSettingsUncheckedUpdateInput> & StoreSettingsUncheckedUpdateInput) | (Without<...> & StoreSettingsUpdateInput)'.
+app/api/offers/[id]/route.ts(14,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/offers/[id]/route.ts(21,17): error TS2322: Type 'number | null' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+  Type 'number' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+app/api/offers/[id]/route.ts(22,17): error TS2322: Type 'number | null' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+  Type 'number' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+app/api/offers/[id]/route.ts(40,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/offers/route.ts(58,17): error TS2322: Type 'number | null' is not assignable to type 'string | null | undefined'.
+  Type 'number' is not assignable to type 'string'.
+app/api/offers/route.ts(59,17): error TS2322: Type 'number | null' is not assignable to type 'string | null | undefined'.
+  Type 'number' is not assignable to type 'string'.
+app/api/products/[id]/history/route.ts(18,22): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"TransactionItem"> | undefined'.
+app/api/products/[id]/history/route.ts(31,22): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"ProductBatch"> | undefined'.
+app/api/products/[id]/route.ts(19,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/products/[id]/route.ts(51,26): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/products/[id]/route.ts(56,21): error TS2322: Type 'number | null' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+  Type 'number' is not assignable to type 'string | NullableStringFieldUpdateOperationsInput | null | undefined'.
+app/api/products/[id]/route.ts(114,22): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"TransactionItem"> | undefined'.
+app/api/products/[id]/route.ts(126,56): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"ProductUnit"> | undefined'.
+app/api/products/[id]/route.ts(127,48): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/products/route.ts(69,21): error TS2322: Type 'number | null' is not assignable to type 'string | null | undefined'.
+  Type 'number' is not assignable to type 'string'.
+app/api/products/route.ts(70,21): error TS2322: Type 'number | null' is not assignable to type 'string | null | undefined'.
+  Type 'number' is not assignable to type 'string'.
+app/api/products/route.ts(99,25): error TS2322: Type '{ productId: string; quantity: number; costPrice: number; batchNumber: string; expiryDate: null; }' is not assignable to type '(Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput) | (Without<...> & ProductBatchCreateInput)'.
+  Type '{ productId: string; quantity: number; costPrice: number; batchNumber: string; expiryDate: null; }' is not assignable to type 'Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput'.
+    Type '{ productId: string; quantity: number; costPrice: number; batchNumber: string; expiryDate: null; }' is missing the following properties from type 'ProductBatchUncheckedCreateInput': tenantId, branchId
+app/api/reports/analytics/route.ts(143,37): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+app/api/reports/analytics/route.ts(144,36): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+app/api/reports/analytics/route.ts(150,32): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+app/api/reports/analytics/route.ts(151,32): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+app/api/reports/analytics/route.ts(196,23): error TS2322: Type 'number[]' is not assignable to type 'string[] | FieldRef<"Product", "String[]"> | undefined'.
+  Type 'number[]' is not assignable to type 'string[]'.
+    Type 'number' is not assignable to type 'string'.
+app/api/settings/route.ts(11,17): error TS2322: Type '{ storeName: string; storePhone: string; storeAddress: string; footerMessage: string; autoPrint: false; }' is not assignable to type '(Without<StoreSettingsCreateInput, StoreSettingsUncheckedCreateInput> & StoreSettingsUncheckedCreateInput) | (Without<...> & StoreSettingsCreateInput)'.
+  Type '{ storeName: string; storePhone: string; storeAddress: string; footerMessage: string; autoPrint: false; }' is not assignable to type 'Without<StoreSettingsUncheckedCreateInput, StoreSettingsCreateInput> & StoreSettingsCreateInput'.
+    Type '{ storeName: string; storePhone: string; storeAddress: string; footerMessage: string; autoPrint: false; }' is missing the following properties from type 'StoreSettingsCreateInput': tenant, branch
+app/api/settings/route.ts(47,17): error TS2322: Type '{ storeName: any; storePhone: any; storeAddress: any; footerMessage: any; autoPrint: any; }' is not assignable to type '(Without<StoreSettingsCreateInput, StoreSettingsUncheckedCreateInput> & StoreSettingsUncheckedCreateInput) | (Without<...> & StoreSettingsCreateInput)'.
+  Type '{ storeName: any; storePhone: any; storeAddress: any; footerMessage: any; autoPrint: any; }' is not assignable to type 'Without<StoreSettingsUncheckedCreateInput, StoreSettingsCreateInput> & StoreSettingsCreateInput'.
+    Type '{ storeName: any; storePhone: any; storeAddress: any; footerMessage: any; autoPrint: any; }' is missing the following properties from type 'StoreSettingsCreateInput': tenant, branch
+app/api/suppliers/[id]/payment/route.ts(17,70): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/payment/route.ts(28,21): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/payment/route.ts(39,26): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/route.ts(11,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/route.ts(19,22): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"SupplierLedger"> | undefined'.
+app/api/suppliers/[id]/route.ts(37,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/route.ts(64,22): error TS2322: Type 'number' is not assignable to type 'string | StringNullableFilter<"Product"> | null | undefined'.
+app/api/suppliers/[id]/route.ts(76,70): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/[id]/route.ts(84,59): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"SupplierLedger"> | undefined'.
+app/api/suppliers/[id]/route.ts(85,49): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/suppliers/route.ts(32,13): error TS2322: Type '{ name: any; phone: any; address: any; balance: number; }' is not assignable to type '(Without<SupplierCreateInput, SupplierUncheckedCreateInput> & SupplierUncheckedCreateInput) | (Without<...> & SupplierCreateInput)'.
+  Type '{ name: any; phone: any; address: any; balance: number; }' is not assignable to type 'Without<SupplierUncheckedCreateInput, SupplierCreateInput> & SupplierCreateInput'.
+    Property 'tenant' is missing in type '{ name: any; phone: any; address: any; balance: number; }' but required in type 'SupplierCreateInput'.
+app/api/sync/push/route.ts(50,5): error TS2322: Type '{ branchId: string; status: string; }' is not assignable to type '(Without<SyncLogCreateInput, SyncLogUncheckedCreateInput> & SyncLogUncheckedCreateInput) | (Without<...> & SyncLogCreateInput)'.
+  Type '{ branchId: string; status: string; }' is not assignable to type 'Without<SyncLogCreateInput, SyncLogUncheckedCreateInput> & SyncLogUncheckedCreateInput'.
+    Property 'tenantId' is missing in type '{ branchId: string; status: string; }' but required in type 'SyncLogUncheckedCreateInput'.
+app/api/transactions/[id]/route.ts(19,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(31,22): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(65,25): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(66,25): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(74,73): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(80,30): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"ProductBatch"> | undefined'.
+app/api/transactions/refund/route.ts(90,76): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(94,33): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/refund/route.ts(104,30): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/return/route.ts(33,17): error TS2322: Type '{ type: string; totalAmount: number; date: Date; userId: string | null; customerId: string | null; }' is not assignable to type '(Without<TransactionCreateInput, TransactionUncheckedCreateInput> & TransactionUncheckedCreateInput) | (Without<...> & TransactionCreateInput)'.
+  Type '{ type: string; totalAmount: number; date: Date; userId: string | null; customerId: string | null; }' is not assignable to type 'Without<TransactionCreateInput, TransactionUncheckedCreateInput> & TransactionUncheckedCreateInput'.
+    Type '{ type: string; totalAmount: number; date: Date; userId: string | null; customerId: string | null; }' is missing the following properties from type 'TransactionUncheckedCreateInput': tenantId, branchId
+app/api/transactions/route.ts(61,75): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/route.ts(67,26): error TS2322: Type 'number' is not assignable to type 'string | StringFilter<"CashierShift"> | undefined'.
+app/api/transactions/route.ts(99,72): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/route.ts(100,73): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/route.ts(114,25): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/route.ts(115,25): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transactions/route.ts(132,34): error TS2322: Type 'number' is not assignable to type 'string'.
+app/api/transfers/[id]/route.ts(56,13): error TS2322: Type '{ productId: string; branchId: string; quantity: number; costPrice: Decimal; batchNumber: string | null; expiryDate: Date | null; }' is not assignable to type '(Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput) | (Without<...> & ProductBatchCreateInput)'.
+  Type '{ productId: string; branchId: string; quantity: number; costPrice: Decimal; batchNumber: string | null; expiryDate: Date | null; }' is not assignable to type 'Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput'.
+    Property 'tenantId' is missing in type '{ productId: string; branchId: string; quantity: number; costPrice: Decimal; batchNumber: string | null; expiryDate: Date | null; }' but required in type 'ProductBatchUncheckedCreateInput'.
+app/api/users/route.ts(48,57): error TS2322: Type '{ username: any; }' is not assignable to type 'UserWhereUniqueInput'.
+  Type '{ username: any; }' is not assignable to type '{ id: string | UserTenantIdUsernameCompoundUniqueInput; tenantId_username: string | UserTenantIdUsernameCompoundUniqueInput; } & { ...; }'.
+    Type '{ username: any; }' is missing the following properties from type '{ id: string | UserTenantIdUsernameCompoundUniqueInput; tenantId_username: string | UserTenantIdUsernameCompoundUniqueInput; }': id, tenantId_username
+app/api/users/route.ts(54,13): error TS2322: Type '{ username: any; password: string; role: any; }' is not assignable to type '(Without<UserCreateInput, UserUncheckedCreateInput> & UserUncheckedCreateInput) | (Without<...> & UserCreateInput)'.
+  Type '{ username: any; password: string; role: any; }' is not assignable to type 'Without<UserUncheckedCreateInput, UserCreateInput> & UserCreateInput'.
+    Property 'tenant' is missing in type '{ username: any; password: string; role: any; }' but required in type 'UserCreateInput'.
+app/api/users/route.ts(82,62): error TS2322: Type 'number' is not assignable to type 'string | (UserTenantIdUsernameCompoundUniqueInput & string) | undefined'.
+app/api/users/route.ts(108,45): error TS2322: Type 'number' is not assignable to type 'string | (UserTenantIdUsernameCompoundUniqueInput & string) | undefined'.
+lib/inventory-logic.ts(111,14): error TS2322: Type 'number' is not assignable to type 'string'.
+lib/inventory-logic.ts(126,14): error TS2322: Type 'number' is not assignable to type 'string'.
+lib/inventory-logic.ts(141,14): error TS2322: Type 'number' is not assignable to type 'string'.
+scripts/cron/check-expiring-subscriptions.ts(103,38): error TS18047: 'sub.endDate' is possibly 'null'.
+scripts/cron/check-expiring-subscriptions.ts(123,30): error TS18047: 'sub.endDate' is possibly 'null'.
+scripts/migrate-to-multitenant.ts(19,22): error TS2307: Cannot find module 'better-sqlite3' or its corresponding type declarations.
+scripts/migrate-to-multitenant.ts(218,7): error TS2322: Type '{ productId: string; branchId: string; batchNumber: any; expiryDate: Date | null; quantity: any; costPrice: any; createdAt: Date; }' is not assignable to type '(Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput) | (Without<...> & ProductBatchCreateInput)'.
+  Type '{ productId: string; branchId: string; batchNumber: any; expiryDate: Date | null; quantity: any; costPrice: any; createdAt: Date; }' is not assignable to type 'Without<ProductBatchCreateInput, ProductBatchUncheckedCreateInput> & ProductBatchUncheckedCreateInput'.
+    Property 'tenantId' is missing in type '{ productId: string; branchId: string; batchNumber: any; expiryDate: Date | null; quantity: any; costPrice: any; createdAt: Date; }' but required in type 'ProductBatchUncheckedCreateInput'.

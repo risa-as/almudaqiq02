@@ -1,0 +1,84 @@
+﻿
+> supermarket-core@0.1.0 build
+> next build
+
+ظû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+
+node.exe : ظأب The 
+"middleware" file 
+convention is 
+deprecated. Please 
+use "proxy" instead. 
+Learn more: https://n
+extjs.org/docs/messag
+es/middleware-to-prox
+y
+At line:1 char:1
++ & "C:\Program Files
+\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (ظأب The   
+  "middle...lewar    
+e-to-proxy:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+  Creating an optimized production build ...
+ظ£ô Compiled successfully in 16.6s
+  Running TypeScript ...
+Failed to compile.
+
+./app/(tenant)/sales/
+customers/[id]/page.t
+sx:21:18
+Type error: Type 
+'number' is not 
+assignable to type 
+'string'.
+
+[0m [90m 19 |[39m
+ [90m 20 |[39m     
+[36mconst[39m 
+customer [33m=[39m 
+[36mawait[39m prism
+a[33m.[39mcustomer
+[33m.[39mfindUnique(
+{
+[31m[1m>[22m[39m
+[90m 21 |[39m       
+  where[33m:[39m { 
+id[33m:[39m 
+customerId 
+}[33m,[39m
+ [90m    |[39m     
+             
+[31m[1m^[22m[39m
+ [90m 22 |[39m     
+    
+include[33m:[39m {
+ [90m 23 |[39m     
+        transactions
+[33m:[39m {
+ [90m 24 |[39m     
+            
+orderBy[33m:[39m { 
+date[33m:[39m 
+[32m'asc'[39m 
+}[33m,[39m [90m// 
+Get in chronological 
+order[39m[0m
+Next.js build worker 
+exited with code: 1 
+and signal: null

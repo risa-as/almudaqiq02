@@ -1,0 +1,163 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getTenantId } from '@/lib/api-helpers';
+
+export async function GET(request: Request) {
+    const tenantId = await getTenantId();
+    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const branchId = searchParams.get('branchId');
+    const branchFilter = branchId && branchId !== 'all' ? { branchId } : {};
+
+    // Default to this month
+    const start = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    try {
+        // 1. Revenue (Total Sales) - include SALE and RETURN types
+        const transactions = await prisma.transaction.findMany({
+            where: {
+                tenantId,
+                ...branchFilter,
+                type: { in: ['SALE', 'RETURN', 'REFUND'] },
+                date: {
+                    gte: start,
+                    lte: end
+                }
+            },
+            include: {
+                items: {
+                    include: {
+                        product: true,
+                        unit: true
+                    }
+                }
+            }
+        });
+
+        let revenue = 0;
+        let cogs = 0; // Cost of Goods Sold
+        const salesList: any[] = []; // Collect items for the Sales Table (SALE only)
+
+        transactions.forEach(tx => {
+            // RETURN has negative totalAmount; REFUND has positive totalAmount (from POS)
+            if (tx.type === 'REFUND') {
+                revenue -= Number(tx.totalAmount); // positive amount, subtract from revenue
+            } else {
+                revenue += Number(tx.totalAmount); // SALE (+), RETURN (-)
+            }
+
+            if (tx.type === 'SALE') {
+                tx.items.forEach(item => {
+                    cogs += Number(item.cost);
+
+                    salesList.push({
+                        id: item.id,
+                        productName: item.product?.name || 'منتج محذوف',
+                        quantity: Number(item.quantity),
+                        unitName: item.unit?.name || 'وحدة',
+                        price: Number(item.price),
+                        cost: Number(item.cost),
+                        transactionDate: tx.date
+                    });
+                });
+            } else if (tx.type === 'RETURN' || tx.type === 'REFUND') {
+                // Reduce COGS for returned items
+                tx.items.forEach(item => {
+                    cogs -= Number(item.cost);
+                });
+            }
+        });
+
+        // 2. Operating Expenses
+        const expenses = await prisma.expense.findMany({
+            where: {
+                tenantId,
+                ...branchFilter,
+                date: {
+                    gte: start,
+                    lte: end
+                }
+            }
+        });
+
+        let totalExpenses = 0;
+        expenses.forEach(exp => totalExpenses += Number(exp.amount));
+
+        // 3. Calculations
+        const grossProfit = revenue - cogs;
+        const netProfit = grossProfit - totalExpenses;
+        const margin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
+
+        // 4. Chart Data Generation (Group by Date)
+        const dailyData: Record<string, { revenue: number; profit: number; cogs: number; expenses: number }> = {};
+
+        // Initialize days between start and end date
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            dailyData[d.toISOString().split('T')[0]] = { revenue: 0, profit: 0, cogs: 0, expenses: 0 };
+        }
+
+        // Aggregate transactions and cogs
+        transactions.forEach(tx => {
+            const dateStr = tx.date.toISOString().split('T')[0];
+            if (!dailyData[dateStr]) dailyData[dateStr] = { revenue: 0, profit: 0, cogs: 0, expenses: 0 };
+
+            // RETURN has negative totalAmount; REFUND has positive totalAmount (from POS)
+            if (tx.type === 'REFUND') {
+                dailyData[dateStr].revenue -= Number(tx.totalAmount);
+            } else {
+                dailyData[dateStr].revenue += Number(tx.totalAmount); // SALE (+), RETURN (-)
+            }
+
+            if (tx.type === 'SALE') {
+                tx.items.forEach(item => {
+                    dailyData[dateStr].cogs += Number(item.cost);
+                });
+            } else if (tx.type === 'RETURN' || tx.type === 'REFUND') {
+                tx.items.forEach(item => {
+                    dailyData[dateStr].cogs -= Number(item.cost);
+                });
+            }
+        });
+
+        // Aggregate expenses
+        expenses.forEach(exp => {
+            const dateStr = exp.date.toISOString().split('T')[0];
+            if (!dailyData[dateStr]) dailyData[dateStr] = { revenue: 0, profit: 0, cogs: 0, expenses: 0 };
+            dailyData[dateStr].expenses += Number(exp.amount);
+        });
+
+        // Format to chart array
+        const chartData = Object.keys(dailyData).sort().map(date => {
+            const day = dailyData[date];
+            const dayGross = day.revenue - day.cogs;
+            return {
+                date,
+                revenue: day.revenue,
+                profit: dayGross - day.expenses
+            };
+        });
+
+        return NextResponse.json({
+            range: { start, end },
+            financials: {
+                revenue,
+                cogs,
+                grossProfit,
+                operatingExpenses: totalExpenses,
+                netProfit,
+                margin
+            },
+            salesList,
+            expensesList: expenses,
+            chartData
+        });
+
+    } catch (error) {
+        console.error('Financial report error:', error);
+        return NextResponse.json({ error: 'Failed to generate financial report' }, { status: 500 });
+    }
+}

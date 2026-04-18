@@ -16,7 +16,7 @@ interface SalesData {
 }
 
 export default function SalesReportPage() {
-    const { selectedBranch } = useBranch();
+    const { selectedBranch, loading: branchLoading } = useBranch();
     const [period, setPeriod] = useState('daily');
     const [userId, setUserId] = useState('ALL');
     const [data, setData] = useState<SalesData | null>(null);
@@ -28,9 +28,9 @@ export default function SalesReportPage() {
     }, []);
 
     useEffect(() => {
-        if (!selectedBranch) return;
+        if (branchLoading) return;
         fetchSales();
-    }, [period, userId, selectedBranch]);
+    }, [period, userId, selectedBranch, branchLoading]);
 
     const fetchUsers = async () => {
         const res = await fetch('/api/users');
@@ -103,7 +103,7 @@ export default function SalesReportPage() {
 
             {/* Filters */}
             <div className="flex flex-wrap gap-4 items-center p-4 rounded-2xl no-print"
-                style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(12px)', border: '1px solid rgba(226,232,240,0.8)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                style={{ background: 'var(--bg-card-glass)', backdropFilter: 'blur(12px)', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                 <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--text-secondary)' }}>
                     <Filter size={16} />
                     <span className="text-sm">تصفية:</span>
@@ -111,17 +111,17 @@ export default function SalesReportPage() {
 
                 <select value={period} onChange={e => setPeriod(e.target.value)}
                     className="px-4 py-2 rounded-xl text-sm font-bold outline-none"
-                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f172a' }}>
+                    style={{ background: 'var(--bg-page)', border: '1.5px solid var(--border-color)', color: 'var(--text-primary)' }}>
                     <option value="daily">اليوم</option>
                     <option value="weekly">هذا الأسبوع</option>
                     <option value="monthly">هذا الشهر</option>
                 </select>
 
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0' }}>
+                    style={{ background: 'var(--bg-page)', border: '1.5px solid var(--border-color)' }}>
                     <User size={15} className="text-slate-400" />
                     <select value={userId} onChange={e => setUserId(e.target.value)}
-                        className="bg-transparent text-sm font-bold outline-none min-w-[120px]" style={{ color: '#0f172a' }}>
+                        className="bg-transparent text-sm font-bold outline-none min-w-[120px]" style={{ color: 'var(--text-primary)' }}>
                         <option value="ALL">كل الكاشيرات</option>
                         {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
                     </select>
@@ -144,7 +144,7 @@ export default function SalesReportPage() {
                             <h3 className="text-3xl font-black relative z-10">{formatCurrency(data.totalSales)}</h3>
                         </div>
                         <div className="rounded-2xl p-6 relative overflow-hidden"
-                            style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
                             <p className="font-bold mb-1 text-sm" style={{ color: 'var(--text-secondary)' }}>عدد الفواتير</p>
                             <h3 className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>{data.transactionCount}</h3>
                         </div>
@@ -154,7 +154,7 @@ export default function SalesReportPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                         {/* Sales Chart */}
                         <div className="lg:col-span-2 p-6 rounded-2xl"
-                            style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
                             <h3 className="font-bold mb-6 flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
                                 <div className="w-7 h-7 rounded-lg flex items-center justify-center"
                                     style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
@@ -191,7 +191,7 @@ export default function SalesReportPage() {
                                             <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{cat.name}</span>
                                             <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{formatCurrency(cat.value)}</span>
                                         </div>
-                                        <div className="w-full rounded-full h-2" style={{ background: '#f1f5f9' }}>
+                                        <div className="w-full rounded-full h-2" style={{ background: 'var(--border-color)' }}>
                                             <div className="h-2 rounded-full"
                                                 style={{
                                                     width: `${data.totalSales > 0 ? (cat.value / data.totalSales) * 100 : 0}%`,
@@ -209,7 +209,7 @@ export default function SalesReportPage() {
 
                     {/* Sales Table */}
                     <div className="rounded-2xl overflow-hidden"
-                        style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
+                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
                         <div className="p-5 flex items-center gap-2.5" style={{ borderBottom: '1px solid var(--border-light)' }}>
                             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
                                 style={{ background: 'linear-gradient(135deg, #64748b, #475569)' }}>

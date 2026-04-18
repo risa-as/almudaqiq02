@@ -1,0 +1,257 @@
+// Local SQLite schema for Electron desktop app (offline-first)
+// This mirrors the cloud schema but with sync tracking fields
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-local"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("LOCAL_DATABASE_URL")
+}
+
+// ─── Sync Metadata ───────────────────────────────────────────────────────────
+
+model SyncMeta {
+  id           Int      @id @default(autoincrement())
+  branchToken  String   // JWT token issued by cloud for this branch
+  tenantId     String
+  branchId     String
+  lastPullAt   DateTime?
+  lastPushAt   DateTime?
+  updatedAt    DateTime @updatedAt
+}
+
+model SyncQueue {
+  id         Int      @id @default(autoincrement())
+  tableName  String   // "transactions", "customers", etc.
+  operation  String   // INSERT | UPDATE | DELETE
+  recordId   String   // The local record's ID (stringified)
+  payload    String   // JSON string of the full record
+  createdAt  DateTime @default(now())
+  syncedAt   DateTime?
+  attempts   Int      @default(0)
+  lastError  String?
+}
+
+// ─── Core Models (mirrors cloud, single-branch scope) ───────────────────────
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String   // bcrypt hashed
+  role         String   @default("CASHIER")
+  cloudId      String?  // UUID from cloud
+  tenantId     String?
+  branchId     String?
+  failedAttempts Int    @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transactions Transaction[]
+  shifts       CashierShift[]
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  cloudId   String?
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  balance   Decimal  @default(0.00)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+  ledger   SupplierLedger[]
+}
+
+model SupplierLedger {
+  id          Int      @id @default(autoincrement())
+  cloudId     String?
+  supplierId  Int
+  type        String
+  amount      Decimal
+  description String?
+  date        DateTime @default(now())
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  cloudId     String?
+  name        String
+  description String?
+  parentId    Int?
+  createdAt   DateTime  @default(now())
+
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+  offers      Offer[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  cloudId     String?
+  name        String
+  description String?
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  baseStock   Int      @default(0)
+  costPrice   Decimal  @default(0.00)
+  supplierId  Int?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  units       ProductUnit[]
+  batches     ProductBatch[]
+  transactionItems TransactionItem[]
+  offers      Offer[]
+}
+
+model ProductUnit {
+  id               Int      @id @default(autoincrement())
+  cloudId          String?
+  productId        Int
+  name             String
+  conversionFactor Int      @default(1)
+  barcode          String   @unique
+  price            Decimal  @default(0.00)
+
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transactionItems TransactionItem[]
+}
+
+model ProductBatch {
+  id          Int       @id @default(autoincrement())
+  cloudId     String?
+  productId   Int
+  batchNumber String?
+  expiryDate  DateTime?
+  quantity    Int
+  costPrice   Decimal
+  createdAt   DateTime  @default(now())
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  cloudId   String?
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  balance   Decimal  @default(0.00)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id            Int      @id @default(autoincrement())
+  cloudId       String?
+  type          String
+  totalAmount   Decimal
+  date          DateTime @default(now())
+  userId        Int?
+  notes         String?
+  discount      Decimal  @default(0.00)
+  paymentMethod String   @default("CASH")
+  paidAmount    Decimal?
+  originalTxId  Int?
+
+  user          User?    @relation(fields: [userId], references: [id])
+  customerId    Int?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  items         TransactionItem[]
+}
+
+model TransactionItem {
+  id            Int         @id @default(autoincrement())
+  transactionId Int
+  productId     Int
+  unitId        Int
+  quantity      Decimal     @default(1.00)
+  price         Decimal
+  cost          Decimal     @default(0.00)
+
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product       Product     @relation(fields: [productId], references: [id])
+  unit          ProductUnit @relation(fields: [unitId], references: [id])
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  cloudId     String?
+  title       String
+  amount      Decimal
+  category    String?
+  description String?
+  date        DateTime @default(now())
+}
+
+model Offer {
+  id          Int      @id @default(autoincrement())
+  cloudId     String?
+  name        String
+  type        String
+  value       Decimal
+  buyQuantity Int?
+  getQuantity Int?
+  productId   Int?
+  categoryId  Int?
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product     Product?  @relation(fields: [productId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
+}
+
+model CashierShift {
+  id             Int      @id @default(autoincrement())
+  cloudId        String?
+  userId         Int
+  openingAmount  Decimal  @default(0.00)
+  closingAmount  Decimal?
+  expectedAmount Decimal?
+  difference     Decimal?
+  openedAt       DateTime @default(now())
+  closedAt       DateTime?
+  notes          String?
+
+  user           User     @relation(fields: [userId], references: [id])
+}
+
+model StoreSettings {
+  id            Int      @id @default(autoincrement())
+  storeName     String   @default("سوبر ماركت")
+  storeAddress  String?
+  storePhone    String?
+  taxNumber     String?
+  footerMessage String?
+  autoPrint     Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  username  String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+}

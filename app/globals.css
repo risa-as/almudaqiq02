@@ -468,14 +468,73 @@ button {
 .value-muted    { color: var(--value-muted); }
 
 /* ====================================================
+   Base Form Controls — normalize appearance globally
+   ==================================================== */
+
+/* Reset placed in @layer base so Tailwind utility classes (bg-gray-50, bg-white …)
+   still win in the cascade — inputs with no bg class become transparent (inherit
+   from their wrapper div), inputs with an explicit bg-* class keep their colour. */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea {
+    background-color: transparent;
+  }
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+select,
+textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  outline: none;
+  outline-offset: 0;
+  border-image: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom select arrow — light mode */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px center;
+  padding-left: 36px;
+}
+
+/* Remove browser focus ring on all elements */
+*:focus,
+*:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+/* ====================================================
    Premium Input Focus
    ==================================================== */
-input:focus,
-select:focus,
-textarea:focus {
+
+/* Standalone inputs (have their own border) — focus ring on self */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])[class*="border"]:focus,
+select[class*="border"]:focus,
+textarea[class*="border"]:focus {
   outline: none;
   border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 3px var(--color-primary-glow) !important;
+}
+
+/* Inputs inside wrapper divs (no border class on the input itself)
+   — focus ring goes on the wrapper via :focus-within */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class*="border"]):focus,
+textarea:not([class*="border"]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Only the DIRECT parent div of the focused input gets the ring */
+div:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus)[class*="border"],
+div:has(> textarea:focus)[class*="border"] {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-glow) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 /* ====================================================
@@ -485,3 +544,383 @@ textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ====================================================
+   DARK MODE — html.dark overrides
+   ==================================================== */
+html.dark {
+  color-scheme: dark;
+
+  /* ── Backgrounds ── */
+  --bg-page: #0d1117;
+  --bg-card: #161b26;
+  --bg-card-glass: rgba(22, 27, 38, 0.92);
+
+  /* ── Text ── */
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --text-main: #e6edf3;
+  --value-neutral: #cdd9e5;
+  --value-muted: #6e7681;
+
+  /* ── Tables ── */
+  --table-header-bg: #161b26;
+  --table-header-text: #6e7681;
+  --table-row-hover: rgba(99, 102, 241, 0.06);
+  --table-border: #30363d;
+  --table-text: #cdd9e5;
+  --table-text-secondary: #8b949e;
+
+  /* ── Borders ── */
+  --border-color: #30363d;
+  --border-light: #21262d;
+  --border-primary: rgba(99, 102, 241, 0.4);
+
+  /* ── State colours ── */
+  --color-primary-light: rgba(99, 102, 241, 0.15);
+  --color-secondary-light: #161b26;
+  --color-success-light: rgba(16, 185, 129, 0.12);
+  --color-success-text: #3fb950;
+  --color-danger-light: rgba(239, 68, 68, 0.12);
+  --color-danger-text: #f85149;
+  --color-warning-light: rgba(245, 158, 11, 0.12);
+  --color-warning-text: #e3b341;
+  --color-accent-light: rgba(245, 158, 11, 0.12);
+  --color-accent-text: #e3b341;
+  --color-primary-text: #a5b4fc;
+
+  /* ── Gradients ── */
+  --gradient-card: linear-gradient(135deg, #161b26 0%, #1a2133 100%);
+  --gradient-page: linear-gradient(135deg, #0d1117 0%, #0d1117 100%);
+  --gradient-brand-soft: rgba(99, 102, 241, 0.12);
+
+  /* ── Shadows (deeper in dark) ── */
+  --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-sm:   0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-md:   0 8px 16px -4px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-lg:   0 16px 32px -8px rgb(0 0 0 / 0.6), 0 8px 16px -8px rgb(0 0 0 / 0.4);
+  --shadow-hover:0 20px 40px -12px rgb(0 0 0 / 0.7), 0 8px 16px -8px rgb(0 0 0 / 0.5);
+}
+
+/* ── Skeleton dark ── */
+html.dark .skeleton {
+  background: linear-gradient(90deg, #1c2333 25%, #2d3748 50%, #1c2333 75%) !important;
+  background-size: 200% 100% !important;
+}
+
+/* ── Scrollbar dark ── */
+html.dark ::-webkit-scrollbar-track { background: #0d1117; }
+html.dark ::-webkit-scrollbar-thumb { background: #30363d; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+/* ═══════════════════════════════════════════════════
+   Tailwind class overrides — Backgrounds
+   ═══════════════════════════════════════════════════ */
+html.dark .bg-white          { background-color: #161b26 !important; }
+html.dark .bg-gray-50        { background-color: #131920 !important; }
+html.dark .bg-gray-100       { background-color: #1c2333 !important; }
+html.dark .bg-gray-200       { background-color: #21262d !important; }
+html.dark .bg-slate-50       { background-color: #131920 !important; }
+html.dark .bg-slate-100      { background-color: #1c2333 !important; }
+
+/* Coloured light backgrounds → translucent tinted */
+html.dark .bg-indigo-50,
+html.dark .bg-indigo-50\/50  { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .bg-blue-50        { background-color: rgba(59,130,246,0.08) !important; }
+html.dark .bg-green-50       { background-color: rgba(16,185,129,0.08) !important; }
+html.dark .bg-emerald-50     { background-color: rgba(16,185,129,0.08) !important; }
+html.dark .bg-red-50         { background-color: rgba(239,68,68,0.08) !important; }
+html.dark .bg-yellow-50      { background-color: rgba(234,179,8,0.08) !important; }
+html.dark .bg-amber-50       { background-color: rgba(245,158,11,0.08) !important; }
+html.dark .bg-purple-50      { background-color: rgba(139,92,246,0.08) !important; }
+html.dark .bg-violet-50      { background-color: rgba(139,92,246,0.08) !important; }
+html.dark .bg-orange-50      { background-color: rgba(249,115,22,0.08) !important; }
+html.dark .bg-cyan-50        { background-color: rgba(6,182,212,0.08) !important; }
+html.dark .bg-teal-50        { background-color: rgba(20,184,166,0.08) !important; }
+html.dark .bg-pink-50        { background-color: rgba(236,72,153,0.08) !important; }
+
+html.dark .bg-indigo-100     { background-color: rgba(99,102,241,0.14) !important; }
+html.dark .bg-blue-100       { background-color: rgba(59,130,246,0.14) !important; }
+html.dark .bg-green-100      { background-color: rgba(16,185,129,0.14) !important; }
+html.dark .bg-emerald-100    { background-color: rgba(16,185,129,0.14) !important; }
+html.dark .bg-red-100        { background-color: rgba(239,68,68,0.14) !important; }
+html.dark .bg-yellow-100     { background-color: rgba(234,179,8,0.14) !important; }
+html.dark .bg-amber-100      { background-color: rgba(245,158,11,0.14) !important; }
+html.dark .bg-purple-100     { background-color: rgba(139,92,246,0.14) !important; }
+html.dark .bg-violet-100     { background-color: rgba(139,92,246,0.14) !important; }
+html.dark .bg-orange-100     { background-color: rgba(249,115,22,0.14) !important; }
+
+/* ═══════════════════════════════════════════════════
+   Tailwind class overrides — Text
+   ═══════════════════════════════════════════════════ */
+html.dark .text-gray-900,
+html.dark .text-slate-900  { color: #e6edf3 !important; }
+html.dark .text-gray-800,
+html.dark .text-slate-800  { color: #cdd9e5 !important; }
+html.dark .text-gray-700,
+html.dark .text-slate-700  { color: #adbac7 !important; }
+html.dark .text-gray-600,
+html.dark .text-slate-600  { color: #8b949e !important; }
+html.dark .text-gray-500,
+html.dark .text-slate-500  { color: #6e7681 !important; }
+html.dark .text-gray-400,
+html.dark .text-slate-400  { color: #484f58 !important; }
+html.dark .text-black      { color: #e6edf3 !important; }
+
+/* Status text in dark */
+html.dark .text-indigo-600 { color: #818cf8 !important; }
+html.dark .text-indigo-700 { color: #a5b4fc !important; }
+html.dark .text-blue-600   { color: #60a5fa !important; }
+html.dark .text-blue-700   { color: #93c5fd !important; }
+html.dark .text-green-600  { color: #34d399 !important; }
+html.dark .text-green-700  { color: #6ee7b7 !important; }
+html.dark .text-emerald-600{ color: #34d399 !important; }
+html.dark .text-emerald-700{ color: #6ee7b7 !important; }
+html.dark .text-red-600    { color: #f87171 !important; }
+html.dark .text-red-700    { color: #fca5a5 !important; }
+html.dark .text-yellow-600 { color: #fbbf24 !important; }
+html.dark .text-amber-600  { color: #fbbf24 !important; }
+html.dark .text-orange-600 { color: #fb923c !important; }
+html.dark .text-purple-600 { color: #c084fc !important; }
+html.dark .text-violet-600 { color: #c084fc !important; }
+html.dark .text-cyan-600   { color: #22d3ee !important; }
+html.dark .text-teal-600   { color: #2dd4bf !important; }
+
+/* ═══════════════════════════════════════════════════
+   Tailwind class overrides — Borders
+   ═══════════════════════════════════════════════════ */
+html.dark .border-gray-50,
+html.dark .border-gray-100,
+html.dark .border-slate-100 { border-color: #21262d !important; }
+html.dark .border-gray-200,
+html.dark .border-slate-200 { border-color: #30363d !important; }
+html.dark .border-gray-300,
+html.dark .border-slate-300 { border-color: #484f58 !important; }
+
+/* Divide */
+html.dark .divide-gray-100 > * + *,
+html.dark .divide-gray-200 > * + * { border-color: #21262d !important; }
+
+/* ═══════════════════════════════════════════════════
+   Inputs / Forms
+   ═══════════════════════════════════════════════════ */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html.dark select,
+html.dark textarea {
+  color: #e6edf3 !important;
+  border-color: #30363d !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border-image: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Inputs WITHOUT an explicit bg-* class (inside wrapper divs like search bars)
+   → transparent so they inherit the wrapper's dark background seamlessly */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class*="bg-"]),
+html.dark textarea:not([class*="bg-"]) {
+  background-color: transparent !important;
+}
+
+/* Selects without a bg class → give them the standard dark field background */
+html.dark select:not([class*="bg-"]) {
+  background-color: #1c2333 !important;
+}
+
+/* Selects / inputs WITH a bg class → handled by the .bg-gray-50, .bg-white overrides above */
+
+/* Remove browser native focus ring on ALL elements in dark mode */
+html.dark *:focus,
+html.dark *:focus-visible,
+html.dark *:focus-within {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+/* Standalone inputs/selects (have their own border class) — focus ring on self */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])[class*="border"]:focus,
+html.dark select[class*="border"]:focus,
+html.dark textarea[class*="border"]:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+  outline: none !important;
+}
+
+/* Inputs inside wrappers (no border class) — no focus ring on self */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([class*="border"]):focus,
+html.dark textarea:not([class*="border"]):focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Only the DIRECT parent div of the focused input gets the ring in dark mode */
+html.dark div:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus)[class*="border"],
+html.dark div:has(> textarea:focus)[class*="border"] {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: left 12px center !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #484f58 !important; }
+
+html.dark select option { background-color: #161b26; color: #e6edf3; }
+
+/* ═══════════════════════════════════════════════════
+   Shadows
+   ═══════════════════════════════════════════════════ */
+html.dark .shadow-sm  { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5) !important; }
+html.dark .shadow     { box-shadow: 0 2px 8px 0 rgb(0 0 0 / 0.5) !important; }
+html.dark .shadow-md  { box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.6) !important; }
+html.dark .shadow-lg  { box-shadow: 0 8px 24px -4px rgb(0 0 0 / 0.7) !important; }
+
+/* ═══════════════════════════════════════════════════
+   Tables — thead gradient override
+   ═══════════════════════════════════════════════════ */
+html.dark .data-table thead th {
+  background: linear-gradient(180deg, #161b26 0%, #1c2333 100%) !important;
+}
+html.dark .data-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   Mobile topbar fix (inline style override via CSS)
+   ═══════════════════════════════════════════════════ */
+html.dark [data-mobile-topbar] {
+  background: #161b26 !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   Glassmorphism dark
+   ═══════════════════════════════════════════════════ */
+html.dark .glass-panel {
+  background: rgba(22, 27, 38, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   btn-secondary dark
+   ═══════════════════════════════════════════════════ */
+html.dark .btn-secondary {
+  background: #1c2333 !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+html.dark .btn-secondary:hover {
+  background: rgba(99, 102, 241, 0.12) !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   Opacity variants — bg-gray-50-50, bg-blue-50-30 etc.
+   ═══════════════════════════════════════════════════ */
+html.dark .bg-gray-50\/50,
+html.dark .bg-gray-50\/80  { background-color: #0d1117 !important; }
+html.dark .bg-gray-100\/50 { background-color: #131920 !important; }
+html.dark .bg-white\/80,
+html.dark .bg-white\/90    { background-color: rgba(22,27,38,0.9) !important; }
+
+html.dark .bg-indigo-50\/50 { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .bg-blue-50\/50,
+html.dark .bg-blue-50\/30  { background-color: rgba(59,130,246,0.06) !important; }
+html.dark .bg-red-50\/30,
+html.dark .bg-red-50\/50   { background-color: rgba(239,68,68,0.06) !important; }
+html.dark .bg-emerald-50\/30,
+html.dark .bg-emerald-50\/50 { background-color: rgba(16,185,129,0.06) !important; }
+html.dark .bg-green-50\/50  { background-color: rgba(16,185,129,0.08) !important; }
+html.dark .bg-purple-50\/50,
+html.dark .bg-violet-50\/50 { background-color: rgba(139,92,246,0.08) !important; }
+html.dark .bg-orange-50\/50 { background-color: rgba(249,115,22,0.08) !important; }
+html.dark .bg-amber-50\/50  { background-color: rgba(245,158,11,0.08) !important; }
+html.dark .bg-yellow-50\/50 { background-color: rgba(234,179,8,0.08) !important; }
+html.dark .bg-teal-50\/50   { background-color: rgba(20,184,166,0.08) !important; }
+html.dark .bg-cyan-50\/50   { background-color: rgba(6,182,212,0.08) !important; }
+html.dark .bg-pink-50\/50   { background-color: rgba(236,72,153,0.08) !important; }
+
+/* ── Gradient-from overrides for section headers ── */
+html.dark [class*="from-blue-50"]    { --tw-gradient-from: rgba(59,130,246,0.05) !important; }
+html.dark [class*="from-red-50"]     { --tw-gradient-from: rgba(239,68,68,0.05) !important; }
+html.dark [class*="from-emerald-50"] { --tw-gradient-from: rgba(16,185,129,0.05) !important; }
+html.dark [class*="from-amber-50"]   { --tw-gradient-from: rgba(245,158,11,0.05) !important; }
+html.dark [class*="from-indigo-50"]  { --tw-gradient-from: rgba(99,102,241,0.05) !important; }
+html.dark [class*="from-purple-50"]  { --tw-gradient-from: rgba(139,92,246,0.05) !important; }
+html.dark [class*="from-orange-50"]  { --tw-gradient-from: rgba(249,115,22,0.05) !important; }
+html.dark [class*="from-gray-50"]    { --tw-gradient-from: rgba(255,255,255,0.02) !important; }
+
+/* ═══════════════════════════════════════════════════
+   Gradient text fix — dark mode
+   Targets headings using #0f172a (dark navy) as
+   gradient start — unreadable on dark backgrounds
+   ═══════════════════════════════════════════════════ */
+html.dark [style*="0f172a"][style*="-webkit-text-fill-color"] {
+  background-image: linear-gradient(135deg, #e2e8f0 0%, #a5b4fc 100%) !important;
+}
+html.dark [style*="334155"][style*="-webkit-text-fill-color"] {
+  background-image: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   Alert boxes — dark mode (light yellow/red → dark)
+   ═══════════════════════════════════════════════════ */
+html.dark [style*="fffbeb"],
+html.dark [style*="fef9c3"] {
+  background: linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,179,8,0.08) 100%) !important;
+}
+html.dark [style*="fef2f2"],
+html.dark [style*="fee2e2"] {
+  background: linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.08) 100%) !important;
+}
+html.dark [style*="92400e"] { color: #fbbf24 !important; }
+html.dark [style*="b45309"] { color: #fbbf24 !important; }
+html.dark [style*="991b1b"] { color: #f87171 !important; }
+html.dark [style*="b91c1c"] { color: #f87171 !important; }
+
+/* Progress bar track */
+html.dark [style*="f1f5f9"]:not([class*="gradient"]) {
+  background: #30363d !important;
+}
+
+/* Hover states using hardcoded light colors */
+html.dark [style*="f8fafc"] { background: #161b26 !important; }
+html.dark [style*="eef2ff"] { background: rgba(99,102,241,0.1) !important; }
+
+/* Inline white card backgrounds */
+html.dark [style*="background: white"],
+html.dark [style*="background:white"],
+html.dark [style*="background: 'white'"] { background: #161b26 !important; }
+
+/* hover:bg-gray-50 and hover:bg-gray-50/50 on table rows */
+html.dark tr:hover { background: rgba(99,102,241,0.05) !important; }
+html.dark .hover\:bg-gray-50:hover { background-color: rgba(255,255,255,0.03) !important; }
+html.dark .hover\:bg-gray-50\/50:hover { background-color: rgba(255,255,255,0.02) !important; }
+html.dark .hover\:bg-blue-50\/30:hover { background-color: rgba(59,130,246,0.05) !important; }
+html.dark .hover\:bg-red-50\/30:hover { background-color: rgba(239,68,68,0.05) !important; }
+html.dark .hover\:bg-indigo-50:hover { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: rgba(255,255,255,0.04) !important; }
+
+/* thead bg-gray-50/80 used in audit */
+html.dark .bg-gray-50\/80 { background-color: #131920 !important; }
+
+/* Inline rgba(255,255,255,...) glass backgrounds */
+html.dark [style*="rgba(255,255,255,0.8)"],
+html.dark [style*="rgba(255,255,255, 0.8)"] {
+  background: rgba(22,27,38,0.92) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Inline #f8fafc selects / inputs */
+html.dark [style*="f8fafc"] { background: #1c2333 !important; }
+html.dark [style*="f8fafc"][style*="color"] { color: #e6edf3 !important; }

@@ -22,6 +22,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <head>
+        {/* Anti-flash: apply saved theme before first paint */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();` }} />
+      </head>
       <body
         className={`${cairo.variable} antialiased`}
         style={{ fontFamily: 'var(--font-cairo, Cairo), Arial, sans-serif', background: 'var(--bg-page)' }}

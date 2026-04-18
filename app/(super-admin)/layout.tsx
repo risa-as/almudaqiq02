@@ -6,7 +6,7 @@ import { LayoutDashboard, Building2, CreditCard, Activity, Megaphone, KeyRound, 
 
 const NAV = [
   { href: '/super-admin/dashboard',     label: 'لوحة التحكم',   icon: LayoutDashboard, gradient: 'from-indigo-400 to-violet-500' },
-  { href: '/super-admin/tenants',       label: 'المستأجرون',    icon: Building2,        gradient: 'from-cyan-400 to-blue-500' },
+  { href: '/super-admin/tenants',       label: 'المنظمات',      icon: Building2,        gradient: 'from-cyan-400 to-blue-500' },
   { href: '/super-admin/plans',         label: 'خطط الاشتراك',  icon: CreditCard,       gradient: 'from-amber-400 to-orange-500' },
   { href: '/super-admin/monitoring',    label: 'المراقبة',      icon: Activity,         gradient: 'from-emerald-400 to-teal-500' },
   { href: '/super-admin/announcements', label: 'الإعلانات',     icon: Megaphone,        gradient: 'from-pink-400 to-rose-500' },

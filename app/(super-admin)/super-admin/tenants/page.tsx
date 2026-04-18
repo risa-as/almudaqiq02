@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   Plus, Search, Building2, CheckCircle, XCircle, Clock,
   SearchX, AlertTriangle, DollarSign, Edit2, X, Save,
-  Loader2, TrendingUp, Users, ShieldAlert, Ban, Trash2
+  Loader2, TrendingUp, Users, Ban, Trash2
 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 
@@ -12,7 +12,8 @@ import { PulseLoader } from '@/components/loading/PulseLoader'
 interface Plan { id: string; name: string }
 
 interface Tenant {
-  id: string; name: string; orgCode: string; status: string; createdAt: string
+  id: string; name: string; status: string; createdAt: string
+  users: { email: string | null }[]
   subscription?: {
     plan: { id: string; name: string }
     endDate?: string
@@ -28,11 +29,11 @@ interface Stats {
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
-  ACTIVE:    { label: 'نشط',        cls: 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/20', icon: CheckCircle },
-  TRIAL:     { label: 'تجربة',      cls: 'bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/20',         icon: Clock },
-  GRACE:     { label: 'فترة مهلة',  cls: 'bg-orange-500/10 text-orange-700 ring-1 ring-orange-500/20',   icon: AlertTriangle },
-  SUSPENDED: { label: 'معلق',       cls: 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20',      icon: XCircle },
-  CANCELLED: { label: 'ملغى',       cls: 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/20',         icon: Ban },
+  ACTIVE:    { label: 'نشط',        cls: 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25', icon: CheckCircle },
+  TRIAL:     { label: 'تجربة',      cls: 'bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/25',   icon: Clock },
+  GRACE:     { label: 'فترة مهلة',  cls: 'bg-orange-500/10 text-orange-700 ring-1 ring-orange-500/25',   icon: AlertTriangle },
+  SUSPENDED: { label: 'معلق',       cls: 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25',      icon: XCircle },
+  CANCELLED: { label: 'ملغى',       cls: 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/25',         icon: Ban },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,13 +77,13 @@ export default function TenantsPage() {
   const [editError,  setEditError]  = useState('')
 
   // Delete modal
-  const [delOpen,       setDelOpen]       = useState(false)
-  const [delTarget,     setDelTarget]     = useState<Tenant | null>(null)
-  const [delOrgCode,    setDelOrgCode]    = useState('')
-  const [delUsername,   setDelUsername]   = useState('')
-  const [delPassword,   setDelPassword]   = useState('')
-  const [delSaving,     setDelSaving]     = useState(false)
-  const [delError,      setDelError]      = useState('')
+  const [delOpen,     setDelOpen]     = useState(false)
+  const [delTarget,   setDelTarget]   = useState<Tenant | null>(null)
+  const [delName,     setDelName]     = useState('')
+  const [delEmail,    setDelEmail]    = useState('')
+  const [delPassword, setDelPassword] = useState('')
+  const [delSaving,   setDelSaving]   = useState(false)
+  const [delError,    setDelError]    = useState('')
 
   // Payment modal
   const [payOpen,   setPayOpen]   = useState(false)
@@ -111,8 +112,8 @@ export default function TenantsPage() {
   // ── Delete Modal ────────────────────────────────────────────────────────────
   function openDelete(t: Tenant) {
     setDelTarget(t)
-    setDelOrgCode('')
-    setDelUsername('')
+    setDelName('')
+    setDelEmail('')
     setDelPassword('')
     setDelError('')
     setDelOpen(true)
@@ -120,17 +121,17 @@ export default function TenantsPage() {
 
   async function submitDelete() {
     if (!delTarget) return
-    if (delOrgCode.trim().toUpperCase() !== delTarget.orgCode) {
-      setDelError('كود المنظمة غير صحيح')
+    if (delName.trim() !== delTarget.name.trim()) {
+      setDelError('اسم المتجر غير مطابق')
       return
     }
-    if (!delUsername || !delPassword) { setDelError('يرجى إدخال اسم المستخدم وكلمة المرور'); return }
+    if (!delEmail || !delPassword) { setDelError('يرجى إدخال البريد الإلكتروني وكلمة المرور'); return }
     setDelSaving(true); setDelError('')
     try {
       const res = await fetch(`/api/super-admin/tenants/${delTarget.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: delUsername, password: delPassword }),
+        body: JSON.stringify({ email: delEmail, password: delPassword }),
       })
       let data: { error?: unknown; success?: boolean } = {}
       try { data = await res.json() } catch { /* non-json response */ }
@@ -229,12 +230,12 @@ export default function TenantsPage() {
             <Building2 size={22} className="text-white relative z-10" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-slate-900">المستأجرون</h1>
-            <p className="text-sm text-slate-500 mt-0.5 font-medium">إجمالي: {c?.total ?? '…'} مستأجر</p>
+            <h1 className="text-2xl font-black text-slate-900">المنظمات</h1>
+            <p className="text-sm text-slate-500 mt-0.5 font-medium">إجمالي: {c?.total ?? '…'} منظمة</p>
           </div>
         </div>
         <a href="/super-admin/tenants/new" className="btn-primary w-full sm:w-auto">
-          <Plus className="w-5 h-5" /> إضافة مستأجر جديد
+          <Plus className="w-5 h-5" /> إضافة منظمة جديدة
         </a>
       </div>
 
@@ -308,96 +309,139 @@ export default function TenantsPage() {
       ) : (
         <div className="rounded-[20px] overflow-hidden" style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
           <div className="overflow-x-auto">
-            <table className="data-table">
+            <table className="w-full text-right" style={{ borderCollapse: 'collapse' }}>
               <thead>
-                <tr>
-                  <th className="text-right">المتجر</th>
-                  <th className="text-center">كود المنظمة</th>
-                  <th className="text-right">الخطة</th>
-                  <th className="text-center">الفروع / المستخدمون</th>
-                  <th className="text-center">تاريخ الانتهاء</th>
-                  <th className="text-center">الحالة</th>
-                  <th className="text-center">إجراءات</th>
+                <tr style={{ background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '2px solid #e2e8f0' }}>
+                  <th className="px-5 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">المتجر</th>
+                  <th className="px-4 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">البريد الإلكتروني</th>
+                  <th className="px-4 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الخطة</th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الفروع / المستخدمون</th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">تاريخ الانتهاء</th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الحالة</th>
+                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">إجراءات</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-50">
                 {tenants.map(t => {
                   const badge = STATUS_BADGE[t.status] ?? STATUS_BADGE.SUSPENDED
                   const Icon  = badge.icon
+                  const isExpiringSoon = t.subscription?.endDate
+                    && new Date(t.subscription.endDate).getTime() - Date.now() < 7 * 86400_000
+                    && new Date(t.subscription.endDate) > new Date()
                   return (
-                    <tr key={t.id} className={rowHighlight(t)}>
+                    <tr key={t.id}
+                      className="transition-all hover:bg-indigo-50/30 group"
+                      style={{
+                        background: t.status === 'GRACE' ? 'rgba(255,237,213,0.3)' :
+                          (t.status === 'SUSPENDED' || t.status === 'CANCELLED') ? 'rgba(248,250,252,0.8)' :
+                          isExpiringSoon ? 'rgba(255,251,235,0.4)' : undefined
+                      }}>
 
                       {/* Name */}
-                      <td className="min-w-[180px]">
+                      <td className="px-5 py-3.5 min-w-[200px]">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
-                            <Building2 className="w-4 h-4 text-slate-400" />
+                          <div className="relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 2px 8px rgba(99,102,241,0.25)' }}>
+                            <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                            <Building2 className="w-4 h-4 text-white relative z-10" />
                           </div>
                           <div>
-                            <span className="font-bold text-slate-800 block text-[13px]">{t.name}</span>
-                            <span className="text-[11px] text-slate-400">{new Date(t.createdAt).toLocaleDateString('ar-IQ')}</span>
+                            <span className="font-extrabold text-slate-800 block text-[13px] leading-tight">{t.name}</span>
+                            <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">{new Date(t.createdAt).toLocaleDateString('ar-IQ')}</span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Org Code */}
-                      <td className="text-center">
-                        <span className="inline-flex px-3 py-1 rounded-lg text-sm font-black bg-blue-50 text-blue-700 border border-blue-100 tracking-widest">
-                          {t.orgCode}
-                        </span>
+                      {/* Admin Email */}
+                      <td className="px-4 py-3.5">
+                        {t.users[0]?.email ? (
+                          <span className="text-[12px] font-medium text-slate-600 dir-ltr" dir="ltr">
+                            {t.users[0].email}
+                          </span>
+                        ) : (
+                          <span className="text-[12px] text-slate-300">—</span>
+                        )}
                       </td>
 
                       {/* Plan */}
-                      <td>
-                        <span className="text-[13px] font-bold text-slate-700">{t.subscription?.plan?.name ?? '—'}</span>
+                      <td className="px-4 py-3.5">
+                        {t.subscription?.plan?.name ? (
+                          <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                            {t.subscription.plan.name}
+                          </span>
+                        ) : (
+                          <span className="text-[12px] text-slate-300 font-medium">—</span>
+                        )}
                       </td>
 
                       {/* Branches / Users */}
-                      <td className="text-center">
-                        <div className="flex items-center justify-center gap-3 text-[13px] font-bold text-slate-600">
-                          <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-slate-400" />{t._count.branches}</span>
-                          <span className="text-slate-200">|</span>
-                          <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-slate-400" />{t._count.users}</span>
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <Building2 className="w-3 h-3" />{t._count.branches}
+                          </span>
+                          <span className="text-slate-200 text-xs">|</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-violet-50 text-violet-700 border border-violet-100">
+                            <Users className="w-3 h-3" />{t._count.users}
+                          </span>
                         </div>
                       </td>
 
                       {/* End Date */}
-                      <td className="text-center">
-                        <span className={`text-[12px] font-bold ${
-                          t.status === 'GRACE' ? 'text-orange-600' :
-                          t.subscription?.endDate && new Date(t.subscription.endDate).getTime() - Date.now() < 7 * 86400_000 && new Date(t.subscription.endDate) > new Date()
-                            ? 'text-amber-600' : 'text-slate-500'
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`inline-flex items-center gap-1 text-[12px] font-bold px-2.5 py-1 rounded-lg ${
+                          t.status === 'GRACE'
+                            ? 'bg-orange-50 text-orange-600 border border-orange-100'
+                            : isExpiringSoon
+                              ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                              : 'text-slate-500'
                         }`}>
+                          {(t.status === 'GRACE' || isExpiringSoon) && <AlertTriangle className="w-3 h-3" />}
                           {endDateDisplay(t)}
                         </span>
                       </td>
 
                       {/* Status */}
-                      <td className="text-center">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold ${badge.cls}`}>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-extrabold ${badge.cls}`}>
                           <Icon className="w-3 h-3" />{badge.label}
                         </span>
                       </td>
 
                       {/* Actions */}
-                      <td>
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
                           <a href={`/super-admin/tenants/${t.id}`}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors">
-                            تفاصيل
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                            title="التفاصيل">
+                            <TrendingUp className="w-3.5 h-3.5" />
                           </a>
                           <button onClick={() => openPay(t)}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center gap-1">
-                            <DollarSign className="w-3 h-3" />تسديد
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 transition-all"
+                            title="تسديد / تجديد">
+                            <DollarSign className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => openEdit(t)}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors flex items-center gap-1">
-                            <Edit2 className="w-3 h-3" />تعديل
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                            title="تعديل">
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => openDelete(t)}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1">
-                            <Trash2 className="w-3 h-3" />حذف
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all"
+                            title="حذف">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                        </div>
+                        {/* Mobile labels */}
+                        <div className="flex items-center justify-center gap-1 mt-1.5 md:hidden">
+                          <a href={`/super-admin/tenants/${t.id}`}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200">تفاصيل</a>
+                          <button onClick={() => openPay(t)}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">تسديد</button>
+                          <button onClick={() => openEdit(t)}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">تعديل</button>
+                          <button onClick={() => openDelete(t)}
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">حذف</button>
                         </div>
                       </td>
                     </tr>
@@ -442,7 +486,7 @@ export default function TenantsPage() {
                   <Trash2 className="w-5 h-5 text-rose-600" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-800 text-lg leading-tight">حذف المستأجر نهائياً</h3>
+                  <h3 className="font-extrabold text-slate-800 text-lg leading-tight">حذف المنظمة نهائياً</h3>
                   <p className="text-xs text-slate-400 mt-0.5">هذا الإجراء لا يمكن التراجع عنه</p>
                 </div>
               </div>
@@ -456,42 +500,38 @@ export default function TenantsPage() {
             {/* Tenant info card */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <Building2 className="w-5 h-5 text-slate-400 shrink-0" />
-              <div>
-                <p className="text-sm font-extrabold text-slate-800">{delTarget.name}</p>
-                <p className="text-xs text-slate-500 mt-0.5">كود المنظمة: <span className="font-black text-blue-700 tracking-widest">{delTarget.orgCode}</span></p>
-              </div>
+              <p className="text-sm font-extrabold text-slate-800">{delTarget.name}</p>
             </div>
 
             <div className="space-y-4">
-              {/* Step 1: orgCode */}
+              {/* Step 1: tenant name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  الخطوة 1 — اكتب كود المنظمة للتأكيد
+                  الخطوة 1 — اكتب اسم المتجر للتأكيد
                 </label>
                 <input
-                  value={delOrgCode}
-                  onChange={e => setDelOrgCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                  placeholder={delTarget.orgCode}
-                  maxLength={6}
+                  value={delName}
+                  onChange={e => setDelName(e.target.value)}
+                  placeholder={delTarget.name}
                   autoComplete="off"
-                  className={`w-full border rounded-xl px-3 py-2.5 text-sm font-black tracking-widest text-center focus:outline-none focus:ring-2 transition-all ${
-                    delOrgCode.length === 6
-                      ? delOrgCode === delTarget.orgCode
+                  className={`w-full border rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 transition-all ${
+                    delName.length > 0
+                      ? delName.trim() === delTarget.name.trim()
                         ? 'border-emerald-400 bg-emerald-50 text-emerald-700 focus:ring-emerald-400/30'
                         : 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-400/30'
-                      : 'border-slate-200 text-slate-800 focus:ring-blue-500/30'
+                      : 'border-slate-200 text-slate-800 focus:ring-indigo-500/30'
                   }`}
-                  dir="ltr"
                 />
               </div>
 
-              {/* Step 2: credentials */}
-              <div className={`space-y-3 transition-opacity ${delOrgCode === delTarget.orgCode ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                <p className="text-xs font-bold text-slate-700">الخطوة 2 — بيانات تسجيل دخول السوبر أدمن</p>
+              {/* Step 2: super admin credentials */}
+              <div className={`space-y-3 transition-opacity ${delName.trim() === delTarget.name.trim() ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                <p className="text-xs font-bold text-slate-700">الخطوة 2 — بريد وكلمة مرور حساب السوبر أدمن</p>
                 <input
-                  value={delUsername}
-                  onChange={e => setDelUsername(e.target.value)}
-                  placeholder="اسم المستخدم"
+                  type="email"
+                  value={delEmail}
+                  onChange={e => setDelEmail(e.target.value)}
+                  placeholder="البريد الإلكتروني"
                   autoComplete="off"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
                   dir="ltr"
@@ -521,7 +561,7 @@ export default function TenantsPage() {
               </button>
               <button
                 onClick={submitDelete}
-                disabled={delSaving || delOrgCode !== delTarget.orgCode || !delUsername || !delPassword}
+                disabled={delSaving || delName.trim() !== delTarget.name.trim() || !delEmail || !delPassword}
                 className="flex-1 py-2.5 rounded-xl font-bold bg-rose-600 text-white hover:bg-rose-700 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                 {delSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 حذف نهائي
@@ -533,31 +573,48 @@ export default function TenantsPage() {
 
       {/* ══ Edit Modal — outside animated div to fix fixed positioning ══════ */}
       {editOpen && editTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() => setEditOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
             onClick={e => e.stopPropagation()}>
 
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-800 text-lg">تعديل بيانات المستأجر</h3>
-              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
-                <X className="w-4 h-4 text-slate-500" />
+            {/* Modal Header */}
+            <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3"
+              style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
+                  <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                  <Edit2 className="w-4 h-4 text-white relative z-10" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base leading-tight">تعديل بيانات المنظمة</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{editTarget.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 shrink-0 mt-0.5">
+                <X className="w-4 h-4 text-slate-400" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="px-6 py-5 space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">الاسم التجاري</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">الاسم التجاري</label>
                 <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  style={{ boxShadow: 'none' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }} />
               </div>
 
               {/* Plan */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">خطة الاشتراك</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">خطة الاشتراك</label>
                 <select value={editForm.planId} onChange={e => setEditForm(f => ({ ...f, planId: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 appearance-none">
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none appearance-none cursor-pointer transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
                   <option value="">— بدون تغيير —</option>
                   {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -565,34 +622,43 @@ export default function TenantsPage() {
 
               {/* End Date */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">تاريخ انتهاء الاشتراك</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">تاريخ انتهاء الاشتراك</label>
                 <input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }} />
               </div>
 
               {/* Status */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">حالة الحساب</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">حالة الحساب</label>
                 <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 appearance-none">
-                  <option value="ACTIVE">نشط</option>
-                  <option value="TRIAL">تجربة</option>
-                  <option value="GRACE">فترة مهلة</option>
-                  <option value="SUSPENDED">معلق</option>
-                  <option value="CANCELLED">ملغى</option>
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none appearance-none cursor-pointer transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
+                  <option value="ACTIVE">✅ نشط</option>
+                  <option value="TRIAL">🔵 تجربة</option>
+                  <option value="GRACE">🟠 فترة مهلة</option>
+                  <option value="SUSPENDED">🟡 معلق</option>
+                  <option value="CANCELLED">🔴 ملغى</option>
                 </select>
               </div>
             </div>
 
-            {editError && <p className="text-xs text-red-600 font-bold bg-red-50 px-3 py-2 rounded-lg">{editError}</p>}
+            {editError && (
+              <div className="mx-6 mb-4 text-xs text-red-600 font-bold bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />{editError}
+              </div>
+            )}
 
-            <div className="flex gap-3 pt-1">
+            <div className="flex gap-3 px-6 pb-5 pt-1">
               <button onClick={() => setEditOpen(false)} disabled={editSaving}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-40">
                 إلغاء
               </button>
               <button onClick={submitEdit} disabled={editSaving}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md"
+                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.3)' }}>
                 {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 حفظ التعديلات
               </button>
@@ -603,34 +669,44 @@ export default function TenantsPage() {
 
       {/* ══ Payment Modal ════════════════════════════════════════════════════ */}
       {payOpen && payTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() => setPayOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
             onClick={e => e.stopPropagation()}>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-slate-800 text-lg">تسديد / تجديد الاشتراك</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{payTarget.name} — {payTarget.orgCode}</p>
+            {/* Modal Header */}
+            <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3"
+              style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                  <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                  <DollarSign className="w-4 h-4 text-white relative z-10" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base leading-tight">تسديد / تجديد الاشتراك</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5 font-mono tracking-wider">{payTarget.name}</p>
+                </div>
               </div>
-              <button onClick={() => setPayOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
-                <X className="w-4 h-4 text-slate-500" />
+              <button onClick={() => setPayOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 shrink-0 mt-0.5">
+                <X className="w-4 h-4 text-slate-400" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="px-6 py-5 space-y-4">
               {/* Months */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">مدة التجديد</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">مدة التجديد</label>
                 <div className="grid grid-cols-4 gap-2">
                   {[1, 3, 6, 12].map(m => (
                     <button key={m} type="button"
                       onClick={() => setPayForm(f => ({ ...f, months: m }))}
-                      className={`py-2 rounded-xl text-sm font-bold border transition-all ${
-                        payForm.months === m
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                          : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                      }`}>
+                      className="py-2.5 rounded-xl text-sm font-bold border transition-all"
+                      style={payForm.months === m ? {
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: 'white', border: '1px solid #10b981',
+                        boxShadow: '0 4px 12px rgba(16,185,129,0.3)'
+                      } : { background: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>
                       {m === 12 ? 'سنة' : `${m} شهر`}
                     </button>
                   ))}
@@ -639,44 +715,62 @@ export default function TenantsPage() {
 
               {/* Amount */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">المبلغ المدفوع (د.ع)</label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">المبلغ المدفوع (د.ع)</label>
                 <input
                   type="number" min="0" placeholder="مثال: 50000"
                   value={payForm.amount}
                   onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none transition-all"
                   dir="ltr"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">ملاحظات <span className="font-normal text-slate-400">(اختياري)</span></label>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">
+                  ملاحظات <span className="font-normal text-slate-400 normal-case">(اختياري)</span>
+                </label>
                 <input
                   placeholder="مثال: تم الدفع نقداً"
                   value={payForm.notes}
                   onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
                 />
               </div>
 
               {/* Summary */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-800 font-bold">
-                سيتم تمديد الاشتراك لمدة{' '}
-                <span className="text-emerald-600">{payForm.months === 12 ? 'سنة كاملة' : `${payForm.months} شهر`}</span>
-                {' '}وتفعيل الحساب تلقائياً
+              <div className="rounded-xl px-4 py-3.5 flex items-center gap-3"
+                style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.06), rgba(5,150,105,0.04))', border: '1px solid rgba(16,185,129,0.15)' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(16,185,129,0.1)' }}>
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                </div>
+                <p className="text-sm text-emerald-800 font-bold">
+                  سيتم تمديد الاشتراك لمدة{' '}
+                  <span className="text-emerald-600">{payForm.months === 12 ? 'سنة كاملة' : `${payForm.months} شهر`}</span>
+                  {' '}وتفعيل الحساب تلقائياً
+                </p>
               </div>
             </div>
 
-            {payError && <p className="text-xs text-red-600 font-bold bg-red-50 px-3 py-2 rounded-lg">{payError}</p>}
+            {payError && (
+              <div className="mx-6 mb-4 text-xs text-red-600 font-bold bg-red-50 border border-red-100 px-3.5 py-2.5 rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />{payError}
+              </div>
+            )}
 
-            <div className="flex gap-3 pt-1">
+            <div className="flex gap-3 px-6 pb-5 pt-1">
               <button onClick={() => setPayOpen(false)} disabled={paySaving}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-40">
                 إلغاء
               </button>
               <button onClick={submitPay} disabled={paySaving}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md"
+                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 16px rgba(16,185,129,0.3)' }}>
                 {paySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
                 تأكيد التسديد
               </button>

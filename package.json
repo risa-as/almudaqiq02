@@ -1,26 +1,76 @@
 {
+  "description": "Supermarket Management System",
+  "author": "Eyad Qaed",
   "name": "supermarket-core",
   "version": "0.1.0",
+  "main": "electron/main.js",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "start": "node .next/standalone/server.js",
+    "lint": "eslint",
+    "electron": "cross-env SERVER_URL=http://localhost:3000/pos electron .",
+    "electron:prod": "cross-env SERVER_URL=http://192.168.1.200:3000/pos electron .",
+    "dist": "npm run build && npm run postbuild && electron-builder",
+    "postbuild": "node scripts/prepare-standalone.js"
+  },
+  "build": {
+    "appId": "com.supermarket.erp",
+    "productName": "SupermarketPOS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "verifyUpdateCodeSignature": false,
+      "legalTrademarks": "Eyad Qaed",
+      "icon": "public/logo.png"
+    },
+    "copyright": "Copyright (c) 2026 Eyad Qaed",
+    "compression": "normal",
+    "afterPack": "scripts/after-pack.js",
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^5.1.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "jose": "^6.1.3",
+    "lucide-react": "^0.563.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-hot-toast": "^2.6.0",
+    "recharts": "^3.7.0",
+    "resend": "^4.0.0",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcrypt": "^5.0.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^40.1.0",
+    "electron-builder": "^26.7.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "15.1.6",
+    "prisma": "^5.22.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.3"
   }
 }

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, Package, AlertCircle, DollarSign, Filter, FolderTree, Trash2, Printer, ScanLine, X, Save } from 'lucide-react';
+import { Search, Plus, Package, AlertCircle, DollarSign, Calendar, Filter, FolderTree, Trash2, Printer, ScanLine, X, Save } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 import { useUser } from '@/hooks/useUser';
 import { useBranch } from '@/contexts/BranchContext';
@@ -31,7 +31,7 @@ interface Product {
 
 export default function InventoryPage() {
     const { isAdmin, loading: userLoading } = useUser();
-    const { selectedBranch, isOwner, branches } = useBranch();
+    const { selectedBranch, isOwner, branches, loading: branchLoading } = useBranch();
     const router = useRouter();
     // ... (State remains same)
     const [products, setProducts] = useState<Product[]>([]);
@@ -71,14 +71,17 @@ export default function InventoryPage() {
     const [stockInQty, setStockInQty] = useState('');
     const [stockInCost, setStockInCost] = useState('');
     const [stockInSupplierId, setStockInSupplierId] = useState('');
+    const [stockInExpiryDate, setStockInExpiryDate] = useState('');
+    const [stockInPaidAmount, setStockInPaidAmount] = useState('');
     const [stockInLoading, setStockInLoading] = useState(false);
     const [barcodeToast, setBarcodeToast] = useState<string | null>(null);
 
     useEffect(() => {
+        if (branchLoading) return;
         fetchProducts();
         fetchCategories();
         fetchSuppliers();
-    }, []);
+    }, [selectedBranch, branchLoading]);
 
     // --- Global Barcode Scanner Listener ---
     useEffect(() => {
@@ -137,8 +140,10 @@ export default function InventoryPage() {
                 setTimeout(() => {
                     setBarcodeToast(null);
                     setStockInQty('');
-                    setStockInCost('');
+                    setStockInCost(data.product.costPrice ? String(data.product.costPrice) : '');
                     setStockInSupplierId(data.product.supplierId ? String(data.product.supplierId) : '');
+                    setStockInExpiryDate('');
+                    setStockInPaidAmount('');
                     setStockInModal({
                         open: true,
                         productId: data.product.id,
@@ -179,8 +184,10 @@ export default function InventoryPage() {
                     productId: stockInModal.productId,
                     unitId: stockInModal.unitId,
                     quantity: Number(stockInQty),
-                    costPrice: stockInCost || '0',
+                    costPrice: Number(stockInCost) || 0,
+                    expiryDate: stockInExpiryDate || null,
                     supplierId: stockInSupplierId || null,
+                    paidAmount: stockInPaidAmount || null,
                     branchId: selectedBranch?.id !== 'all' ? selectedBranch?.id : (branches.length === 1 ? branches[0].id : undefined),
                 })
             });
@@ -219,7 +226,10 @@ export default function InventoryPage() {
 
     const fetchProducts = async () => {
         try {
-            const res = await fetch('/api/products');
+            const branchParam = selectedBranch?.id && selectedBranch.id !== 'all'
+                ? `?branchId=${selectedBranch.id}`
+                : '';
+            const res = await fetch(`/api/products${branchParam}`);
             if (res.ok) {
                 const data = await res.json();
                 setProducts(data);
@@ -287,103 +297,164 @@ export default function InventoryPage() {
 
             {/* Stock-In Quick Modal */}
             {stockInModal.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" dir="rtl">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                        {/* Header */}
-                        <div className="bg-gradient-to-l from-emerald-500 to-teal-500 px-6 py-5 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                                    <Package size={20} className="text-white" />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir="rtl">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+
+                        {/* Header — compact */}
+                        <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                            <div className="min-w-0">
+                                <div className="text-blue-200 text-[11px] font-medium flex items-center gap-1.5 mb-0.5">
+                                    <ScanLine size={12} />
+                                    باركود: {stockInModal.barcode}
                                 </div>
-                                <div>
-                                    <p className="text-white/70 text-xs font-medium">إدخال مخزون سريع</p>
-                                    <h3 className="text-white font-extrabold text-lg leading-tight">{stockInModal.productName}</h3>
-                                </div>
+                                <h3 className="text-base font-extrabold leading-tight truncate">{stockInModal.productName}</h3>
                             </div>
-                            <button onClick={() => setStockInModal(prev => ({ ...prev, open: false }))} className="text-white/70 hover:text-white transition-colors p-1">
-                                <X size={22} />
+                            <button
+                                onClick={() => setStockInModal(prev => ({ ...prev, open: false }))}
+                                className="bg-white/20 hover:bg-white/30 p-1.5 rounded-lg transition-colors shrink-0 mr-3"
+                            >
+                                <X size={18} />
                             </button>
                         </div>
 
-                        {/* Body */}
-                        <div className="p-6 space-y-5">
-                            <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium flex items-center gap-2">
-                                <ScanLine size={16} />
-                                <span>باركود: <span className="font-extrabold tracking-wider">{stockInModal.barcode}</span></span>
+                        {/* Body — no scroll, compact spacing */}
+                        <div className="p-4 space-y-3">
+
+                            {/* Row 1: Unit + Quantity + Cost */}
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">الوحدة</label>
+                                    <select
+                                        className="w-full bg-gray-50 border border-gray-200 px-2 py-2 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={stockInModal.unitId}
+                                        onChange={e => setStockInModal(prev => ({ ...prev, unitId: e.target.value }))}
+                                    >
+                                        {stockInModal.units.map(u => (
+                                            <option key={u.id} value={u.id}>{u.name} (x{u.conversionFactor})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">الكمية *</label>
+                                    <input
+                                        type="number" min="1" autoFocus required
+                                        className="w-full bg-gray-50 border border-gray-200 px-2 py-2 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0"
+                                        value={stockInQty}
+                                        onChange={e => setStockInQty(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">سعر الشراء</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number" step="0.01" min="0"
+                                            className="w-full bg-gray-50 border border-gray-200 px-2 py-2 pl-7 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="0"
+                                            value={stockInCost}
+                                            onChange={e => setStockInCost(e.target.value)}
+                                        />
+                                        <DollarSign className="absolute left-2 top-2.5 text-gray-400" size={14} />
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Unit Select */}
+                            {/* Row 2: Expiry Date */}
                             <div>
-                                <label className="block text-sm font-bold text-gray-600 mb-2">الوحدة</label>
-                                <select
-                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-4 ring-emerald-100 focus:border-emerald-500 transition-all"
-                                    value={stockInModal.unitId}
-                                    onChange={e => setStockInModal(prev => ({ ...prev, unitId: e.target.value }))}
-                                >
-                                    {stockInModal.units.map(u => (
-                                        <option key={u.id} value={u.id}>{u.name} (× {u.conversionFactor})</option>
-                                    ))}
-                                </select>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">تاريخ الانتهاء</label>
+                                <div className="relative">
+                                    <input
+                                        type="date"
+                                        className="w-full bg-gray-50 border border-gray-200 px-2 py-2 pl-7 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={stockInExpiryDate}
+                                        onChange={e => setStockInExpiryDate(e.target.value)}
+                                    />
+                                    <Calendar className="absolute left-2 top-2.5 text-gray-400" size={14} />
+                                </div>
                             </div>
 
-                            {/* Quantity */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-600 mb-2">الكمية المستلمة *</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-4 ring-emerald-100 focus:border-emerald-500 transition-all text-right"
-                                    placeholder="مثال: 10"
-                                    value={stockInQty}
-                                    onChange={e => setStockInQty(e.target.value)}
-                                    autoFocus
-                                />
+                            {/* Divider */}
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 h-px bg-gray-100" />
+                                <span className="text-xs font-bold text-gray-400 flex items-center gap-1">
+                                    <DollarSign size={12} className="text-blue-400" />فاتورة الشراء
+                                </span>
+                                <div className="flex-1 h-px bg-gray-100" />
                             </div>
 
-                            {/* Cost Price */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-600 mb-2">سعر الكلفة للوحدة (اختياري)</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-4 ring-emerald-100 focus:border-emerald-500 transition-all text-right"
-                                    placeholder="اتركه فارغاً للإبقاء على السعر السابق"
-                                    value={stockInCost}
-                                    onChange={e => setStockInCost(e.target.value)}
-                                />
+                            {/* Row 3: Supplier + Paid Amount */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">المورد (اختياري)</label>
+                                    <select
+                                        className="w-full bg-gray-50 border border-gray-200 px-2 py-2 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={stockInSupplierId}
+                                        onChange={e => { setStockInSupplierId(e.target.value); setStockInPaidAmount(''); }}
+                                    >
+                                        <option value="">نقدي عام</option>
+                                        {suppliers.map(sup => (
+                                            <option key={sup.id} value={sup.id}>{sup.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">المبلغ المدفوع</label>
+                                    <input
+                                        type="number" min="0" step="0.01"
+                                        disabled={!stockInSupplierId}
+                                        className="w-full bg-gray-50 border border-gray-200 px-2 py-2 rounded-lg text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40"
+                                        placeholder={stockInSupplierId ? '0' : 'اختر المورد أولاً'}
+                                        value={stockInPaidAmount}
+                                        onChange={e => setStockInPaidAmount(e.target.value)}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Supplier Select */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-600 mb-2">المورد (لربط الدفعة بالديون)</label>
-                                <select
-                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-4 ring-emerald-100 focus:border-emerald-500 transition-all"
-                                    value={stockInSupplierId}
-                                    onChange={e => setStockInSupplierId(e.target.value)}
-                                >
-                                    <option value="">-- اختياري (بدون مورد) --</option>
-                                    {suppliers.map(sup => (
-                                        <option key={sup.id} value={sup.id}>{sup.name}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {/* Financial summary — horizontal strip */}
+                            {stockInSupplierId && (() => {
+                                const total     = Number(stockInQty || 0) * Number(stockInCost || 0);
+                                const paid      = Number(stockInPaidAmount || 0);
+                                const remaining = total - paid;
+                                return (
+                                    <div className="grid grid-cols-3 divide-x divide-x-reverse divide-gray-100 rounded-xl border border-gray-100 bg-gray-50 text-center text-xs overflow-hidden">
+                                        <div className="px-2 py-2">
+                                            <div className="text-gray-400 mb-0.5">الإجمالي</div>
+                                            <div className="font-extrabold text-gray-800">{formatCurrency(total)}</div>
+                                        </div>
+                                        <div className="px-2 py-2">
+                                            <div className="text-gray-400 mb-0.5">المدفوع</div>
+                                            <div className="font-extrabold text-green-600">{formatCurrency(paid)}</div>
+                                        </div>
+                                        <div className="px-2 py-2">
+                                            <div className="text-gray-400 mb-0.5">{remaining > 0 ? 'الدين' : remaining < 0 ? 'زيادة' : 'مسدد'}</div>
+                                            <div className={`font-extrabold ${remaining > 0 ? 'text-red-500' : remaining < 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                                {formatCurrency(Math.abs(remaining))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                         </div>
 
                         {/* Footer */}
-                        <div className="px-6 pb-6 flex gap-3">
+                        <div className="px-4 pb-4 pt-1 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setStockInModal(prev => ({ ...prev, open: false }))}
+                                className="px-4 py-2.5 bg-white text-gray-600 border border-gray-200 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors"
+                            >
+                                إلغاء
+                            </button>
                             <button
                                 onClick={handleStockInSubmit}
                                 disabled={stockInLoading}
-                                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-extrabold py-3 rounded-xl transition-colors"
+                                className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-extrabold py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all text-sm"
                             >
-                                <Save size={18} />
-                                {stockInLoading ? 'جاري الحفظ...' : 'إدخال المخزون'}
-                            </button>
-                            <button
-                                onClick={() => setStockInModal(prev => ({ ...prev, open: false }))}
-                                className="px-6 border-2 border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                            >
-                                إلغاء
+                                {stockInLoading
+                                    ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />جاري الحفظ...</>
+                                    : <><Save size={16} />حفظ المخزون</>
+                                }
                             </button>
                         </div>
                     </div>

@@ -54,48 +54,48 @@
 ## Phase 7: US6 — Inventory Pages
 
 - [x] T016 [P] [US6] تحديث `app/(tenant)/inventory/page.tsx` — StatCard gradients updated
-- [ ] T017 [P] [US6] تحديث `app/(tenant)/inventory/batches/page.tsx` — PageHeader gradient
-- [ ] T018 [P] [US6] تحديث `app/(tenant)/inventory/stock-in/page.tsx` — PageHeader gradient
-- [ ] T019 [P] [US6] تحديث `app/(tenant)/inventory/categories/page.tsx` — PageHeader gradient
-- [ ] T020 [P] [US6] تحديث `app/(tenant)/inventory/new/page.tsx` — PageHeader gradient
-- [ ] T021 [P] [US6] تحديث `app/(tenant)/inventory/edit/[id]/page.tsx` — PageHeader gradient
+- [x] T017 [P] [US6] تحديث `app/(tenant)/inventory/batches/page.tsx` — PageHeader gradient
+- [x] T018 [P] [US6] تحديث `app/(tenant)/inventory/stock-in/page.tsx` — no PageHeader (N/A)
+- [x] T019 [P] [US6] تحديث `app/(tenant)/inventory/categories/page.tsx` — PageHeader gradient
+- [x] T020 [P] [US6] تحديث `app/(tenant)/inventory/new/page.tsx` — no PageHeader (N/A)
+- [x] T021 [P] [US6] تحديث `app/(tenant)/inventory/edit/[id]/page.tsx` — no PageHeader (N/A)
 
 ---
 
 ## Phase 8: US7 — Sales Pages
 
-- [ ] T022 [P] [US7] تحديث `app/(tenant)/sales/invoices/page.tsx` — PageHeader + DataTable premium
-- [ ] T023 [P] [US7] تحديث `app/(tenant)/sales/customers/page.tsx` — PageHeader + DataTable
-- [ ] T024 [P] [US7] تحديث `app/(tenant)/sales/customers/[id]/page.tsx` — PageHeader + detail card premium
+- [x] T022 [P] [US7] تحديث `app/(tenant)/sales/invoices/page.tsx` — PageHeader + DataTable premium
+- [x] T023 [P] [US7] تحديث `app/(tenant)/sales/customers/page.tsx` — PageHeader + DataTable
+- [x] T024 [P] [US7] تحديث `app/(tenant)/sales/customers/[id]/page.tsx` — PageHeader + detail card premium
 
 ---
 
 ## Phase 9: US8 — Purchases & Suppliers Pages
 
-- [ ] T025 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/page.tsx` — gradient header
-- [ ] T026 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/[id]/ledger/page.tsx` — gradient header
-- [ ] T027 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/smart-buy/page.tsx` — gradient header
+- [x] T025 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/page.tsx` — gradient header
+- [x] T026 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/[id]/ledger/page.tsx` — gradient header
+- [x] T027 [P] [US8] تحديث `app/(tenant)/purchases/suppliers/smart-buy/page.tsx` — no PageHeader (N/A)
 
 ---
 
 ## Phase 10: US9 — Reports Pages
 
 - [x] T028 [P] [US9] تحديث `app/(tenant)/reports/sales/page.tsx` — KPI cards + charts بألوان indigo + data-table
-- [ ] T029 [P] [US9] تحديث `app/(tenant)/reports/inventory/page.tsx` — PageHeader + KPI cards
+- [x] T029 [P] [US9] تحديث `app/(tenant)/reports/inventory/page.tsx` — PageHeader + KPI cards
 - [x] T030 [P] [US9] تحديث `app/(tenant)/reports/analytics/components/KpiCards.tsx` — premium gradient cards
-- [ ] T031 [P] [US9] تحديث `app/(tenant)/reports/stock-movement/page.tsx` — PageHeader + DataTable
-- [ ] T032 [P] [US9] تحديث `app/(tenant)/reports/audit/page.tsx` — PageHeader + DataTable
-- [ ] T033 [P] [US9] تحديث `app/(tenant)/reports/branches/page.tsx` — PageHeader + cards
+- [x] T031 [P] [US9] تحديث `app/(tenant)/reports/stock-movement/page.tsx` — PageHeader + DataTable
+- [x] T032 [P] [US9] تحديث `app/(tenant)/reports/audit/page.tsx` — PageHeader + DataTable
+- [x] T033 [P] [US9] تحديث `app/(tenant)/reports/branches/page.tsx` — PageHeader + cards
 
 ---
 
 ## Phase 11: US10 — Accounting & Settings Pages
 
 - [x] T034 [P] [US10] تحديث `app/(tenant)/accounting/expenses/page.tsx` — StatCard gradient fixed
-- [ ] T035 [P] [US10] تحديث `app/(tenant)/accounting/shifts/page.tsx` — PageHeader gradient
-- [ ] T036 [P] [US10] تحديث `app/(tenant)/accounting/financials/page.tsx` — PageHeader + KPI cards
-- [ ] T037 [P] [US10] تحديث `app/(tenant)/settings/page.tsx` — ROLE_LABELS type fix ✅
-- [ ] T038 [P] [US10] تحديث `app/(tenant)/branches/page.tsx` — PageHeader gradient
+- [x] T035 [P] [US10] تحديث `app/(tenant)/accounting/shifts/page.tsx` — PageHeader gradient
+- [x] T036 [P] [US10] تحديث `app/(tenant)/accounting/financials/page.tsx` — PageHeader + KPI cards
+- [x] T037 [P] [US10] تحديث `app/(tenant)/settings/page.tsx` — ROLE_LABELS type fix ✅
+- [x] T038 [P] [US10] تحديث `app/(tenant)/branches/page.tsx` — PageHeader gradient
 
 ---
 
@@ -103,17 +103,17 @@
 
 - [x] T039 [P] [US11] تحديث `app/(super-admin)/super-admin/dashboard/page.tsx` — KPI header + cards
 - [x] T040 [P] [US11] تحديث `app/(super-admin)/super-admin/tenants/page.tsx` — gradient header + stats cards + filter bar premium
-- [ ] T041 [P] [US11] تحديث `app/(super-admin)/super-admin/tenants/[id]/page.tsx` — premium detail
-- [ ] T042 [P] [US11] تحديث `app/(super-admin)/super-admin/plans/page.tsx` — pricing cards
-- [ ] T043 [P] [US11] تحديث `app/(super-admin)/super-admin/monitoring/page.tsx` — header + stats
-- [ ] T044 [P] [US11] تحديث `app/(super-admin)/super-admin/announcements/page.tsx` — header + list
-- [ ] T045 [P] [US11] تحديث `app/(super-admin)/super-admin/licenses/page.tsx` — header + table
+- [x] T041 [P] [US11] تحديث `app/(super-admin)/super-admin/tenants/[id]/page.tsx` — premium detail
+- [x] T042 [P] [US11] تحديث `app/(super-admin)/super-admin/plans/page.tsx` — pricing cards
+- [x] T043 [P] [US11] تحديث `app/(super-admin)/super-admin/monitoring/page.tsx` — header + stats
+- [x] T044 [P] [US11] تحديث `app/(super-admin)/super-admin/announcements/page.tsx` — header + list
+- [x] T045 [P] [US11] تحديث `app/(super-admin)/super-admin/licenses/page.tsx` — header + table
 
 ---
 
 ## Phase 13: US12 — POS Polish
 
-- [ ] T046 [US12] تحديث `app/pos/page.tsx` — ألوان indigo للـ accent buttons
+- [x] T046 [US12] تحديث `app/pos/page.tsx` — ألوان indigo للـ accent buttons
 
 ---
 
@@ -122,7 +122,7 @@
 - [x] T047 [P] تحديث `app/(tenant)/layout.tsx` — indigo dark sidebar + premium nav
 - [x] T048 [P] تحديث `app/(super-admin)/layout.tsx` — ultra-dark sidebar + violet theme
 - [x] T049 [P] تحديث `app/(tenant)/marketing/offers/page.tsx` — gradient fixed + isSubmitting bugfix
-- [ ] T050 [P] تحديث `app/(tenant)/transfers/page.tsx` — PageHeader gradient
+- [x] T050 [P] تحديث `app/(tenant)/transfers/page.tsx` — PageHeader gradient
 - [x] T051 TypeScript errors من UI changes: جميعها مُصلحة ✅
 
 ---

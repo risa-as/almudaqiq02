@@ -1,0 +1,591 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import {
+  FolderTree, Plus, Edit3, Trash2, X, Save, Search,
+  ArrowRight, ChevronRight, Sparkles, CheckCircle, AlertCircle,
+  FolderOpen, Folder, Loader2, MoveRight, RefreshCw
+} from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string | null;
+  parentId?: string | null;
+  parent?: { name: string } | null;
+  _count?: { products: number };
+  children?: Category[];
+}
+
+interface Toast {
+  type: 'success' | 'error';
+  message: string;
+}
+
+// ── Build tree structure ──────────────────────────────────────────────────────
+function buildTree(categories: Category[]): Category[] {
+  const map = new Map<string, Category>();
+  const roots: Category[] = [];
+
+  categories.forEach(c => map.set(c.id, { ...c, children: [] }));
+  categories.forEach(c => {
+    const node = map.get(c.id)!;
+    if (c.parentId && map.has(c.parentId)) {
+      map.get(c.parentId)!.children!.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
+// ── Toast Component ───────────────────────────────────────────────────────────
+function ToastNotif({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3500);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <div
+      className={`fixed bottom-6 left-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-white font-bold text-sm animate-fade-in-up ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+        }`}
+    >
+      {toast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+      {toast.message}
+    </div>
+  );
+}
+
+// ── Category Tree Node ────────────────────────────────────────────────────────
+function CategoryNode({
+  cat,
+  depth,
+  onEdit,
+  onDelete,
+}: {
+  cat: Category;
+  depth: number;
+  onEdit: (cat: Category) => void;
+  onDelete: (cat: Category) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const hasChildren = cat.children && cat.children.length > 0;
+  const productCount = cat._count?.products ?? 0;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-primary-light)] transition-all group border-b border-[var(--border-color)] last:border-0 ${depth > 0 ? 'bg-[var(--bg-page)]/40' : 'bg-[var(--bg-card)]'
+          }`}
+        style={{ paddingRight: `${16 + depth * 28}px` }}
+      >
+        {/* Expand toggle */}
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          className={`shrink-0 w-5 h-5 flex items-center justify-center rounded transition-colors ${hasChildren ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]' : 'invisible'
+            }`}
+        >
+          <ChevronRight
+            size={14}
+            className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          />
+        </button>
+
+        {/* Icon */}
+        <div className="shrink-0">
+          {hasChildren
+            ? <FolderOpen size={18} className="text-[var(--color-primary)]" />
+            : <Folder size={16} className="text-slate-400" />
+          }
+        </div>
+
+        {/* Name + parent badge */}
+        <div className="flex-1 min-w-0">
+          <span className={`font-bold ${depth === 0 ? 'text-[var(--value-neutral)] text-base' : 'text-[var(--value-muted)] text-sm'}`}>
+            {cat.name}
+          </span>
+          {cat.parent && (
+            <span className="mr-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)]">
+              فرع: {cat.parent.name}
+            </span>
+          )}
+          {cat.description && (
+            <span className="mr-2 text-xs text-[var(--value-muted)] opacity-70 hidden md:inline">
+              — {cat.description}
+            </span>
+          )}
+        </div>
+
+        {/* Product count badge */}
+        <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${productCount > 0
+            ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
+            : 'bg-slate-100 text-slate-400'
+          }`}>
+          {productCount} منتج
+        </span>
+
+        {/* Actions */}
+        <div className="shrink-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onEdit(cat)}
+            className="p-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] transition-all"
+            title="تعديل"
+          >
+            <Edit3 size={14} />
+          </button>
+          <button
+            onClick={() => onDelete(cat)}
+            className="p-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-danger)] hover:bg-red-50 transition-all"
+            title="حذف"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Children */}
+      {expanded && hasChildren && (
+        <div>
+          {cat.children!.map(child => (
+            <CategoryNode key={child.id} cat={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function CategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tree, setTree] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  // Seed state
+  const [seeding, setSeeding] = useState(false);
+
+  // Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editCat, setEditCat] = useState<Category | null>(null);
+  const [formData, setFormData] = useState({ name: '', description: '', parentId: '' });
+
+  const showToast = (type: 'success' | 'error', message: string) => setToast({ type, message });
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data: Category[] = await res.json();
+        setCategories(data);
+        setTree(buildTree(data));
+      }
+    } catch {
+      showToast('error', 'فشل تحميل الأقسام');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+  // ── Seed ──────────────────────────────────────────────────────────────────
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const res = await fetch('/api/categories/seed', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.seeded) {
+        showToast('success', `تم تحميل ${data.count} قسم بنجاح ✓`);
+        await fetchCategories();
+      } else if (data.reason === 'already_exists') {
+        showToast('error', 'يوجد أقسام مضافة مسبقاً');
+      } else {
+        showToast('error', data.error ?? 'فشل التحميل');
+      }
+    } catch {
+      showToast('error', 'حدث خطأ أثناء التحميل');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  // ── Open modal ────────────────────────────────────────────────────────────
+  const openAdd = () => {
+    setEditCat(null);
+    setFormData({ name: '', description: '', parentId: '' });
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (cat: Category) => {
+    setEditCat(cat);
+    setFormData({ name: cat.name, description: cat.description ?? '', parentId: cat.parentId ?? '' });
+    setIsModalOpen(true);
+  };
+
+  // Get all descendant IDs to prevent circular parent selection
+  function getDescendantIds(catId: string, allCats: Category[]): Set<string> {
+    const result = new Set<string>();
+    const stack = [catId];
+    while (stack.length) {
+      const curr = stack.pop()!;
+      result.add(curr);
+      allCats.filter(c => c.parentId === curr).forEach(c => stack.push(c.id));
+    }
+    return result;
+  }
+
+  // Parent options: all categories except self and its descendants
+  const parentOptions = categories.filter(c => {
+    if (!editCat) return true;
+    const excluded = getDescendantIds(editCat.id, categories);
+    return !excluded.has(c.id);
+  });
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
+        parentId: formData.parentId || null,
+        ...(editCat ? { id: editCat.id } : {}),
+      };
+
+      const res = await fetch('/api/categories', {
+        method: editCat ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast('success', editCat ? 'تم تعديل القسم بنجاح' : 'تم إضافة القسم بنجاح');
+        setIsModalOpen(false);
+        await fetchCategories();
+      } else {
+        showToast('error', data.error ?? 'فشل الحفظ');
+      }
+    } catch {
+      showToast('error', 'حدث خطأ أثناء الحفظ');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const handleDelete = async (cat: Category) => {
+    const productCount = cat._count?.products ?? 0;
+    const msg = productCount > 0
+      ? `⚠️ هذا القسم يحتوي على ${productCount} منتج. هل أنت متأكد من حذفه؟`
+      : `هل تريد حذف قسم "${cat.name}"؟`;
+    if (!confirm(msg)) return;
+
+    try {
+      const res = await fetch(`/api/categories?id=${cat.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('success', 'تم حذف القسم');
+        await fetchCategories();
+      } else {
+        const data = await res.json();
+        showToast('error', data.error ?? 'فشل الحذف');
+      }
+    } catch {
+      showToast('error', 'حدث خطأ أثناء الحذف');
+    }
+  };
+
+  // ── Filter (flat search) ──────────────────────────────────────────────────
+  const filteredFlat = searchQuery
+    ? categories.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : null;
+
+  const displayTree = filteredFlat
+    ? buildTree(filteredFlat.length > 0 ? filteredFlat.map(c => ({
+      ...c, children: []
+    })) : [])
+    : tree;
+
+  // Stats
+  const rootCount = categories.filter(c => !c.parentId).length;
+  const childCount = categories.filter(c => !!c.parentId).length;
+
+  return (
+    <div className="min-h-screen p-4 md:p-8 text-right" dir="rtl" style={{ background: 'var(--bg-page)' }}>
+      <div className="max-w-5xl mx-auto">
+
+        {/* Back */}
+        <div className="mb-3 flex items-center gap-2">
+          <Link
+            href="/inventory"
+            className="flex items-center gap-2 text-[var(--value-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] px-4 py-2 rounded-lg transition-all font-bold text-sm"
+          >
+            <ArrowRight size={16} />
+            <span>العودة للمخزن</span>
+          </Link>
+        </div>
+
+        <PageHeader
+          title="أقسام المنتجات"
+          subtitle="نظّم منتجاتك في هيكلية من الأقسام الرئيسية والفرعية"
+          icon={FolderTree}
+          gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
+          actions={
+            <button onClick={openAdd} className="btn-primary">
+              <Plus size={18} />
+              قسم جديد
+            </button>
+          }
+        />
+
+        {/* Stats row */}
+        {categories.length > 0 && (
+          <div className="flex gap-4 mt-6">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl px-5 py-3 flex items-center gap-3 shadow-sm">
+              <FolderOpen size={20} className="text-[var(--color-primary)]" />
+              <div>
+                <p className="text-xs text-[var(--value-muted)]">أقسام رئيسية</p>
+                <p className="text-xl font-extrabold text-[var(--value-neutral)]">{rootCount}</p>
+              </div>
+            </div>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl px-5 py-3 flex items-center gap-3 shadow-sm">
+              <Folder size={20} className="text-slate-400" />
+              <div>
+                <p className="text-xs text-[var(--value-muted)]">أقسام فرعية</p>
+                <p className="text-xl font-extrabold text-[var(--value-neutral)]">{childCount}</p>
+              </div>
+            </div>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl px-5 py-3 flex items-center gap-3 shadow-sm">
+              <RefreshCw size={20} className="text-slate-400" />
+              <div>
+                <p className="text-xs text-[var(--value-muted)]">الإجمالي</p>
+                <p className="text-xl font-extrabold text-[var(--value-neutral)]">{categories.length}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Seed Banner */}
+        {!loading && categories.length === 0 && (
+          <div className="mt-8 rounded-3xl border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] p-8 flex flex-col md:flex-row items-center gap-6">
+            <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary)] flex items-center justify-center shrink-0 shadow-lg">
+              <Sparkles size={32} className="text-white" />
+            </div>
+            <div className="flex-1 text-center md:text-right">
+              <h3 className="text-xl font-extrabold text-[var(--color-primary)] mb-1">
+                لا توجد أقسام بعد!
+              </h3>
+              <p className="text-[var(--value-muted)] text-sm leading-relaxed">
+                هل تريد تحميل الهيكلية القياسية للسوبرماركت العراقي؟<br />
+                <span className="font-bold">9 قسم رئيسي + 36 قسم فرعي</span> جاهزة للاستخدام الفوري.
+              </p>
+            </div>
+            <div className="flex gap-3 shrink-0">
+              <button
+                onClick={handleSeed}
+                disabled={seeding}
+                className="btn-primary flex items-center gap-2 px-6 py-3 text-base"
+              >
+                {seeding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                {seeding ? 'جاري التحميل...' : 'تحميل الأقسام'}
+              </button>
+              <button onClick={openAdd} className="px-5 py-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] font-bold text-sm text-[var(--value-muted)] hover:opacity-80 transition-all">
+                إضافة يدوياً
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search & List */}
+        {categories.length > 0 && (
+          <div className="mt-8">
+            {/* Search bar */}
+            <div className="relative mb-4">
+              <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="ابحث عن قسم..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pr-10 pl-4 py-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl text-sm font-bold focus:ring-2 focus:ring-[var(--color-primary)] outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-400"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Tree / Flat results */}
+            <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
+              {loading ? (
+                <div className="p-10 text-center text-[var(--value-muted)] flex flex-col items-center gap-3">
+                  <Loader2 size={32} className="animate-spin text-[var(--color-primary)]" />
+                  <p className="font-bold">جاري التحميل...</p>
+                </div>
+              ) : filteredFlat !== null && filteredFlat.length === 0 ? (
+                <div className="p-12 text-center text-gray-400 flex flex-col items-center gap-3">
+                  <Search size={40} className="opacity-20" />
+                  <p className="font-bold">لا توجد نتائج لـ "{searchQuery}"</p>
+                </div>
+              ) : (
+                <div>
+                  {/* Header row */}
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-b border-[var(--border-color)] text-xs font-bold text-slate-500">
+                    <span className="flex-1">اسم القسم</span>
+                    <span className="w-20 text-center">المنتجات</span>
+                    <span className="w-20 text-center">إجراءات</span>
+                  </div>
+
+                  {searchQuery
+                    ? // Flat filtered results
+                    filteredFlat!.map(cat => (
+                      <CategoryNode
+                        key={cat.id}
+                        cat={{ ...cat, children: [] }}
+                        depth={cat.parentId ? 1 : 0}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))
+                    : // Tree view
+                    displayTree.map(root => (
+                      <CategoryNode
+                        key={root.id}
+                        cat={root}
+                        depth={0}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Add/Edit Modal ─────────────────────────────────────────────────────── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl animate-fade-in-up"
+            dir="rtl"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
+                {editCat ? (
+                  <><MoveRight size={22} className="text-blue-500" /> تعديل القسم</>
+                ) : (
+                  <><Plus size={22} className="text-blue-500" /> قسم جديد</>
+                )}
+              </h2>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-red-500 transition-colors">
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              {/* Category name */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">اسم القسم *</label>
+                <input
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-sm"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="مثال: مشروبات غازية"
+                />
+              </div>
+
+              {/* Parent selector */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  القسم الأب
+                  <span className="mr-2 text-xs font-normal text-gray-400">(اختر "بدون" لجعله قسماً رئيسياً)</span>
+                </label>
+                <select
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-sm text-gray-700"
+                  value={formData.parentId}
+                  onChange={e => setFormData({ ...formData, parentId: e.target.value })}
+                >
+                  <option value="">— بدون (قسم رئيسي) —</option>
+                  
+                  {parentOptions.filter(c => !c.parentId).map(root => (
+                    <optgroup key={`group-${root.id}`} label={`📦 ${root.name}`}>
+                      <option value={root.id}>
+                        {root.name} (نفسه كقسم أب)
+                      </option>
+                      {parentOptions.filter(sub => sub.parentId === root.id).map(sub => (
+                        <option key={sub.id} value={sub.id}>
+                          ↳ {sub.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+
+                  {/* في حالة وجود أقسام مستوى ثالث فما فوق أو أقسام يتيمة */}
+                  {parentOptions.some(c => c.parentId && parentOptions.find(p => p.id === c.parentId)?.parentId) && (
+                    <optgroup label="📂 أقسام فرعية أخرى (مستويات متقدمة)">
+                      {parentOptions.filter(c => c.parentId && parentOptions.find(p => p.id === c.parentId)?.parentId).map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.parent ? `${c.parent.name} ⬅️ ` : ''}{c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">وصف (اختياري)</label>
+                <textarea
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                  rows={2}
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="وصف مختصر للقسم..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-7">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors flex items-center justify-center gap-2"
+              >
+                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {isSaving ? 'جاري الحفظ...' : 'حفظ'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && <ToastNotif toast={toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}

@@ -22,7 +22,7 @@ export default function ExpensesPage() {
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const { selectedBranch } = useBranch();
+    const { selectedBranch, loading: branchLoading } = useBranch();
 
     // Filter State
     const [startDate, setStartDate] = useState('');
@@ -37,7 +37,7 @@ export default function ExpensesPage() {
     const [expenseDate, setExpenseDate] = useState('');
 
     useEffect(() => {
-        if (!selectedBranch) return;
+        if (branchLoading) return;
         // Default to current month on load if not set
         const now = new Date();
         const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -47,7 +47,7 @@ export default function ExpensesPage() {
         if (!endDate) setEndDate(end); 
         
         fetchExpenses(start, end);
-    }, [selectedBranch, startDate, endDate]);
+    }, [selectedBranch, startDate, endDate, branchLoading]);
 
     const fetchExpenses = async (start?: string, end?: string) => {
         setLoading(true);

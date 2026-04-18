@@ -12,13 +12,14 @@ import { formatCurrency } from '@/lib/format';
 import { useBranch } from '@/contexts/BranchContext';
 
 export default function Home() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranch, loading: branchLoading } = useBranch();
   const [alerts, setAlerts] = useState<{ lowStock: any[], expiringBatches: any[] } | null>(null);
   const [profit, setProfit] = useState({ revenue: 0, cogs: 0, expenses: 0, netProfit: 0, grossProfit: 0 });
   const [latestTransactions, setLatestTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (branchLoading) return;
     const branchQuery = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : '';
     const profitQuery = selectedBranch?.id ? `&branchId=${selectedBranch.id}` : '';
     setLoading(true);
@@ -33,7 +34,7 @@ export default function Home() {
       else if (txData?.transactions) setLatestTransactions(txData.transactions.slice(0, 7));
       setLoading(false);
     });
-  }, [selectedBranch?.id]);
+  }, [selectedBranch?.id, branchLoading]);
 
   const quickActions = [
     { href: '/inventory/new',       icon: Package,       label: 'منتج جديد',      gradient: 'linear-gradient(135deg,#10b981,#059669)', glow: 'rgba(16,185,129,0.2)' },
@@ -168,7 +169,7 @@ export default function Home() {
         <div
           className="lg:col-span-2 rounded-2xl p-5"
           style={{
-            background: 'white',
+            background: 'var(--bg-card)',
             border: '1px solid var(--border-color)',
             boxShadow: 'var(--shadow-card)',
           }}
@@ -200,9 +201,9 @@ export default function Home() {
                 <div
                   key={idx}
                   className="flex justify-between items-center p-3.5 rounded-xl transition-all duration-150 group cursor-default"
-                  style={{ background: '#f8fafc' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#eef2ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
+                  style={{ background: 'var(--bg-page)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-light)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-page)')}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -243,7 +244,7 @@ export default function Home() {
           ) : (
             <div className="text-center py-14" style={{ color: 'var(--text-muted)' }}>
               <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)' }}>
+                style={{ background: 'var(--color-secondary-light)' }}>
                 <Activity size={28} className="opacity-40" />
               </div>
               <p className="font-bold text-sm">لا توجد فواتير اليوم بعد</p>
@@ -256,7 +257,7 @@ export default function Home() {
         <div
           className="rounded-2xl p-5"
           style={{
-            background: 'white',
+            background: 'var(--bg-card)',
             border: '1px solid var(--border-color)',
             boxShadow: 'var(--shadow-card)',
           }}
@@ -275,8 +276,8 @@ export default function Home() {
                 href={action.href}
                 className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-xl text-center transition-all duration-200 group relative overflow-hidden"
                 style={{
-                  background: `linear-gradient(135deg, ${action.gradient.includes('10b981') ? '#ecfdf5' : action.gradient.includes('6366f1') ? '#eef2ff' : action.gradient.includes('ef4444') ? '#fef2f2' : action.gradient.includes('8b5cf6') ? '#f5f3ff' : action.gradient.includes('06b6d4') ? '#ecfeff' : '#fffbeb'} 0%, white 100%)`,
-                  border: '1px solid rgba(0,0,0,0.04)',
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border-color)',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${action.glow}`; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
