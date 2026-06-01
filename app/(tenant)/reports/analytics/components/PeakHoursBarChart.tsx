@@ -53,7 +53,7 @@ export default function PeakHoursBarChart({ data }: PeakHoursBarChartProps) {
                             axisLine={false}
                             tickLine={false}
                             tick={{ fill: '#94a3b8', fontSize: 11 }}
-                            tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+                            tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(1)} مليون` : val >= 1000 ? `${(val / 1000).toFixed(0)} الف` : val}
                             dx={-10}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />

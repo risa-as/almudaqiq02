@@ -1,25 +1,23 @@
 'use client';
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Printer, Search, Plus, Minus, FileText, Tag, Filter, ArrowRight } from 'lucide-react';
+import { Printer, Search, Tag, X, Plus, Minus, Package, Ruler, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/format';
-
 import toast from 'react-hot-toast';
+
 interface ProductUnit {
     name: string;
     price: number;
     barcode: string | null;
 }
-
 interface Product {
     id: number;
     name: string;
     units: ProductUnit[];
-    categoryId?: number;
     category?: { name: string };
 }
-
 interface LabelToPrint {
     productName: string;
     price: number;
@@ -27,257 +25,411 @@ interface LabelToPrint {
     quantity: number;
 }
 
+const LABEL_SIZES = {
+    SMALL:    { label: 'صغير',       sub: '38 × 25 mm',   width: '38mm',    height: '25mm',   cols: 4, barcodeH: 6  },
+    MEDIUM:   { label: 'متوسط',      sub: '57 × 32 mm',   width: '57mm',    height: '32mm',   cols: 3, barcodeH: 8  },
+    STANDARD: { label: 'قياسي A4',   sub: '63.5 × 38 mm', width: '63.5mm',  height: '38.1mm', cols: 3, barcodeH: 10 },
+    LARGE:    { label: 'كبير A4',    sub: '99.1 × 38 mm', width: '99.1mm',  height: '38.1mm', cols: 2, barcodeH: 10 },
+    XLARGE:   { label: 'كبير جداً',  sub: '100 × 50 mm',  width: '100mm',   height: '50mm',   cols: 2, barcodeH: 14 },
+} as const;
+
+type SizeKey = keyof typeof LABEL_SIZES;
+
 export default function PrintLabelsPage() {
+  usePageTitle('طباعة الملصقات');
     const router = useRouter();
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    const [products, setProducts]           = useState<Product[]>([]);
+    const [loading, setLoading]             = useState(true);
+    const [search, setSearch]               = useState('');
     const [selectedLabels, setSelectedLabels] = useState<LabelToPrint[]>([]);
-    const printAreaRef = useRef<HTMLDivElement>(null);
+    const [labelSize, setLabelSize]         = useState<SizeKey>('STANDARD');
+    const [bwipReady, setBwipReady]         = useState(false);
 
     useEffect(() => {
-        fetchProducts();
+        fetch('/api/products').then(r => r.json()).then(d => setProducts(d)).catch(console.error).finally(() => setLoading(false));
 
-        // Dynamically load bwip-js for barcode generation
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/bwip-js/3.0.5/bwip-js-min.js';
         script.async = true;
+        script.onload = () => setBwipReady(true);
         document.body.appendChild(script);
-
-        return () => {
-            document.body.removeChild(script);
-        };
+        return () => { try { document.body.removeChild(script); } catch {} };
     }, []);
 
-    const fetchProducts = async () => {
-        try {
-            const res = await fetch('/api/products');
-            if (res.ok) {
-                const data = await res.json();
-                setProducts(data);
-            }
-        } catch (error) {
-            console.error('Error fetching products:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleAddLabel = (productName: string, price: number, barcode: string | null) => {
-        if (!barcode) {
-            toast.success('هذه الوحدة لا تملك باركود مسجل.');
-            return;
-        }
-
+        if (!barcode) { toast.error('هذه الوحدة لا تملك باركود مسجل.'); return; }
         setSelectedLabels(prev => {
-            const existing = prev.find(l => l.barcode === barcode);
-            if (existing) {
-                return prev.map(l => l.barcode === barcode ? { ...l, quantity: l.quantity + 1 } : l);
-            }
+            const ex = prev.find(l => l.barcode === barcode);
+            if (ex) return prev.map(l => l.barcode === barcode ? { ...l, quantity: l.quantity + 1 } : l);
             return [...prev, { productName, price, barcode, quantity: 1 }];
         });
     };
 
-    const handleQuantityChange = (barcode: string, quantity: number) => {
-        if (quantity < 1) return;
-        setSelectedLabels(prev => prev.map(l => l.barcode === barcode ? { ...l, quantity } : l));
+    const handleQty = (barcode: string, qty: number) => {
+        if (qty < 1) return;
+        setSelectedLabels(prev => prev.map(l => l.barcode === barcode ? { ...l, quantity: qty } : l));
     };
 
-    const handleRemoveLabel = (barcode: string) => {
-        setSelectedLabels(prev => prev.filter(l => l.barcode !== barcode));
-    };
+    const handleRemove = (barcode: string) => setSelectedLabels(prev => prev.filter(l => l.barcode !== barcode));
+
+    const totalLabels = selectedLabels.reduce((s, l) => s + l.quantity, 0);
+
+    const labelsGrid = selectedLabels.flatMap(l =>
+        Array.from({ length: l.quantity }).map((_, i) => ({ ...l, instanceId: i }))
+    );
 
     const handlePrint = () => {
-        if (selectedLabels.length === 0) return;
-
-        // Ensure bwipjs is loaded
-        if (typeof window !== 'undefined' && (window as any).bwipjs) {
-            // Draw all barcodes
-            selectedLabels.forEach(label => {
-                for (let i = 0; i < label.quantity; i++) {
-                    try {
-                        let canvasId = `barcode-${label.barcode}-${i}`;
-                        (window as any).bwipjs.toCanvas(canvasId, {
-                            bcid: 'code128',       // Barcode type
-                            text: label.barcode,    // Text to encode
-                            scale: 2,               // 2x scaling factor
-                            height: 10,              // Bar height, in millimeters
-                            includetext: true,            // Show human-readable text
-                            textxalign: 'center',        // Always good to set this
-                        });
-                    } catch (e) {
-                        console.error('Barcode generation error', e);
-                    }
-                }
-            });
-
-            // Call print after a short delay to allow rendering
-            setTimeout(() => {
-                window.print();
-            }, 500);
-        } else {
-            toast.success('انتظر قليلاً حتى يتم تحميل مكتبة الباركود.');
+        if (!selectedLabels.length) return;
+        if (!bwipReady || !(window as any).bwipjs) {
+            toast.error('مكتبة الباركود لم تُحمَّل بعد، انتظر لحظة.'); return;
         }
+        const size = LABEL_SIZES[labelSize];
+        labelsGrid.forEach((label) => {
+            try {
+                (window as any).bwipjs.toCanvas(`bc-${label.barcode}-${label.instanceId}`, {
+                    bcid: 'code128',
+                    text: label.barcode,
+                    scale: 2,
+                    height: size.barcodeH,
+                    includetext: true,
+                    textxalign: 'center',
+                });
+            } catch (e) { console.error('Barcode error', e); }
+        });
+        setTimeout(() => window.print(), 500);
     };
 
     const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
-
-    // Explode labels based on quantity for rendering the print grid
-    const labelsGrid = selectedLabels.flatMap(label =>
-        Array.from({ length: label.quantity }).map((_, i) => ({ ...label, instanceId: i }))
-    );
+    const size = LABEL_SIZES[labelSize];
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col overflow-hidden" dir="rtl">
-            <div className="bg-white border-b border-gray-200 h-16 flex items-center px-6 shadow-sm z-20 no-print gap-4">
-                <button
-                    onClick={() => router.push('/inventory')}
-                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg font-bold transition-colors"
-                >
-                    <ArrowRight size={18} />
-                    المخزون
-                </button>
-                <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
-                    <Printer className="text-blue-600" />
-                    طباعة ملصقات الباركود
-                </h1>
+        <>
+            {/* ─── Print CSS ─── */}
+            <style>{`
+                /* ── Screen: hide print area off-screen (NOT display:none so canvas renders) ── */
+                #print-area {
+                    position: fixed;
+                    left: -9999px;
+                    top: 0;
+                    pointer-events: none;
+                    z-index: -1;
+                }
+
+                /* ── Print mode ── */
+                @media print {
+                    @page { size: A4; margin: 8mm; }
+
+                    /* Hide ALL elements (works for any nesting depth) */
+                    body * { visibility: hidden !important; }
+
+                    /* Show only the print area and its children */
+                    #print-area,
+                    #print-area * { visibility: visible !important; }
+
+                    /* Position the grid at top-left of the page */
+                    #print-area {
+                        position: fixed !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        z-index: 99999 !important;
+                        display: grid !important;
+                        grid-template-columns: repeat(${size.cols}, ${size.width}) !important;
+                        gap: 2mm !important;
+                        align-content: start !important;
+                        background: white !important;
+                        padding: 0 !important;
+                    }
+
+                    .label-box {
+                        border: 0.4px dashed #aaa;
+                        width: ${size.width};
+                        height: ${size.height};
+                        box-sizing: border-box;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        padding: 1.5mm;
+                        page-break-inside: avoid;
+                        overflow: hidden;
+                    }
+                    .label-name {
+                        font-size: 6.5pt;
+                        font-weight: 700;
+                        text-align: center;
+                        margin-bottom: 0.5mm;
+                        line-height: 1.2;
+                        word-break: break-word;
+                    }
+                    .label-price {
+                        font-size: 8pt;
+                        font-weight: 900;
+                        margin-top: 0.5mm;
+                    }
+                    canvas { max-width: 100%; display: block; }
+                }
+            `}</style>
+
+            {/* ─── Print area: off-screen on screen, visible on print ─── */}
+            <div id="print-area">
+                {labelsGrid.map(label => (
+                    <div key={`${label.barcode}-${label.instanceId}`} className="label-box">
+                        <div className="label-name">{label.productName}</div>
+                        <canvas id={`bc-${label.barcode}-${label.instanceId}`} />
+                        <div className="label-price">{formatCurrency(label.price)}</div>
+                    </div>
+                ))}
             </div>
 
-            <div className="flex flex-1 overflow-hidden no-print p-6 gap-6">
+            {/* ─── Main UI ─── */}
+            <div className="flex flex-col gap-4 h-[calc(100vh-5rem)]" dir="rtl">
 
-                {/* Left Side: Product Selection */}
-                <div className="w-1/2 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50">
-                        <input
-                            type="text"
-                            placeholder="بحث عن منتج..."
-                            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                        />
+                {/* Header */}
+                <div className="flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#094B9F 0%,#063A8A 100%)', boxShadow: '0 8px 20px rgba(9,75,159,.3)' }}>
+                            <Printer className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-black text-slate-900">طباعة ملصقات الباركود</h1>
+                            <p className="text-xs text-slate-400 font-medium mt-0.5">اختر المنتجات وحجم الملصق ثم اطبع</p>
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2">
-                        {loading ? (
-                            <p className="text-center p-4 text-gray-400">جاري التحميل...</p>
-                        ) : (
-                            <div className="grid grid-cols-1 gap-2">
-                                {filteredProducts.map(product => (
-                                    <div key={product.id} className="border border-gray-100 p-3 rounded-xl hover:border-blue-200 transition-colors">
-                                        <h3 className="font-bold text-gray-800 mb-2">{product.name}</h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {product.units.map(unit => (
-                                                <button
-                                                    key={unit.barcode}
-                                                    onClick={() => handleAddLabel(product.name, unit.price, unit.barcode)}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${unit.barcode ? 'bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`}
-                                                    title={!unit.barcode ? 'لا يوجد باركود' : 'إضافة للطباعة'}
-                                                    disabled={!unit.barcode}
-                                                >
-                                                    {unit.name} ({formatCurrency(unit.price)})
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Right Side: Selected Labels & Print Controls */}
-                <div className="w-1/2 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                        <h2 className="font-bold text-gray-800">الملصقات المحددة ({labelsGrid.length})</h2>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => router.push('/inventory')}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
+                        >
+                            <X size={15} />إلغاء
+                        </button>
                         <button
                             onClick={handlePrint}
-                            disabled={selectedLabels.length === 0}
-                            className="flex items-center gap-2 bg-gray-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-black transition-colors disabled:opacity-50"
+                            disabled={!selectedLabels.length}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-sm shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                            style={{ background: 'linear-gradient(135deg,#094B9F 0%,#063A8A 100%)', boxShadow: '0 6px 20px rgba(9,75,159,.35)' }}
                         >
-                            <Printer size={18} /> طباعة
+                            <Printer size={15} />
+                            طباعة {totalLabels > 0 && `(${totalLabels})`}
                         </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {selectedLabels.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                                <Tag size={48} className="mb-4 text-gray-200" />
-                                <p>لم يتم تحديد باركودات للطباعة</p>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 grid grid-cols-5 gap-4 min-h-0">
+
+                    {/* ── LEFT: Products (2 cols) ── */}
+                    <div className="col-span-2 glass-panel flex flex-col overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/40 shrink-0"
+                            style={{ background: 'linear-gradient(135deg,rgba(9,75,159,.05) 0%,transparent 60%)' }}>
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                                style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)', boxShadow: '0 4px 12px rgba(9,75,159,.3)' }}>
+                                <Search className="w-4 h-4 text-white" />
                             </div>
-                        ) : (
-                            selectedLabels.map(label => (
-                                <div key={label.barcode} className="flex items-center justify-between border border-gray-200 p-3 rounded-xl bg-gray-50">
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{label.productName}</h4>
-                                        <p className="text-xs text-gray-500 mt-1">{label.barcode} | {formatCurrency(label.price)}</p>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                            <button onClick={() => handleQuantityChange(label.barcode, label.quantity - 1)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200 font-bold">-</button>
-                                            <span className="w-10 text-center font-bold">{label.quantity}</span>
-                                            <button onClick={() => handleQuantityChange(label.barcode, label.quantity + 1)} className="px-3 py-1 bg-gray-100 hover:bg-gray-200 font-bold">+</button>
-                                        </div>
-                                        <button onClick={() => handleRemoveLabel(label.barcode)} className="text-red-500 hover:text-red-700 text-sm font-bold bg-red-50 px-2 py-1 rounded">حذف</button>
+                            <h2 className="font-bold text-slate-700 text-sm">قائمة المنتجات</h2>
+                        </div>
+
+                        <div className="px-4 pt-3 pb-2 shrink-0">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="بحث عن منتج..."
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm placeholder-slate-300"
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                />
+                                <Search className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+                            {loading ? (
+                                <p className="text-center py-8 text-slate-300 text-sm font-bold animate-pulse">جاري التحميل...</p>
+                            ) : filteredProducts.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-slate-200">
+                                    <Package size={32} /><p className="text-xs font-bold mt-2 text-slate-300">لا توجد نتائج</p>
+                                </div>
+                            ) : filteredProducts.map(product => (
+                                <div key={product.id} className="bg-white border border-slate-100 rounded-xl p-3 hover:border-blue-100 transition-colors">
+                                    <p className="font-bold text-slate-800 text-sm mb-2">{product.name}</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {product.units.map(unit => (
+                                            <button
+                                                key={unit.barcode ?? unit.name}
+                                                onClick={() => handleAddLabel(product.name, unit.price, unit.barcode)}
+                                                disabled={!unit.barcode}
+                                                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                    unit.barcode
+                                                        ? 'bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-100'
+                                                        : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                                }`}
+                                                title={unit.barcode ? `إضافة: ${unit.barcode}` : 'لا يوجد باركود'}
+                                            >
+                                                <Tag size={10} />
+                                                {unit.name} — {formatCurrency(unit.price)}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ── RIGHT: Settings + Queue (3 cols) ── */}
+                    <div className="col-span-3 glass-panel flex flex-col overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/40 shrink-0"
+                            style={{ background: 'linear-gradient(135deg,rgba(16,185,129,.05) 0%,transparent 60%)' }}>
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                                style={{ background: 'linear-gradient(135deg,#10b981,#059669)', boxShadow: '0 4px 12px rgba(16,185,129,.3)' }}>
+                                <Ruler className="w-4 h-4 text-white" />
+                            </div>
+                            <h2 className="font-bold text-slate-700 text-sm">حجم الملصق والقائمة</h2>
+                            {totalLabels > 0 && (
+                                <span className="mr-auto text-[11px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                                    {totalLabels} ملصق
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+                            {/* ── Size picker ── */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-5 h-5 rounded-md flex items-center justify-center"
+                                        style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)' }}>
+                                        <Ruler size={11} className="text-white" />
+                                    </div>
+                                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">حجم الملصق</span>
+                                    <div className="flex-1 h-px bg-slate-100" />
+                                </div>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {(Object.keys(LABEL_SIZES) as SizeKey[]).map(key => {
+                                        const s = LABEL_SIZES[key];
+                                        const active = labelSize === key;
+                                        return (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => setLabelSize(key)}
+                                                className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 transition-all text-center ${
+                                                    active
+                                                        ? 'border-blue-400 bg-blue-50'
+                                                        : 'border-slate-100 bg-white hover:border-blue-200 hover:bg-blue-50/40'
+                                                }`}
+                                            >
+                                                {/* Mini label visual */}
+                                                <div className={`rounded border flex items-center justify-center transition-all ${
+                                                    active ? 'border-blue-300 bg-blue-100' : 'border-slate-200 bg-slate-50'
+                                                }`} style={{
+                                                    width: key === 'SMALL' ? 20 : key === 'MEDIUM' ? 24 : key === 'STANDARD' ? 28 : key === 'LARGE' ? 36 : 32,
+                                                    height: key === 'SMALL' ? 14 : key === 'MEDIUM' ? 14 : key === 'STANDARD' ? 17 : key === 'LARGE' ? 17 : 18,
+                                                }}>
+                                                    {active && <CheckCircle2 size={10} className="text-blue-500" />}
+                                                </div>
+                                                <span className={`text-[10px] font-black leading-tight ${active ? 'text-blue-700' : 'text-slate-600'}`}>
+                                                    {s.label}
+                                                </span>
+                                                <span className={`text-[9px] font-medium leading-none ${active ? 'text-blue-400' : 'text-slate-400'}`}>
+                                                    {s.sub}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {/* Size info strip */}
+                                <div className="mt-3 flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5">
+                                    <Tag size={13} className="text-blue-400 shrink-0" />
+                                    <div className="text-xs text-slate-600 font-semibold">
+                                        الحجم المحدد: <span className="font-black text-blue-600">{size.label} ({size.sub})</span>
+                                        <span className="mx-2 text-slate-300">|</span>
+                                        {size.cols} أعمدة في الصفحة
+                                        <span className="mx-2 text-slate-300">|</span>
+                                        ≈ {size.cols * Math.floor(257 / parseInt(size.height))} ملصق/ورقة
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ── Label queue ── */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-5 h-5 rounded-md flex items-center justify-center"
+                                        style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
+                                        <Tag size={11} className="text-white" />
+                                    </div>
+                                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">قائمة الطباعة</span>
+                                    <div className="flex-1 h-px bg-slate-100" />
+                                    {selectedLabels.length > 0 && (
+                                        <button
+                                            onClick={() => setSelectedLabels([])}
+                                            className="text-[11px] font-bold text-red-400 hover:text-red-600 transition-colors"
+                                        >
+                                            مسح الكل
+                                        </button>
+                                    )}
+                                </div>
+
+                                {selectedLabels.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-slate-200">
+                                        <Tag size={36} />
+                                        <p className="text-xs font-bold mt-2 text-slate-300">أضف ملصقات من القائمة على اليمين</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {selectedLabels.map(label => (
+                                            <div key={label.barcode}
+                                                className="flex items-center gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3 hover:border-blue-100 transition-colors">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                                    <Tag size={14} className="text-blue-500" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-800 text-sm truncate">{label.productName}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[11px] font-mono text-slate-400">{label.barcode}</span>
+                                                        <span className="text-slate-200">|</span>
+                                                        <span className="text-[11px] font-bold text-emerald-600">{formatCurrency(label.price)}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shrink-0">
+                                                    <button
+                                                        onClick={() => handleQty(label.barcode, label.quantity - 1)}
+                                                        className="w-7 h-7 flex items-center justify-center hover:bg-slate-200 transition-colors text-slate-600"
+                                                    >
+                                                        <Minus size={12} />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={label.quantity}
+                                                        onChange={e => {
+                                                            const v = parseInt(e.target.value);
+                                                            if (!isNaN(v) && v >= 1) handleQty(label.barcode, v);
+                                                        }}
+                                                        className="w-12 text-center text-sm font-black text-slate-700 bg-transparent outline-none border-none py-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                    />
+                                                    <button
+                                                        onClick={() => handleQty(label.barcode, label.quantity + 1)}
+                                                        className="w-7 h-7 flex items-center justify-center hover:bg-slate-200 transition-colors text-slate-600"
+                                                    >
+                                                        <Plus size={12} />
+                                                    </button>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemove(label.barcode)}
+                                                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-
-            {/* Hidden Print Container */}
-            <div className="hidden print:block bg-white text-black" ref={printAreaRef}>
-                <style dangerouslySetInnerHTML={{
-                    __html: `
-                    @media print {
-                        @page {
-                            /* Standard A4 Label sheet setup (e.g., 3x8 or similar depending on label size) */
-                            /* Using standard generic A4 size */
-                            size: A4;
-                            margin: 10mm;
-                        }
-                        body * {
-                            visibility: hidden;
-                        }
-                        .print-labels-container, .print-labels-container * {
-                            visibility: visible;
-                        }
-                        .print-labels-container {
-                            position: absolute;
-                            left: 0;
-                            top: 0;
-                            width: 100%;
-                            display: grid !important;
-                            grid-template-columns: repeat(3, 1fr) !important;
-                            gap: 5mm !important;
-                            background: white;
-                        }
-                        .label-box {
-                            border: 1px dashed #ccc;
-                            padding: 10px;
-                            text-align: center;
-                            display: flex;
-                            flex-direction: column;
-                            align-items: center;
-                            justify-content: center;
-                            height: 38.1mm; /* Standard label height */
-                            width: 63.5mm; /* Standard label width */
-                            box-sizing: border-box;
-                            page-break-inside: avoid;
-                        }
-                    }
-                `}} />
-
-                <div className="print-labels-container p-0 m-0">
-                    {labelsGrid.map((label) => (
-                        <div key={`${label.barcode}-${label.instanceId}`} className="label-box">
-                            <span className="text-sm font-bold mb-1 line-clamp-1">{label.productName}</span>
-                            <canvas id={`barcode-${label.barcode}-${label.instanceId}`} className="mb-1"></canvas>
-                            <span className="text-sm font-black text-gray-900">{formatCurrency(label.price)}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-        </div>
+        </>
     );
 }

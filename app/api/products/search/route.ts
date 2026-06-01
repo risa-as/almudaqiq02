@@ -9,69 +9,80 @@ export async function GET(request: NextRequest) {
     if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q');
+    const q        = searchParams.get('q');
+    const branchId = searchParams.get('branchId');
+    const specificBranch = branchId && branchId !== 'all' ? branchId : null;
 
-    if (!q) {
-        return NextResponse.json([]);
-    }
+    if (!q) return NextResponse.json([]);
 
-    // Search logic:
-    // 1. Exact Barcode Match on Unit (Highest Priority)
-    // 2. Partial Name Match on Product
+    // Helper: compute actual batch stock for a list of product IDs
+    const getBatchStock = async (productIds: string[]): Promise<Map<string, number>> => {
+        if (productIds.length === 0) return new Map();
+        const batches = await prisma.productBatch.groupBy({
+            by: ['productId'],
+            where: {
+                tenantId,
+                productId: { in: productIds },
+                ...(specificBranch ? { branchId: specificBranch } : {}),
+            },
+            _sum: { quantity: true },
+        });
+        return new Map(batches.map(b => [b.productId, b._sum.quantity ?? 0]));
+    };
 
     try {
-        // 1. Check if query matches a barcode exactly (scoped to tenant via product)
+        // 1. Exact barcode match (highest priority)
         const unitMatch = await prisma.productUnit.findFirst({
-            where: {
-                barcode: q,
-                product: { tenantId }
+            where: { barcode: q, product: { tenantId } },
+            include: {
+                product: { include: { units: true } },
             },
-            include: { product: true },
         });
 
         if (unitMatch) {
-            // Found a specific unit scan
-            // Return consistent structure with 'units' array so frontend works uniformly
+            const stockMap = await getBatchStock([unitMatch.product.id]);
+            const stock    = stockMap.get(unitMatch.product.id) ?? unitMatch.product.baseStock;
+
             return NextResponse.json([{
-                id: unitMatch.product.id,
-                name: unitMatch.product.name,
-                baseStock: unitMatch.product.baseStock,
+                id:        unitMatch.product.id,
+                name:      unitMatch.product.name,
+                baseStock: stock,
                 units: [{
-                    unitId: unitMatch.id,
-                    unitName: unitMatch.name,
-                    price: Number(unitMatch.price),
-                    barcode: unitMatch.barcode
+                    unitId:           unitMatch.id,
+                    unitName:         unitMatch.name,
+                    price:            Number(unitMatch.price),
+                    barcode:          unitMatch.barcode,
+                    conversionFactor: unitMatch.conversionFactor,
                 }],
-                matchType: 'barcode'
+                matchType: 'barcode',
             }]);
         }
 
-        // 2. If no barcode match, search by Name (Partial)
-        // We fetch products that match the name, scoped to tenant
+        // 2. Partial name match
         const products = await prisma.product.findMany({
             where: {
                 tenantId,
                 name: { contains: q, mode: 'insensitive' },
             },
-            include: {
-                units: true // Include all units to let cashier choose
-            },
+            include: { units: true },
             take: 10,
         });
 
-        // Map to a simplified format for POS Search Grid
+        const stockMap = await getBatchStock(products.map(p => p.id));
+
         const results = products.map(p => ({
-            id: p.id,
-            name: p.name,
-            baseStock: p.baseStock,
+            id:        p.id,
+            name:      p.name,
+            // Use real batch stock; fall back to legacy baseStock only if no batches exist yet
+            baseStock: stockMap.has(p.id) ? (stockMap.get(p.id) ?? 0) : p.baseStock,
             units: p.units.map((u: any) => ({
-                unitId: u.id,
-                unitName: u.name,
-                price: Number(u.price),
-                barcode: u.barcode,
-                conversionFactor: u.conversionFactor
+                unitId:           u.id,
+                unitName:         u.name,
+                price:            Number(u.price),
+                barcode:          u.barcode,
+                conversionFactor: u.conversionFactor,
             })),
-            matchType: 'name'
+            matchType: 'name',
         }));
 
         return NextResponse.json(results);

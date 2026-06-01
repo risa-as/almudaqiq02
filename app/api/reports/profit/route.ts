@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
                 tenantId,
                 ...branchFilter,
                 date: { gte: startDate, lte: endDate },
-                type: { in: ['SALE', 'REFUND'] }
+                type: { in: ['SALE', 'REFUND', 'RETURN'] }
             },
             include: {
                 items: true
@@ -60,9 +60,10 @@ export async function GET(req: NextRequest) {
                 for (const item of tx.items) {
                     cogs += Number(item.cost || 0);
                 }
-            } else if (tx.type === 'REFUND') {
-                // REFUND totalAmount is positive (from POS)
-                refunds += Number(tx.totalAmount);
+            } else if (tx.type === 'REFUND' || tx.type === 'RETURN') {
+                // REFUND stores +amount, legacy RETURN stores -amount — normalise to
+                // a positive refund value, and reverse the COGS of the returned goods.
+                refunds += tx.type === 'REFUND' ? Number(tx.totalAmount) : -Number(tx.totalAmount);
                 for (const item of tx.items) {
                     cogs -= Number(item.cost || 0);
                 }

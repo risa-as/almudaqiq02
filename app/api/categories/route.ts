@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
+import { logCloudDelete } from '@/lib/sync-delete-log';
 
 export async function GET() {
     const tenantId = await getTenantId();
@@ -10,7 +12,7 @@ export async function GET() {
     try {
         const categories = await prisma.category.findMany({
             where: { tenantId },
-            orderBy: { name: 'asc' },
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
             include: {
                 parent: { select: { name: true } },
                 _count: { select: { products: true } }
@@ -39,6 +41,10 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        enqueueSync('categories', 'INSERT', category.id, {
+            id: category.id, name: category.name,
+            description: category.description, parentId: category.parentId,
+        });
         return NextResponse.json(category);
     } catch (error) {
         return NextResponse.json({ error: 'Failed' }, { status: 500 });
@@ -70,8 +76,42 @@ export async function PUT(req: NextRequest) {
             }
         });
 
+        enqueueSync('categories', 'UPDATE', category.id, {
+            id: category.id, name: category.name,
+            description: category.description, parentId: category.parentId,
+        });
         return NextResponse.json(category);
     } catch (error) {
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    }
+}
+
+// PATCH /api/categories — bulk update sortOrder
+export async function PATCH(req: NextRequest) {
+    const tenantId = await getTenantId();
+    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+
+    try {
+        const body = await req.json();
+        const items: { id: string; sortOrder: number }[] = body.items;
+        if (!Array.isArray(items)) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+
+        await prisma.$transaction(
+            items.map(({ id, sortOrder }) =>
+                prisma.category.updateMany({
+                    where: { id, tenantId },
+                    data: { sortOrder },
+                })
+            )
+        );
+
+        // Enqueue each reordered category so the sync worker pushes sortOrder to the cloud
+        for (const { id, sortOrder } of items) {
+            enqueueSync('categories', 'UPDATE', id, { id, sortOrder });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch {
         return NextResponse.json({ error: 'Failed' }, { status: 500 });
     }
 }
@@ -96,6 +136,8 @@ export async function DELETE(req: NextRequest) {
             where: { id }
         });
 
+        enqueueSync('categories', 'DELETE', id, { id });
+        await logCloudDelete(tenantId, 'categories', id!)
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: 'Failed' }, { status: 500 });

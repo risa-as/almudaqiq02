@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
 
@@ -69,8 +69,18 @@ export async function GET(request: NextRequest) {
             }
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        // Surface the real cause — most often a schema mismatch on the desktop
+        // (e.g. dev.db missing a column added in a later migration).  The full
+        // message goes to the server log; a short summary is returned to the UI.
         console.error('Check Barcode Error:', error);
-        return NextResponse.json({ error: 'فشل في التحقق من الباركود' }, { status: 500 });
+        const msg = String(error?.message ?? '')
+        const isSchemaIssue = /no such column|does not exist|Unknown column/i.test(msg)
+        return NextResponse.json({
+            error: isSchemaIssue
+                ? 'الـ schema المحلي قديم — شغّل: npm run db:push'
+                : 'فشل في التحقق من الباركود',
+            detail: msg.slice(0, 240),
+        }, { status: 500 });
     }
 }

@@ -1,4 +1,5 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useState, useEffect } from 'react'
 import { Megaphone, Plus, Send, Loader2, Users, Info, AlertTriangle, Wrench } from 'lucide-react'
@@ -16,11 +17,12 @@ interface Announcement {
 
 const TYPE_CONFIG = {
   INFO:        { label: 'معلومات',  icon: Info,          color: 'bg-blue-50 text-blue-600 border-blue-200' },
-  WARNING:     { label: 'تحذير',    icon: AlertTriangle,  color: 'bg-amber-50 text-amber-600 border-amber-200' },
+  WARNING:     { label: 'تحذير',    icon: AlertTriangle,  color: 'bg-blue-50 text-blue-600 border-blue-200' },
   MAINTENANCE: { label: 'صيانة',    icon: Wrench,         color: 'bg-red-50 text-red-600 border-red-200' },
 }
 
 export default function AnnouncementsPage() {
+  usePageTitle('الإعلانات');
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading]             = useState(true)
   const [sending, setSending]             = useState(false)
@@ -139,10 +141,10 @@ export default function AnnouncementsPage() {
             <button
               type="submit"
               disabled={sending}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md active:scale-95 whitespace-nowrap"
+              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md active:scale-95 whitespace-nowrap"
             >
               {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              إرسال للجميع
+              {sending ? 'جاري الإرسال...' : 'إرسال للجميع'}
             </button>
           </div>
         </form>
@@ -183,7 +185,7 @@ export default function AnnouncementsPage() {
                           </span>
                           <span>{new Date(ann.createdAt).toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                           {ann.expiresAt && (
-                            <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
+                            <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
                               ينتهي: {new Date(ann.expiresAt).toLocaleDateString('ar-IQ')}
                             </span>
                           )}

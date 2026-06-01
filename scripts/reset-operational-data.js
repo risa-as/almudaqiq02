@@ -12,7 +12,23 @@
  */
 
 const { PrismaClient } = require('@prisma/client');
+const readline = require('readline');
 const prisma = new PrismaClient();
+
+// Safety guard — must pass --confirm flag or type YES
+const hasFlag = process.argv.includes('--confirm');
+
+async function askConfirmation() {
+  if (hasFlag) return true;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    console.log('\n⛔  هذا الأمر سيحذف جميع البيانات التشغيلية نهائياً ولا يمكن التراجع!');
+    rl.question('   اكتب "نعم احذف" للمتابعة: ', answer => {
+      rl.close();
+      resolve(answer.trim() === 'نعم احذف');
+    });
+  });
+}
 
 async function main() {
   console.log('');
@@ -26,6 +42,13 @@ async function main() {
   console.log('   التحويلات، السجلات، الإشعارات، الإعلانات');
   console.log('');
   console.log('✅ سيتم الاحتفاظ بـ: المستخدمين، المنظمات، الفروع، الإعدادات');
+  console.log('');
+
+  const confirmed = await askConfirmation();
+  if (!confirmed) {
+    console.log('\n❌ تم الإلغاء — لم يتم حذف أي بيانات.\n');
+    process.exit(0);
+  }
   console.log('');
 
   // ── 1. Announcement recipients & Announcements ──────────────────────────────

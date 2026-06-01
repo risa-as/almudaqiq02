@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { prisma } from '@/lib/multi-tenant/prisma'
+import { prisma } from '@/lib/prisma'
 import { generateBranchToken } from '@/lib/auth'
+import { getTenantId } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(request: NextRequest) {
-  return request.headers.get('x-tenant-id') ?? ''
-}
-
-export async function GET(request: NextRequest) {
-  const tenantId = getTenantId(request)
+export async function GET(_request: NextRequest) {
+  const tenantId = await getTenantId()
   if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const branches = await prisma.branch.findMany({
@@ -31,7 +28,7 @@ const CreateSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const tenantId = getTenantId(request)
+  const tenantId = await getTenantId()
   if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body   = await request.json().catch(() => null)

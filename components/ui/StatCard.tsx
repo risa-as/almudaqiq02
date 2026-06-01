@@ -16,7 +16,7 @@ export default function StatCard({
     label,
     value,
     icon: Icon,
-    gradient = 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    gradient = 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)',
     valueColor,
     trend,
     onClick,

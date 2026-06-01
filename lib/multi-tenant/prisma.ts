@@ -1,15 +1,18 @@
-import { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from "@prisma/client";
+import { PrismaClientCtor, getDbUrl } from "../prisma-runtime";
 
-// Global singleton for the cloud Prisma client
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+// Global singleton — local SQLite client in Electron, PostgreSQL client in cloud
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
-  })
+  new PrismaClientCtor({
+    // log: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
+    log: ["error"],
+    datasources: { db: { url: getDbUrl() } },
+  });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 /**
  * Models that have a tenantId field and should be auto-scoped.
@@ -17,25 +20,38 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
  * through their parent relations and do NOT have tenantId.
  */
 const TENANT_SCOPED_MODELS = new Set([
-  'tenant', 'branch', 'user', 'tenantSubscription',
-  'category', 'product', 'productBatch',
-  'supplier', 'customer', 'transaction',
-  'expense', 'cashierShift', 'offer',
-  'storeSettings', 'stockTransfer', 'syncLog',
-  'auditLog', 'notification', 'announcementRecipient',
-])
+  "tenant",
+  "branch",
+  "user",
+  "tenantSubscription",
+  "category",
+  "product",
+  "productBatch",
+  "supplier",
+  "customer",
+  "transaction",
+  "expense",
+  "cashierShift",
+  "offer",
+  "storeSettings",
+  "stockTransfer",
+  "syncLog",
+  "auditLog",
+  "notification",
+  "announcementRecipient",
+]);
 
 function withTenant(model: string, args: any, tenantId: string) {
-  if (!TENANT_SCOPED_MODELS.has(model)) return args
-  return { ...args, where: { ...args?.where, tenantId } }
+  if (!TENANT_SCOPED_MODELS.has(model)) return args;
+  return { ...args, where: { ...args?.where, tenantId } };
 }
 
 function withTenantData(model: string, args: any, tenantId: string) {
-  if (!TENANT_SCOPED_MODELS.has(model)) return args
+  if (!TENANT_SCOPED_MODELS.has(model)) return args;
   if (Array.isArray(args.data)) {
-    return { ...args, data: args.data.map((d: any) => ({ ...d, tenantId })) }
+    return { ...args, data: args.data.map((d: any) => ({ ...d, tenantId })) };
   }
-  return { ...args, data: { ...args.data, tenantId } }
+  return { ...args, data: { ...args.data, tenantId } };
 }
 
 /**
@@ -50,82 +66,107 @@ export function getTenantPrisma(tenantId: string) {
     query: {
       $allModels: {
         async findMany({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async findFirst({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async findUnique({ args, query }: any) {
-          return query(args) // findUnique uses unique fields, can't inject freely
+          return query(args); // findUnique uses unique fields, can't inject freely
         },
         async create({ model, args, query }: any) {
-          return query(withTenantData(model, args, tenantId))
+          return query(withTenantData(model, args, tenantId));
         },
         async createMany({ model, args, query }: any) {
-          return query(withTenantData(model, args, tenantId))
+          return query(withTenantData(model, args, tenantId));
         },
         async update({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async updateMany({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async delete({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async deleteMany({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async count({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
         async aggregate({ model, args, query }: any) {
-          return query(withTenant(model, args, tenantId))
+          return query(withTenant(model, args, tenantId));
         },
       },
     },
-  }) as unknown as PrismaClient
+  }) as unknown as PrismaClient;
 }
 
 /** Models that have both tenantId and branchId */
 const BRANCH_SCOPED_MODELS = new Set([
-  'branch', 'user', 'transaction', 'expense',
-  'cashierShift', 'productBatch', 'syncLog',
-  'storeSettings', 'auditLog',
-])
+  "branch",
+  "user",
+  "transaction",
+  "expense",
+  "cashierShift",
+  "productBatch",
+  "syncLog",
+  "storeSettings",
+  "auditLog",
+]);
 
 /** Models that have tenantId but NOT branchId (tenant-level) */
 const TENANT_ONLY_MODELS = new Set([
-  'tenant', 'tenantSubscription',
-  'category', 'product', 'supplier', 'customer',
-  'offer', 'stockTransfer', 'notification',
-  'announcementRecipient',
-])
+  "tenant",
+  "tenantSubscription",
+  "category",
+  "product",
+  "supplier",
+  "customer",
+  "offer",
+  "stockTransfer",
+  "notification",
+  "announcementRecipient",
+]);
 
-function withBranch(model: string, args: any, tenantId: string, branchId: string) {
+function withBranch(
+  model: string,
+  args: any,
+  tenantId: string,
+  branchId: string,
+) {
   if (BRANCH_SCOPED_MODELS.has(model)) {
-    return { ...args, where: { ...args?.where, tenantId, branchId } }
+    return { ...args, where: { ...args?.where, tenantId, branchId } };
   }
   if (TENANT_ONLY_MODELS.has(model)) {
-    return { ...args, where: { ...args?.where, tenantId } }
+    return { ...args, where: { ...args?.where, tenantId } };
   }
-  return args // child models — no injection
+  return args; // child models — no injection
 }
 
-function withBranchData(model: string, args: any, tenantId: string, branchId: string) {
+function withBranchData(
+  model: string,
+  args: any,
+  tenantId: string,
+  branchId: string,
+) {
   if (BRANCH_SCOPED_MODELS.has(model)) {
     if (Array.isArray(args.data)) {
-      return { ...args, data: args.data.map((d: any) => ({ ...d, tenantId, branchId })) }
+      return {
+        ...args,
+        data: args.data.map((d: any) => ({ ...d, tenantId, branchId })),
+      };
     }
-    return { ...args, data: { ...args.data, tenantId, branchId } }
+    return { ...args, data: { ...args.data, tenantId, branchId } };
   }
   if (TENANT_ONLY_MODELS.has(model)) {
     if (Array.isArray(args.data)) {
-      return { ...args, data: args.data.map((d: any) => ({ ...d, tenantId })) }
+      return { ...args, data: args.data.map((d: any) => ({ ...d, tenantId })) };
     }
-    return { ...args, data: { ...args.data, tenantId } }
+    return { ...args, data: { ...args.data, tenantId } };
   }
-  return args
+  return args;
 }
 
 /**
@@ -136,39 +177,39 @@ export function getBranchPrisma(tenantId: string, branchId: string) {
     query: {
       $allModels: {
         async findMany({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async findFirst({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async findUnique({ args, query }: any) {
-          return query(args)
+          return query(args);
         },
         async create({ model, args, query }: any) {
-          return query(withBranchData(model, args, tenantId, branchId))
+          return query(withBranchData(model, args, tenantId, branchId));
         },
         async createMany({ model, args, query }: any) {
-          return query(withBranchData(model, args, tenantId, branchId))
+          return query(withBranchData(model, args, tenantId, branchId));
         },
         async update({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async updateMany({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async delete({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async deleteMany({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async count({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
         async aggregate({ model, args, query }: any) {
-          return query(withBranch(model, args, tenantId, branchId))
+          return query(withBranch(model, args, tenantId, branchId));
         },
       },
     },
-  }) as unknown as PrismaClient
+  }) as unknown as PrismaClient;
 }

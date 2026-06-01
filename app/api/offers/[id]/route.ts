@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
+import { logCloudDelete } from '@/lib/sync-delete-log';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const tenantId = await getTenantId();
@@ -40,6 +42,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             }
         });
 
+        enqueueSync('offers', 'UPDATE', updatedOffer.id, {
+          id: updatedOffer.id, name: updatedOffer.name, type: updatedOffer.type,
+          value: Number(updatedOffer.value),
+          buyQuantity: updatedOffer.buyQuantity, getQuantity: updatedOffer.getQuantity,
+          productId: updatedOffer.productId, categoryId: updatedOffer.categoryId,
+          branchId: updatedOffer.branchId,
+          startDate: updatedOffer.startDate, endDate: updatedOffer.endDate,
+          isActive: updatedOffer.isActive,
+        })
+
         return NextResponse.json(updatedOffer);
     } catch (error) {
         console.error('Failed to update offer:', error);
@@ -65,6 +77,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         await prisma.offer.delete({
             where: { id: offerId }
         });
+
+        enqueueSync('offers', 'DELETE', offerId, { id: offerId })
+        await logCloudDelete(tenantId, 'offers', offerId)
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Failed to delete offer:', error);

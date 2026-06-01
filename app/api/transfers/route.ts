@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
+import { getAuthContext } from '@/lib/api-helpers'
+import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(r: NextRequest) { return r.headers.get('x-tenant-id') ?? '' }
-function getUserId(r: NextRequest)   { return r.headers.get('x-user-id')   ?? '' }
-
 export async function GET(request: NextRequest) {
-  const tenantId = getTenantId(request)
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const tenantId = auth.tenantId
   const { searchParams } = request.nextUrl
   const status   = searchParams.get('status') ?? undefined
   const branchId = searchParams.get('branchId') ?? undefined
@@ -37,8 +38,10 @@ const CreateSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const tenantId = getTenantId(request)
-  const userId   = getUserId(request)
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const tenantId = auth.tenantId
+  const userId   = auth.userId
   const body = await request.json().catch(() => null)
   const parsed = CreateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
@@ -64,5 +67,12 @@ export async function POST(request: NextRequest) {
     },
     include: { fromBranch: { select: { name: true } }, toBranch: { select: { name: true } } },
   })
+  enqueueSync('stockTransfers', 'INSERT', transfer.id, {
+    cloudId: transfer.id, tenantId, fromBranchId, toBranchId,
+    items: transfer.items, notes: transfer.notes,
+    requestedBy: transfer.requestedBy, status: transfer.status,
+    createdAt: transfer.createdAt,
+  })
+
   return NextResponse.json(transfer, { status: 201 })
 }

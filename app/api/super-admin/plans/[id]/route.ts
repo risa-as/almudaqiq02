@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
+import { withCloudDb } from '@/lib/cloud-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,18 +14,33 @@ const UpdateSchema = z.object({
 })
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const body = await request.json().catch(() => null)
-  const parsed = UpdateSchema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  return withCloudDb(async () => {
+    const { id } = await params
+    const body = await request.json().catch(() => null)
+    const parsed = UpdateSchema.safeParse(body)
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-  const plan = await prisma.subscriptionPlan.update({ where: { id }, data: parsed.data })
-  return NextResponse.json(plan)
+    const plan = await prisma.subscriptionPlan.update({ where: { id }, data: parsed.data })
+    return NextResponse.json(plan)
+  })
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  // Soft delete — just deactivate
-  await prisma.subscriptionPlan.update({ where: { id }, data: { isActive: false } })
-  return NextResponse.json({ success: true })
+  return withCloudDb(async () => {
+    const { id } = await params
+
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { id },
+      include: { _count: { select: { subscriptions: true } } },
+    })
+    if (!plan) return NextResponse.json({ error: 'الخطة غير موجودة' }, { status: 404 })
+    if (plan._count.subscriptions > 0)
+      return NextResponse.json(
+        { error: `لا يمكن حذف الخطة — لديها ${plan._count.subscriptions} مشترك نشط` },
+        { status: 409 }
+      )
+
+    await prisma.subscriptionPlan.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  })
 }

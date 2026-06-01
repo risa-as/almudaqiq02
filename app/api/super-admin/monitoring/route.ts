@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/multi-tenant/prisma'
+import { withCloudDb } from '@/lib/cloud-guard'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET() { return withCloudDb(async () => {
   const since14Days = new Date(Date.now() - 14 * 86400_000)
 
   const [recentAuditLogs, auditByDay] = await Promise.all([
@@ -51,6 +52,6 @@ export async function GET() {
     auditLogs: recentAuditLogs,
     activityByDay,
   })
-}
+}) }
 
 

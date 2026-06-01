@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 // Iraqi Supermarket Standard Category Hierarchy
 const IRAQI_CATEGORIES = [
@@ -101,7 +102,6 @@ export async function POST() {
   if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
 
   try {
-    // Check if this tenant already has categories
     const existingCount = await prisma.category.count({ where: { tenantId } });
     if (existingCount > 0) {
       return NextResponse.json({ seeded: false, reason: 'already_exists', count: existingCount });
@@ -109,7 +109,7 @@ export async function POST() {
 
     let totalSeeded = 0;
 
-    // Create root categories first, then children
+    // Use individual creates (not createMany) so we get IDs for sync queueing.
     for (const cat of IRAQI_CATEGORIES) {
       const parent = await prisma.category.create({
         data: {
@@ -118,18 +118,30 @@ export async function POST() {
           description: cat.description,
         },
       });
+      enqueueSync('categories', 'INSERT', parent.id, {
+        id: parent.id,
+        name: parent.name,
+        description: parent.description,
+        parentId: null,
+      });
       totalSeeded++;
 
-      if (cat.children?.length) {
-        await prisma.category.createMany({
-          data: cat.children.map((child) => ({
+      for (const child of cat.children ?? []) {
+        const childCat = await prisma.category.create({
+          data: {
             tenantId,
             name: child.name,
             description: child.description,
             parentId: parent.id,
-          })),
+          },
         });
-        totalSeeded += cat.children.length;
+        enqueueSync('categories', 'INSERT', childCat.id, {
+          id: childCat.id,
+          name: childCat.name,
+          description: childCat.description,
+          parentId: childCat.parentId,
+        });
+        totalSeeded++;
       }
     }
 

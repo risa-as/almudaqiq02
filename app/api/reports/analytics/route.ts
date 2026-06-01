@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
+import { getAuthContext } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     try {
-        const tenantId = request.headers.get('x-tenant-id') ?? ''
-        const userBranchId = request.headers.get('x-branch-id') ?? ''
+        const auth = await getAuthContext()
+        if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const tenantId = auth.tenantId
+        const userBranchId = auth.branchId ?? ''
         const { searchParams } = new URL(request.url);
         const branchId = searchParams.get('branchId') || userBranchId || undefined;
         const startDateParam = searchParams.get('startDate');
         const endDateParam = searchParams.get('endDate');
-        if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         let start = startDateParam ? new Date(startDateParam) : new Date();
         let end = endDateParam ? new Date(endDateParam) : new Date();
@@ -56,27 +58,22 @@ export async function GET(request: NextRequest) {
 
         // --- 1. KPI Calculations ---
         const calcNetProfit = (txs: any[], exps: any[]) => {
-            let revenue = 0;
+            let gross = 0;       // SALE only
+            let returns = 0;     // REFUND/RETURN (positive magnitude)
             let cogs = 0;
             txs.forEach(tx => {
-                // RETURN has negative totalAmount; REFUND has positive totalAmount (from POS)
-                if (tx.type === 'REFUND') {
-                    revenue -= Number(tx.totalAmount);
-                } else {
-                    revenue += Number(tx.totalAmount); // SALE (+), RETURN (-)
-                }
                 if (tx.type === 'SALE') {
-                    tx.items.forEach((item: any) => {
-                        cogs += Number(item.cost);
-                    });
-                } else if (tx.type === 'RETURN' || tx.type === 'REFUND') {
-                    tx.items.forEach((item: any) => {
-                        cogs -= Number(item.cost);
-                    });
+                    gross += Number(tx.totalAmount);
+                    tx.items.forEach((item: any) => { cogs += Number(item.cost); });
+                } else if (tx.type === 'REFUND' || tx.type === 'RETURN') {
+                    // REFUND stores +amount, legacy RETURN stores −amount → normalise to positive
+                    returns += tx.type === 'REFUND' ? Number(tx.totalAmount) : -Number(tx.totalAmount);
+                    tx.items.forEach((item: any) => { cogs -= Number(item.cost); });
                 }
             });
             const totalExp = exps.reduce((sum, exp) => sum + Number(exp.amount), 0);
-            return { revenue, profit: revenue - cogs - totalExp };
+            const revenue = gross - returns; // net revenue
+            return { revenue, gross, returns, profit: revenue - cogs - totalExp };
         };
 
         const currentKpis = calcNetProfit(currentTransactions, currentExpenses);
@@ -86,7 +83,9 @@ export async function GET(request: NextRequest) {
         const prevAov = prevTransactions.length ? prevKpis.revenue / prevTransactions.length : 0;
 
         const kpis = {
-            revenue: currentKpis.revenue,
+            revenue: currentKpis.revenue,          // net revenue
+            grossRevenue: currentKpis.gross,
+            returns: currentKpis.returns,
             profit: currentKpis.profit,
             aov: currentAov,
             transactions: currentTransactions.length,
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
         const dailyData: Record<string, { revenue: number, profit: number, cogs: number, expenses: number }> = {};
         const hourlyDataMap: Record<string, number> = {};
         const categoryDataMap: Record<string, number> = {};
-        const productDataMap: Record<number, { name: string, quantity: number, profit: number }> = {};
+        const productDataMap: Record<string, { name: string, quantity: number, profit: number }> = {};
 
         // Initialize days
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {

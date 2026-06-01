@@ -1,4 +1,5 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useState, useEffect } from 'react'
 import { KeyRound, Plus, Loader2, CheckCircle2, Copy, Shield, Clock } from 'lucide-react'
@@ -27,6 +28,7 @@ const DURATION_LABELS: Record<string, string> = {
 }
 
 export default function LicensesPage() {
+  usePageTitle('التراخيص');
   const [licenses, setLicenses]             = useState<LicenseRecord[]>([])
   const [loading, setLoading]               = useState(true)
   const [generating, setGenerating]         = useState(false)
@@ -162,7 +164,7 @@ export default function LicensesPage() {
                   <input
                     type="number"
                     min={1}
-                    className="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 text-[14px] font-[family-name:var(--font-mono)] text-slate-800 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all shadow-sm"
+                    className="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 text-[14px] font-[family-name:var(--font-mono)] text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm"
                     value={customDays}
                     onChange={e => setCustomDays(Math.max(1, parseInt(e.target.value) || 1))}
                   />
@@ -185,10 +187,10 @@ export default function LicensesPage() {
                 <button
                   type="submit"
                   disabled={generating}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md shadow-emerald-500/20"
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md shadow-emerald-500/20"
                 >
                   {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
-                  توليد واعتماد الترخيص
+                  {generating ? 'جاري التوليد...' : 'توليد واعتماد الترخيص'}
                 </button>
               </div>
             </form>
@@ -225,7 +227,7 @@ export default function LicensesPage() {
           {loading && licenses.length === 0 ? (
             <div className="glass-panel rounded-3xl p-16 flex justify-center"><PulseLoader /></div>
           ) : (
-            <div className="bg-white rounded-[20px] shadow-sm shadow-slate-200/50 border border-slate-200 overflow-hidden">
+            <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
               <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
                 <div className="p-2 bg-blue-500/10 rounded-lg">
                    <Clock className="w-4 h-4 text-blue-600" />
@@ -234,44 +236,44 @@ export default function LicensesPage() {
                 <span className="bg-slate-200 text-slate-600 text-[11px] font-black px-2.5 py-0.5 rounded-full font-[family-name:var(--font-mono)]">{licenses.length}</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
+                <table className="w-full text-right">
+                  <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                     <tr>
-                      <th className="text-right">م</th>
-                      <th className="text-right">العميل</th>
-                      <th className="text-right">المدة</th>
-                      <th className="text-right">بصمة الجهاز</th>
-                      <th className="text-right">التاريخ</th>
-                      <th className="text-center">إجراء</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">م</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">العميل</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المدة</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">بصمة الجهاز</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التاريخ</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">إجراء</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-50">
                     {licenses.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-12 text-slate-400 font-medium">لا توجد تراخيص مصدرة حالياً</td></tr>
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400">لا توجد تراخيص مصدرة حالياً</td></tr>
                     ) : licenses.map((lic, idx) => (
-                      <tr key={lic.id}>
-                        <td className="text-slate-400 font-[family-name:var(--font-mono)]">{idx + 1}</td>
-                        <td>
+                      <tr key={lic.id} className="hover:bg-blue-50/50 transition-colors group">
+                        <td className="px-6 py-4 text-slate-400 font-[family-name:var(--font-mono)]">{idx + 1}</td>
+                        <td className="px-6 py-4">
                           <span className="font-bold text-slate-800 block text-[14px]">{lic.clientName}</span>
                           {lic.clientPhone && <span className="text-[12px] text-slate-500 font-medium font-[family-name:var(--font-mono)] mt-0.5 block">{lic.clientPhone}</span>}
                         </td>
-                        <td>
+                        <td className="px-6 py-4">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-700">
                             {DURATION_LABELS[lic.duration] ?? lic.duration}
                           </span>
                         </td>
-                        <td className="font-[family-name:var(--font-mono)] text-[12px]">
+                        <td className="px-6 py-4 font-[family-name:var(--font-mono)] text-[12px]">
                           {lic.machineId
                             ? <code className="text-cyan-700 bg-cyan-50 px-2.5 py-1 rounded-md border border-cyan-100">{lic.machineId}</code>
                             : <span className="text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">مفتوح الترخيص</span>}
                         </td>
-                        <td>
+                        <td className="px-6 py-4">
                           <span className="block text-[13px] text-slate-700 font-medium">إصدار: {new Date(lic.generatedAt).toLocaleDateString('ar-IQ')}</span>
                           <span className="block text-[12px] text-slate-500 mt-0.5">
                             انتهاء: {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString('ar-IQ') : 'مدى الحياة ♾️'}
                           </span>
                         </td>
-                        <td className="text-center">
+                        <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleCopy(lic.licenseKey)}
                             className="text-slate-400 hover:text-emerald-600 p-2 rounded-lg hover:bg-emerald-50 transition-colors bg-slate-50 border border-slate-100"

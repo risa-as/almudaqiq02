@@ -1,10 +1,12 @@
 'use client';
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, KeyRound, AlertCircle, Loader2, CheckCircle2, Cpu, Copy } from 'lucide-react';
 
 export default function ActivatePage() {
+  usePageTitle('تفعيل الحساب');
     const router = useRouter();
     const [key, setKey] = useState('');
     const [loading, setLoading] = useState(false);
@@ -71,13 +73,13 @@ export default function ActivatePage() {
             {/* Decorative Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
-                <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-indigo-500/5 rounded-full blur-3xl" />
+                <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-blue-500/5 rounded-full blur-3xl" />
             </div>
 
             <div className="relative w-full max-w-md">
                 {/* Logo / Icon */}
                 <div className="flex justify-center mb-8">
-                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/30">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/30">
                         <ShieldCheck size={40} className="text-white" />
                     </div>
                 </div>
@@ -147,7 +149,7 @@ export default function ActivatePage() {
                             <button
                                 type="submit"
                                 disabled={loading || !key.trim()}
-                                className="w-full flex items-center justify-center gap-3 bg-gradient-to-l from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold py-4 rounded-xl transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
+                                className="w-full flex items-center justify-center gap-3 bg-gradient-to-l from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold py-4 rounded-xl transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
                             >
                                 {loading ? (
                                     <>

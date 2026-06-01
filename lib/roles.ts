@@ -14,7 +14,7 @@ export type UserRole = keyof typeof ROLES
 export const ROLE_LABELS: Record<UserRole, { label: string; color: string; bg: string; icon: string }> = {
   SUPER_ADMIN:    { label: 'سوبر أدمن',  color: 'text-yellow-700', bg: 'bg-yellow-100',  icon: '👑' },
   ADMIN:          { label: 'مدير',        color: 'text-purple-700', bg: 'bg-purple-100',  icon: '🏢' },
-  BRANCH_MANAGER: { label: 'مدير فرع',   color: 'text-indigo-700', bg: 'bg-indigo-100',  icon: '🏪' },
+  BRANCH_MANAGER: { label: 'مدير فرع',   color: 'text-blue-700', bg: 'bg-blue-100',  icon: '🏪' },
   CASHIER:        { label: 'كاشير',       color: 'text-blue-700',   bg: 'bg-blue-100',    icon: '🖥️' },
   STOCK_KEEPER:   { label: 'أمين مخزن',  color: 'text-green-700',  bg: 'bg-green-100',   icon: '📦' },
 }

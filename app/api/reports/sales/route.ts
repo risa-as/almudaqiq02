@@ -64,37 +64,34 @@ export async function GET(request: NextRequest) {
             }
         });
 
-        // 3. Chart Data: Sales per Day (or Hour if daily)
-        // Grouping is complex in Prisma+SQLite without raw queries, so we do it in JS
+        // 3. Chart Data
         const allTransactionsForChart = await prisma.transaction.findMany({
             where: whereClause,
             select: { date: true, totalAmount: true }
         });
 
-        const chartData: any[] = [];
-        const dateMap = new Map();
+        let chartData: any[] = [];
 
-        allTransactionsForChart.forEach(tx => {
-            const d = new Date(tx.date);
-            let key = '';
-
-            if (period === 'daily') {
-                key = d.toLocaleTimeString('en-US', { hour: '2-digit', hour12: true });
-            } else {
-                key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            }
-
-            if (!dateMap.has(key)) dateMap.set(key, 0);
-            dateMap.set(key, dateMap.get(key) + Number(tx.totalAmount));
-        });
-
-        dateMap.forEach((value, key) => {
-            chartData.push({ name: key, value });
-        });
+        if (period === 'daily') {
+            // Full 24-hour array, always complete
+            const hourly = Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, value: 0 }));
+            allTransactionsForChart.forEach(tx => {
+                const h = new Date(tx.date).getHours();
+                hourly[h].value += Number(tx.totalAmount);
+            });
+            chartData = hourly;
+        } else {
+            const dateMap = new Map<string, number>();
+            allTransactionsForChart.forEach(tx => {
+                const key = new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                dateMap.set(key, (dateMap.get(key) ?? 0) + Number(tx.totalAmount));
+            });
+            dateMap.forEach((value, key) => chartData.push({ name: key, value }));
+        }
 
         // 4. Profit Calc (Global for range)
         // Ensure profit calculation respects the branch filter
-        const profitStats = await calculateProfit(startDate, endDate, branchId);
+        const profitStats = await calculateProfit(startDate, endDate, branchId, tenantId);
 
         // 5. Sales By Category
         const allItems = await prisma.transactionItem.findMany({
@@ -119,6 +116,9 @@ export async function GET(request: NextRequest) {
             totalSales: salesStats._sum.totalAmount || 0,
             transactionCount: salesStats._count.id || 0,
             netProfit: profitStats.netProfit || 0,
+            totalReturns: profitStats.totalReturns || 0,
+            returnCount: profitStats.returnCount || 0,
+            netRevenue: profitStats.netRevenue || 0,
             transactions,
             chartData: chartData.reverse(), // Chronological (roughly, map iteration order varies but mostly insert order in recent nodes)
             // Ideally sort chartData by date key

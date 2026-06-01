@@ -18,32 +18,35 @@ export default function SyncStatusBar() {
     syncing: false,
   })
 
+  const [isElectron, setIsElectron] = useState(false)
+
   useEffect(() => {
-    // Listen for sync status updates from Electron IPC (via window.electron bridge)
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'sync:status') {
-        setStatus(event.data.status)
-      }
+    const electron = window.electron
+    setIsElectron(!!electron)
+
+    if (electron?.onSyncStatus) {
+      // Worker → main → preload delivers the inner status object directly.
+      electron.onSyncStatus((s) => setStatus(prev => ({ ...prev, ...s })))
+      return () => electron.removeSyncStatusListener?.()
     }
 
-    // Browser-based online/offline detection as fallback
+    // Web fallback: only browser online/offline detection (no worker).
     const updateOnline = () => setStatus(s => ({ ...s, online: navigator.onLine }))
-    window.addEventListener('message', handler)
     window.addEventListener('online', updateOnline)
     window.addEventListener('offline', updateOnline)
     updateOnline()
-
     return () => {
-      window.removeEventListener('message', handler)
       window.removeEventListener('online', updateOnline)
       window.removeEventListener('offline', updateOnline)
     }
   }, [])
 
   function forceSync() {
-    // Send to Electron main process via window.postMessage or custom bridge
-    window.postMessage({ type: 'sync:force' }, '*')
+    window.electron?.forceSync?.()
   }
+
+  // The sync bar is only meaningful inside the desktop app.
+  if (!isElectron) return null
 
   const lastSync = status.lastSyncAt
     ? new Date(status.lastSyncAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })
@@ -89,7 +92,7 @@ export default function SyncStatusBar() {
           <button
             onClick={forceSync}
             disabled={status.syncing}
-            className="flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw className={`w-3 h-3 ${status.syncing ? 'animate-spin' : ''}`} />
             {status.syncing ? 'جاري...' : 'مزامنة'}

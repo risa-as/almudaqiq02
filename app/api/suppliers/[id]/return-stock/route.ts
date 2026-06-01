@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,13 +21,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             return NextResponse.json({ error: 'بيانات المرتجع غير صالحة' }, { status: 400 });
         }
 
-        const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+        const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, tenantId: auth.tenantId } });
         if (!supplier) {
             return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 });
         }
 
-        const batch = await prisma.productBatch.findUnique({
-            where: { id: batchId },
+        const batch = await prisma.productBatch.findFirst({
+            where: { id: batchId, tenantId: auth.tenantId },
             include: { product: true }
         });
 
@@ -43,13 +44,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const batchDesc = description
             || `مرتجع بضاعة - ${batch.product.name} (تشغيلة: ${batch.batchNumber || 'بدون'}) بكمية ${returnQty}`;
 
-        await prisma.$transaction(async (tx) => {
-            await tx.productBatch.update({
+        const result = await prisma.$transaction(async (tx) => {
+            const updatedBatch = await tx.productBatch.update({
                 where: { id: batchId },
                 data: { quantity: { decrement: returnQty } }
             });
 
-            await tx.supplierLedger.create({
+            // Also decrement product.baseStock so totals stay correct
+            await tx.product.update({
+                where: { id: batch.productId },
+                data:  { baseStock: { decrement: returnQty } },
+            });
+
+            const ledgerEntry = await tx.supplierLedger.create({
                 data: {
                     supplierId,
                     branchId: branchId && branchId !== 'all' ? branchId : null,
@@ -75,6 +82,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                     details: JSON.stringify({ batchId, productId: batch.productId, quantity: returnQty, amount })
                 }
             });
+
+            return { updatedBatch, ledgerEntry };
+        });
+
+        // Sync ledger entry (cloud derives supplier.balance from type=RETURN)
+        enqueueSync('supplierLedger', 'INSERT', result.ledgerEntry.id, {
+            id:          result.ledgerEntry.id,
+            supplierId:  result.ledgerEntry.supplierId,
+            branchId:    result.ledgerEntry.branchId,
+            type:        result.ledgerEntry.type,
+            amount:      Number(result.ledgerEntry.amount),
+            description: result.ledgerEntry.description,
+            date:        result.ledgerEntry.date,
+        });
+
+        // Sync the batch quantity change (cloud computes delta and adjusts product.baseStock)
+        enqueueSync('productBatches', 'UPDATE', batchId, {
+            id:       batchId,
+            quantity: result.updatedBatch.quantity,
         });
 
         return NextResponse.json({ success: true, message: 'تم تسجيل المرتجع وخصم المخزون بنجاح' });

@@ -1,4 +1,5 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState } from 'react'
 import { Activity, AlertCircle, Database, RefreshCw, History, TrendingUp, BarChart2, Zap } from 'lucide-react'
@@ -24,6 +25,7 @@ interface MonitorData {
 }
 
 export default function MonitoringPage() {
+  usePageTitle('المراقبة');
   const [data, setData]       = useState<MonitorData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -48,7 +50,7 @@ export default function MonitoringPage() {
         <div>
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}>
+                style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)' }}>
                 <div className="absolute inset-0 rounded-xl opacity-40" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%)' }} />
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </div>
@@ -61,7 +63,7 @@ export default function MonitoringPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="flex items-center gap-2 bg-white border border-slate-200 text-sm font-bold text-slate-700 px-5 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
+          className="flex items-center gap-2 bg-white border border-slate-200 text-sm font-bold text-slate-700 px-5 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <RefreshCw className={`w-4 h-4 text-blue-500 ${loading ? 'animate-spin' : ''}`} />
           {loading ? 'جاري التحديث...' : 'تحديث البيانات'}

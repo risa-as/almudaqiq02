@@ -10,7 +10,8 @@ export async function deductStock(
   productId: number,
   unitId: number,
   quantitySold: number, // In terms of Unit (e.g., 2 Boxes)
-  txClient: any = prisma
+  txClient: any = prisma,
+  branchId?: string
 ) {
   // 1. Get Unit details to find conversion factor
   const unit = await txClient.productUnit.findUnique({
@@ -21,10 +22,13 @@ export async function deductStock(
 
   const totalBaseQuantity = quantitySold * unit.conversionFactor;
 
-  // 2. Fetch Batches for this product, ordered by absolute expiry (FIFO) or creation
-  // Prioritize batches with Expiry Date first, then oldest created
+  // 2. Fetch Batches for this product scoped to the selling branch (FIFO)
   const batches = await txClient.productBatch.findMany({
-    where: { productId, quantity: { gt: 0 } },
+    where: {
+      productId,
+      quantity: { gt: 0 },
+      ...(branchId ? { branchId } : {}),
+    },
     orderBy: [
       { expiryDate: 'asc' }, // Expires first = Out first
       { createdAt: 'asc' },
@@ -68,7 +72,8 @@ export async function restoreStock(
   productId: number,
   unitId: number,
   quantityRestored: number, // In terms of Unit (e.g., 2 Boxes)
-  txClient: any = prisma
+  txClient: any = prisma,
+  branchId?: string
 ) {
   // 1. Get Unit details to find conversion factor
   const unit = await txClient.productUnit.findUnique({
@@ -79,9 +84,9 @@ export async function restoreStock(
 
   const totalBaseQuantity = quantityRestored * unit.conversionFactor;
 
-  // 2. Fetch the most recent batch for this product
+  // 2. Fetch the most recent batch for this product in the same branch
   const recentBatch = await txClient.productBatch.findFirst({
-    where: { productId },
+    where: { productId, ...(branchId ? { branchId } : {}) },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -153,60 +158,45 @@ export async function calculateWAC(
  * Logic: Net Profit = Sales - (COGS + Expenses)
  * COGS is derived from the 'cost' field recorded at the time of TransactionItem creation using FIFO batch cost.
  */
-export async function calculateProfit(startDate: Date, endDate: Date, branchId?: string) {
-  const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
+export async function calculateProfit(startDate: Date, endDate: Date, branchId?: string, tenantId?: string) {
+  // Scope by tenant (and branch when given) — never aggregate across tenants.
+  const scope = {
+    ...(tenantId ? { tenantId } : {}),
+    ...(branchId && branchId !== 'all' ? { branchId } : {}),
+    date: { gte: startDate, lte: endDate },
+  };
 
-  // 1. Sum Total Sales
-  const sales = await prisma.transaction.aggregate({
-    where: {
-      ...branchFilter,
-      type: 'SALE',
-      date: { gte: startDate, lte: endDate },
-    },
-    _sum: { totalAmount: true },
-  });
+  // Canonical model:
+  //   grossSales  = Σ SALE.totalAmount
+  //   returns     = Σ REFUND.totalAmount  (+ |Σ RETURN.totalAmount| for legacy records)
+  //   cogs        = Σ SALE.item.cost − Σ (REFUND|RETURN).item.cost
+  //   netRevenue  = grossSales − returns
+  //   netProfit   = netRevenue − cogs − expenses
+  const [saleAgg, saleCogs, refundAgg, returnAgg, refundCogs, expensesAgg] = await Promise.all([
+    prisma.transaction.aggregate({ where: { ...scope, type: 'SALE' },   _sum: { totalAmount: true }, _count: { id: true } }),
+    prisma.transactionItem.aggregate({ where: { transaction: { ...scope, type: 'SALE' } }, _sum: { cost: true } }),
+    prisma.transaction.aggregate({ where: { ...scope, type: 'REFUND' }, _sum: { totalAmount: true }, _count: { id: true } }),
+    prisma.transaction.aggregate({ where: { ...scope, type: 'RETURN' }, _sum: { totalAmount: true }, _count: { id: true } }),
+    prisma.transactionItem.aggregate({ where: { transaction: { ...scope, type: { in: ['REFUND', 'RETURN'] } } }, _sum: { cost: true } }),
+    prisma.expense.aggregate({ where: scope, _sum: { amount: true } }),
+  ]);
 
-  // 2. Sum Cost of Goods Sold (COGS)
-  // We need to look at TransactionItems for SALES in this period
-  const cogsWrapper = await prisma.transactionItem.aggregate({
-    where: {
-      transaction: {
-        ...branchFilter,
-        type: 'SALE',
-        date: { gte: startDate, lte: endDate },
-      },
-    },
-    _sum: {
-      // cost field in TransactionItem should track the Total Cost of that item (qty * unit_cost)
-      // Wait, TransactionItem schem has 'cost' Decimal. 
-      // Is it Unit Cost or Total Line Cost? 
-      // Usually better to store 'totalCost' or sum (quantity * cost_per_unit).
-      // Assuming 'cost' in Item is (BaseCost * Conversion * Qty) OR (UnitCost * Qty).
-      // Let's assume schema.prisma 'cost' is Total Line Cost for simplicity or update schema.
-      // Based on my schema: cost Decimal @default(0.00). Let's assume it's TOTAL COST for the line.
-      cost: true
-    },
-  });
+  const grossSales    = Number(saleAgg._sum.totalAmount) || 0;
+  // REFUND stores +amount, legacy RETURN stores −amount → both count as positive returns
+  const totalReturns  = (Number(refundAgg._sum.totalAmount) || 0) + Math.abs(Number(returnAgg._sum.totalAmount) || 0);
+  const returnCount   = (refundAgg._count.id || 0) + (returnAgg._count.id || 0);
+  const totalCOGS     = (Number(saleCogs._sum.cost) || 0) - (Number(refundCogs._sum.cost) || 0);
+  const totalExpenses = Number(expensesAgg._sum.amount) || 0;
 
-  const totalSales = Number(sales._sum.totalAmount) || 0;
-  const totalCOGS = Number(cogsWrapper._sum.cost) || 0;
-
-  // Expenses? (Not in schema yet, but placeholder)
-  // 3. Sum Expenses
-  const expenses = await prisma.expense.aggregate({
-    where: {
-      ...branchFilter,
-      date: { gte: startDate, lte: endDate },
-    },
-    _sum: { amount: true },
-  });
-
-  const totalExpenses = Number(expenses._sum.amount) || 0;
-
-  const netProfit = totalSales - totalCOGS - totalExpenses;
+  const netRevenue = grossSales - totalReturns;
+  const netProfit  = netRevenue - totalCOGS - totalExpenses;
 
   return {
-    totalSales,
+    totalSales: grossSales,   // kept for backward compatibility (gross)
+    grossSales,
+    totalReturns,
+    returnCount,
+    netRevenue,
     totalCOGS,
     totalExpenses,
     netProfit,

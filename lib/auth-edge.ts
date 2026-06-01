@@ -5,16 +5,23 @@
  */
 import { SignJWT, jwtVerify } from 'jose'
 
-function getAccessSecret() {
-  const s = process.env.JWT_SECRET || 'change-me-to-a-secure-random-string-min-64-chars'
-  if (!s) throw new Error('JWT_SECRET is not set')
+function requireSecret(name: string): Uint8Array {
+  const s = process.env[name]
+  if (!s || /change-me/i.test(s) || s.length < 32) {
+    throw new Error(
+      `${name} must be set to a strong, unique value (>= 32 chars). ` +
+      `Placeholder/default values are rejected — tokens would be forgeable.`
+    )
+  }
   return new TextEncoder().encode(s)
 }
 
+function getAccessSecret() {
+  return requireSecret('JWT_SECRET')
+}
+
 function getBranchSecret() {
-  const s = process.env.BRANCH_TOKEN_SECRET || 'change-me-branch-token-secret-64-chars'
-  if (!s) throw new Error('BRANCH_TOKEN_SECRET is not set')
-  return new TextEncoder().encode(s)
+  return requireSecret('BRANCH_TOKEN_SECRET')
 }
 
 export interface TokenPayload {

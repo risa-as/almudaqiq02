@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/multi-tenant/prisma'
+import { prisma } from '@/lib/prisma'
 import { verifyRefreshToken, generateAccessToken } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
     branchId: payload.branchId,
   })
 
+  const secure = process.env.NODE_ENV === 'production' && process.env.IS_ELECTRON !== '1'
   const res = NextResponse.json({ accessToken })
-  res.cookies.set('auth-token', accessToken, { httpOnly: true, path: '/', sameSite: 'lax', maxAge: 3600 })
+  res.cookies.set('auth-token', accessToken, { httpOnly: true, secure, path: '/', sameSite: 'lax', maxAge: 3600 })
   return res
 }

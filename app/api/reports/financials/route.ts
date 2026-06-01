@@ -38,16 +38,17 @@ export async function GET(request: Request) {
             }
         });
 
-        let revenue = 0;
+        let grossRevenue = 0; // SALE only
+        let returns = 0;      // REFUND/RETURN (positive magnitude)
         let cogs = 0; // Cost of Goods Sold
         const salesList: any[] = []; // Collect items for the Sales Table (SALE only)
 
         transactions.forEach(tx => {
-            // RETURN has negative totalAmount; REFUND has positive totalAmount (from POS)
-            if (tx.type === 'REFUND') {
-                revenue -= Number(tx.totalAmount); // positive amount, subtract from revenue
-            } else {
-                revenue += Number(tx.totalAmount); // SALE (+), RETURN (-)
+            // REFUND stores +amount, legacy RETURN stores −amount → normalise returns to positive
+            if (tx.type === 'SALE') {
+                grossRevenue += Number(tx.totalAmount);
+            } else if (tx.type === 'REFUND' || tx.type === 'RETURN') {
+                returns += tx.type === 'REFUND' ? Number(tx.totalAmount) : -Number(tx.totalAmount);
             }
 
             if (tx.type === 'SALE') {
@@ -88,6 +89,7 @@ export async function GET(request: Request) {
         expenses.forEach(exp => totalExpenses += Number(exp.amount));
 
         // 3. Calculations
+        const revenue = grossRevenue - returns; // net revenue
         const grossProfit = revenue - cogs;
         const netProfit = grossProfit - totalExpenses;
         const margin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
@@ -144,7 +146,9 @@ export async function GET(request: Request) {
         return NextResponse.json({
             range: { start, end },
             financials: {
-                revenue,
+                revenue,            // net revenue (gross − returns)
+                grossRevenue,
+                returns,
                 cogs,
                 grossProfit,
                 operatingExpenses: totalExpenses,

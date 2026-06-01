@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import crypto from 'crypto';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { hashPassword } from '@/lib/auth';
 import { canManage } from '@/lib/roles';
+import { enqueueSync } from '@/lib/sync-enqueue';
+import { logCloudDelete } from '@/lib/sync-delete-log';
 
 export const dynamic = 'force-dynamic';
 
-function hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-export async function GET(request: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+export async function GET(_request: NextRequest) {
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     try {
-        const callerRole = request.headers.get('x-user-role') || 'CASHIER';
+        const callerRole = auth.role;
 
         const users = await prisma.user.findMany({
             where: { tenantId },
@@ -35,16 +34,24 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     try {
-        const callerRole = request.headers.get('x-user-role') || 'CASHIER';
+        const callerRole = auth.role;
         const body = await request.json();
-        const { email, password, role } = body;
+        const { email, password, role, username: rawUsername } = body;
 
         if (!email || !password) {
             return NextResponse.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, { status: 400 });
+        }
+
+        const username = rawUsername?.trim() ||
+            `${email.split('@')[0].replace(/[^a-z0-9]/gi, '').toLowerCase() || 'user'}-${Math.random().toString(36).slice(2, 6)}`;
+
+        if (username.length < 2) {
+            return NextResponse.json({ error: 'اسم المستخدم قصير جداً' }, { status: 400 });
         }
 
         const requestedRole = role || 'CASHIER';
@@ -59,18 +66,29 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'البريد الإلكتروني مستخدم مسبقاً' }, { status: 400 });
         }
 
-        // Auto-generate unique username from email prefix
-        const prefix = email.split('@')[0].replace(/[^a-z0-9]/gi, '').toLowerCase() || 'user';
-        const username = `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
+        const usernameTaken = await prisma.user.findFirst({ where: { username, tenantId } });
+        if (usernameTaken) {
+            return NextResponse.json({ error: 'اسم المستخدم مستخدم مسبقاً' }, { status: 400 });
+        }
 
         const newUser = await prisma.user.create({
             data: {
                 username,
                 email,
-                password: hashPassword(password),
+                password: await hashPassword(password),
                 role: requestedRole,
                 tenant: { connect: { id: tenantId } }
             }
+        });
+
+        // Desktop → cloud: queue the new user for push (no-op on web).
+        // We send the already-hashed password so the cloud stores the same hash.
+        enqueueSync('users', 'INSERT', newUser.id, {
+            username: newUser.username,
+            email:    newUser.email,
+            password: newUser.password,
+            role:     newUser.role,
+            branchId: newUser.branchId,
         });
 
         return NextResponse.json({
@@ -85,13 +103,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     try {
-        const callerRole = request.headers.get('x-user-role') || 'CASHIER';
+        const callerRole = auth.role;
         const { searchParams } = new URL(request.url);
-        const id = Number(searchParams.get('id'));
+        const id = searchParams.get('id');
 
         if (!id) {
             return NextResponse.json({ error: 'User ID required' }, { status: 400 });
@@ -104,9 +123,9 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
         }
 
-        // Only SUPER_ADMIN can delete SUPER_ADMIN accounts
-        if (user.role === 'SUPER_ADMIN' && callerRole !== 'SUPER_ADMIN') {
-            return NextResponse.json({ error: 'لا يمكن حذف حساب سوبر أدمن' }, { status: 403 });
+        // Only users with strictly higher role can delete
+        if (!canManage(callerRole, user.role)) {
+            return NextResponse.json({ error: 'غير مصرح لك بحذف هذا المستخدم' }, { status: 403 });
         }
 
         // Prevent deleting last ADMIN (SUPER_ADMIN doesn't count as ADMIN here)
@@ -126,10 +145,73 @@ export async function DELETE(request: NextRequest) {
         }
 
         await prisma.user.delete({ where: { id } });
+
+        // Web → other devices: record the delete so desktops hard-delete on pull.
+        await logCloudDelete(tenantId, 'users', id);
+        // Desktop → cloud: queue the delete for push (no-op on web).
+        enqueueSync('users', 'DELETE', id, {});
+
         return NextResponse.json({ success: true });
 
     } catch (error) {
         console.error('Delete User Error:', error);
         return NextResponse.json({ error: 'فشل حذف المستخدم' }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: NextRequest) {
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
+
+    try {
+        const callerRole = auth.role;
+        const body = await request.json();
+        const { id, username, email, password, role } = body;
+
+        if (!id) return NextResponse.json({ error: 'معرف المستخدم مطلوب' }, { status: 400 });
+
+        const user = await prisma.user.findFirst({ where: { id: String(id), tenantId } });
+        if (!user) return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
+
+        if (!canManage(callerRole, user.role)) {
+            return NextResponse.json({ error: 'غير مصرح لك بتعديل هذا المستخدم' }, { status: 403 });
+        }
+
+        if (role && role !== user.role && !canManage(callerRole, role)) {
+            return NextResponse.json({ error: 'غير مصرح لك بتعيين هذا الدور' }, { status: 403 });
+        }
+
+        if (username?.trim() && username.trim() !== user.username) {
+            const taken = await prisma.user.findFirst({ where: { username: username.trim(), tenantId } });
+            if (taken) return NextResponse.json({ error: 'اسم المستخدم مستخدم مسبقاً' }, { status: 400 });
+        }
+
+        if (email?.trim() && email.trim() !== user.email) {
+            const taken = await prisma.user.findFirst({ where: { email: email.trim(), tenantId } });
+            if (taken) return NextResponse.json({ error: 'البريد الإلكتروني مستخدم مسبقاً' }, { status: 400 });
+        }
+
+        const updateData: Record<string, unknown> = {};
+        if (username?.trim()) updateData.username = username.trim();
+        if (email?.trim())    updateData.email    = email.trim();
+        if (role)             updateData.role     = role;
+        if (password?.trim()) updateData.password = await hashPassword(password.trim());
+
+        const updated = await prisma.user.update({
+            where: { id: String(id) },
+            data: updateData,
+            select: { id: true, username: true, email: true, role: true },
+        });
+
+        // Sync the same partial change. updateData already holds only the fields
+        // that changed (incl. the bcrypt-hashed password when it was updated).
+        enqueueSync('users', 'UPDATE', String(id), updateData);
+
+        return NextResponse.json({ success: true, user: updated });
+
+    } catch (error) {
+        console.error('Update User Error:', error);
+        return NextResponse.json({ error: 'فشل تحديث المستخدم' }, { status: 500 });
     }
 }

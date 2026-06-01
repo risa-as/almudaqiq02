@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Force Tailwind v4 dark: variant to use .dark class (not prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Restrict Tailwind v4 scanner to source files only.
    Without this, it scans dist/ and .next/ HTML files which contain
    old class names and trigger an oxide-scanner bug (U+000E in CSS). */
@@ -8,7 +11,7 @@
 
 /* ====================================================
    PREMIUM SAAS DESIGN SYSTEM — نظام التصميم الفاخر
-   Indigo / Violet / Amber — نظام ألوان احترافي
+   Blue — نظام ألوان ذهبي احترافي
    ==================================================== */
 :root {
   /* ── الخلفيات ── */
@@ -16,20 +19,20 @@
   --bg-card: #ffffff;
   --bg-card-glass: rgba(255, 255, 255, 0.85);
 
-  /* Sidebar — indigo-950 → slate-900 gradient */
-  --bg-sidebar: linear-gradient(160deg, #1e1b4b 0%, #0f172a 60%, #0f172a 100%);
+  /* Sidebar — indigo-950 → slate-900 gradient with gold glow on top */
+  --bg-sidebar: linear-gradient(160deg, #1e1b4b 0%, #0f172a 55%, #0a0f1e 100%);
   --bg-sidebar-solid: #0f172a;
   --bg-sidebar-hover: rgba(255, 255, 255, 0.06);
-  --bg-sidebar-active: linear-gradient(90deg, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0.08) 100%);
-  --sidebar-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+  --bg-sidebar-active: linear-gradient(90deg, rgba(9, 75, 159, 0.25) 0%, rgba(9, 75, 159, 0.08) 100%);
+  --sidebar-glow: 0 0 20px rgba(9, 75, 159, 0.15);
 
-  /* ── الألوان الرئيسية — Indigo ── */
-  --color-primary: #6366f1;
-  --color-primary-dark: #4f46e5;
-  --color-primary-light: #eef2ff;
-  --color-primary-text: #4338ca;
-  --color-primary-hover: #4f46e5;
-  --color-primary-glow: rgba(99, 102, 241, 0.25);
+  /* ── الألوان الرئيسية — Gold ── */
+  --color-primary: #094B9F;
+  --color-primary-dark: #073D82;
+  --color-primary-light: #EEF4FF;
+  --color-primary-text: #063380;
+  --color-primary-hover: #073D82;
+  --color-primary-glow: rgba(9, 75, 159, 0.25);
 
   /* ── الألوان الثانوية — Amber/Gold ── */
   --color-accent: #f59e0b;
@@ -86,13 +89,13 @@
   --shadow-lg: 0 16px 32px -8px rgb(0 0 0 / 0.1), 0 8px 16px -8px rgb(0 0 0 / 0.06);
   --shadow-hover: 0 20px 40px -12px rgb(0 0 0 / 0.12), 0 8px 16px -8px rgb(0 0 0 / 0.08);
   --shadow-dropdown: 0 10px 24px -4px rgb(0 0 0 / 0.12), 0 4px 8px -4px rgb(0 0 0 / 0.06);
-  --shadow-primary: 0 8px 24px -4px rgba(99, 102, 241, 0.3);
+  --shadow-primary: 0 6px 20px rgba(9,75,159,.35);
   --shadow-success: 0 8px 24px -4px rgba(16, 185, 129, 0.25);
   --shadow-danger: 0 8px 24px -4px rgba(239, 68, 68, 0.25);
 
   /* ── Gradients ── */
-  --gradient-brand: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
-  --gradient-brand-soft: linear-gradient(135deg, #eef2ff 0%, #ede9fe 100%);
+  --gradient-brand: linear-gradient(135deg, #094B9F 0%, #1565C0 50%, #063A8A 100%);
+  --gradient-brand-soft: linear-gradient(135deg, #EEF4FF 0%, #DBEAFE 100%);
   --gradient-gold: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
   --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -105,7 +108,7 @@
   --gradient-page: linear-gradient(135deg, #f8fafc 0%, #f1f5ff 50%, #faf8ff 100%);
 
   /* ── Glow Effects ── */
-  --glow-primary: 0 0 24px rgba(99, 102, 241, 0.2), 0 0 48px rgba(99, 102, 241, 0.08);
+  --glow-primary: 0 0 24px rgba(9, 75, 159, 0.2), 0 0 48px rgba(9, 75, 159, 0.08);
   --glow-accent: 0 0 24px rgba(245, 158, 11, 0.2);
   --glow-success: 0 0 24px rgba(16, 185, 129, 0.2);
   --glow-danger: 0 0 24px rgba(239, 68, 68, 0.2);
@@ -113,14 +116,32 @@
   /* ── Borders ── */
   --border-color: #e2e8f0;
   --border-light: #f1f5f9;
-  --border-primary: rgba(99, 102, 241, 0.3);
-  --border-radius-xs: 6px;
-  --border-radius-sm: 8px;
-  --border-radius-card: 16px;
-  --border-radius-btn: 10px;
-  --border-radius-input: 10px;
-  --border-radius-xl: 20px;
-  --border-radius-2xl: 24px;
+  --border-primary: rgba(9, 75, 159, 0.3);
+
+  /* ══════════════════════════════════════════════
+     نظام border-radius الموحّد
+     غيّر --radius-base وحده ليتغير كل شيء،
+     أو غيّر كل فئة باستقلالية.
+     ══════════════════════════════════════════════ */
+  --radius-base:       5px;   /* القيمة الأساسية — النقطة المركزية */
+
+  --radius-button:     var(--radius-base);   /* أزرار: btn-primary, btn-secondary … */
+  --radius-card:       var(--radius-base);   /* كروت: stat-card, glass-panel, modal */
+  --radius-input:      var(--radius-base);   /* حقول: input, select, textarea */
+  --radius-table:      var(--radius-base);   /* الجداول وحاويتها */
+  --radius-container:  var(--radius-base);   /* العناصر الأب / الأقسام */
+  --radius-badge:      var(--radius-base);   /* الشارات والعلامات الصغيرة */
+  --radius-dropdown:   var(--radius-base);   /* القوائم المنسدلة */
+  --radius-icon:       var(--radius-base);   /* مربعات الأيقونات */
+
+  /* Legacy aliases — للتوافق مع الكود القديم */
+  --border-radius-xs:    var(--radius-badge);
+  --border-radius-sm:    var(--radius-input);
+  --border-radius-card:  var(--radius-card);
+  --border-radius-btn:   var(--radius-button);
+  --border-radius-input: var(--radius-input);
+  --border-radius-xl:    var(--radius-card);
+  --border-radius-2xl:   var(--radius-card);
 
   /* ── Transitions ── */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -152,6 +173,49 @@ button {
 /* ====================================================
    Tailwind v4 custom utilities
    ==================================================== */
+/* ══════════════════════════════════════════════════════════
+   Tailwind v4 — تعديل مقياس rounded-* بالكامل
+   كل rounded-sm / rounded-lg / rounded-xl / rounded-2xl …
+   ستستخدم المتغيرات أعلاه تلقائياً دون تغيير JSX.
+   rounded-full يبقى كما هو (9999px).
+   ══════════════════════════════════════════════════════════ */
+@theme {
+  --radius-none: 0px;
+  --radius-sm:   var(--radius-badge);
+  --radius:      var(--radius-base);
+  --radius-md:   var(--radius-input);
+  --radius-lg:   var(--radius-button);
+  --radius-xl:   var(--radius-card);
+  --radius-2xl:  var(--radius-card);
+  --radius-3xl:  var(--radius-container);
+  --radius-4xl:  var(--radius-container);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Utility classes — استخدمها في JSX بدلاً من rounded-*
+   مثال: <div className="r-card">
+   ══════════════════════════════════════════════════════════
+
+   الفئة        التطبيق
+   ─────────    ──────────────────────────────────────────
+   r-btn        أزرار الإجراءات
+   r-card       الكروت، الباترنات، الـ panels
+   r-input      input, select, textarea
+   r-table      حاوية الجدول
+   r-container  أقسام الصفحة، الـ wrappers الرئيسية
+   r-badge      الشارات، العلامات، الـ chips
+   r-dropdown   القوائم المنسدلة، الـ menus
+   r-icon       مربعات الأيقونات الصغيرة
+   ══════════════════════════════════════════════════════════ */
+@utility r-btn       { border-radius: var(--radius-button);    }
+@utility r-card      { border-radius: var(--radius-card);      }
+@utility r-input     { border-radius: var(--radius-input);     }
+@utility r-table     { border-radius: var(--radius-table);     }
+@utility r-container { border-radius: var(--radius-container); }
+@utility r-badge     { border-radius: var(--radius-badge);     }
+@utility r-dropdown  { border-radius: var(--radius-dropdown);  }
+@utility r-icon      { border-radius: var(--radius-icon);      }
+
 @utility shadow-card {
   box-shadow: var(--shadow-card);
 }
@@ -171,13 +235,24 @@ button {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes sk-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes sk-spin {
+  0%   { transform: rotate(0deg)   scale(1);    }
+  50%  { transform: rotate(180deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1);    }
+}
 
 .skeleton {
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 8px;
+  border-radius: var(--radius-badge);
 }
+.sk-pulse { animation: sk-pulse 1.2s ease-in-out infinite; }
+.sk-spin  { animation: sk-spin  2.4s ease-in-out infinite; }
 
 /* ====================================================
    Premium Cards
@@ -210,7 +285,7 @@ button {
 .stat-card-icon {
   width: 52px;
   height: 52px;
-  border-radius: 14px;
+  border-radius: var(--radius-icon);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -287,7 +362,7 @@ button {
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 32px -4px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 12px 32px -4px rgba(9, 75, 159, 0.4);
 }
 
 .btn-primary:active {
@@ -385,7 +460,7 @@ button {
 }
 
 .data-table tbody tr:hover {
-  background: linear-gradient(90deg, #eef2ff 0%, #f8fafc 100%);
+  background: linear-gradient(90deg, #EEF4FF 0%, #f8fafc 100%);
 }
 
 .data-table tbody td {
@@ -413,8 +488,8 @@ button {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-  50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.1); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(9, 75, 159, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(9, 75, 159, 0.1); }
 }
 
 @keyframes gradient-shift {
@@ -567,7 +642,7 @@ html.dark {
   /* ── Tables ── */
   --table-header-bg: #161b26;
   --table-header-text: #6e7681;
-  --table-row-hover: rgba(99, 102, 241, 0.06);
+  --table-row-hover: rgba(9, 75, 159, 0.06);
   --table-border: #30363d;
   --table-text: #cdd9e5;
   --table-text-secondary: #8b949e;
@@ -575,10 +650,10 @@ html.dark {
   /* ── Borders ── */
   --border-color: #30363d;
   --border-light: #21262d;
-  --border-primary: rgba(99, 102, 241, 0.4);
+  --border-primary: rgba(9, 75, 159, 0.4);
 
   /* ── State colours ── */
-  --color-primary-light: rgba(99, 102, 241, 0.15);
+  --color-primary-light: rgba(9, 75, 159, 0.15);
   --color-secondary-light: #161b26;
   --color-success-light: rgba(16, 185, 129, 0.12);
   --color-success-text: #3fb950;
@@ -588,12 +663,12 @@ html.dark {
   --color-warning-text: #e3b341;
   --color-accent-light: rgba(245, 158, 11, 0.12);
   --color-accent-text: #e3b341;
-  --color-primary-text: #a5b4fc;
+  --color-primary-text: #93C5FD;
 
   /* ── Gradients ── */
   --gradient-card: linear-gradient(135deg, #161b26 0%, #1a2133 100%);
   --gradient-page: linear-gradient(135deg, #0d1117 0%, #0d1117 100%);
-  --gradient-brand-soft: rgba(99, 102, 241, 0.12);
+  --gradient-brand-soft: rgba(9, 75, 159, 0.12);
 
   /* ── Shadows (deeper in dark) ── */
   --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.4);
@@ -627,7 +702,7 @@ html.dark .bg-slate-100      { background-color: #1c2333 !important; }
 
 /* Coloured light backgrounds → translucent tinted */
 html.dark .bg-indigo-50,
-html.dark .bg-indigo-50\/50  { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .bg-indigo-50\/50  { background-color: rgba(9,75,159,0.08) !important; }
 html.dark .bg-blue-50        { background-color: rgba(59,130,246,0.08) !important; }
 html.dark .bg-green-50       { background-color: rgba(16,185,129,0.08) !important; }
 html.dark .bg-emerald-50     { background-color: rgba(16,185,129,0.08) !important; }
@@ -641,7 +716,7 @@ html.dark .bg-cyan-50        { background-color: rgba(6,182,212,0.08) !important
 html.dark .bg-teal-50        { background-color: rgba(20,184,166,0.08) !important; }
 html.dark .bg-pink-50        { background-color: rgba(236,72,153,0.08) !important; }
 
-html.dark .bg-indigo-100     { background-color: rgba(99,102,241,0.14) !important; }
+html.dark .bg-indigo-100     { background-color: rgba(9,75,159,0.14) !important; }
 html.dark .bg-blue-100       { background-color: rgba(59,130,246,0.14) !important; }
 html.dark .bg-green-100      { background-color: rgba(16,185,129,0.14) !important; }
 html.dark .bg-emerald-100    { background-color: rgba(16,185,129,0.14) !important; }
@@ -670,8 +745,8 @@ html.dark .text-slate-400  { color: #484f58 !important; }
 html.dark .text-black      { color: #e6edf3 !important; }
 
 /* Status text in dark */
-html.dark .text-indigo-600 { color: #818cf8 !important; }
-html.dark .text-indigo-700 { color: #a5b4fc !important; }
+html.dark .text-indigo-600 { color: #094B9F !important; }
+html.dark .text-indigo-700 { color: #93C5FD !important; }
 html.dark .text-blue-600   { color: #60a5fa !important; }
 html.dark .text-blue-700   { color: #93c5fd !important; }
 html.dark .text-green-600  { color: #34d399 !important; }
@@ -747,8 +822,8 @@ html.dark *:focus-within {
 html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])[class*="border"]:focus,
 html.dark select[class*="border"]:focus,
 html.dark textarea[class*="border"]:focus {
-  border-color: #6366f1 !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+  border-color: #094B9F !important;
+  box-shadow: 0 0 0 3px rgba(9, 75, 159, 0.18) !important;
   outline: none !important;
 }
 
@@ -763,8 +838,8 @@ html.dark textarea:not([class*="border"]):focus {
 /* Only the DIRECT parent div of the focused input gets the ring in dark mode */
 html.dark div:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus)[class*="border"],
 html.dark div:has(> textarea:focus)[class*="border"] {
-  border-color: #6366f1 !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+  border-color: #094B9F !important;
+  box-shadow: 0 0 0 3px rgba(9, 75, 159, 0.18) !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -794,7 +869,7 @@ html.dark .data-table thead th {
   background: linear-gradient(180deg, #161b26 0%, #1c2333 100%) !important;
 }
 html.dark .data-table tbody tr:hover {
-  background: linear-gradient(90deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%) !important;
+  background: linear-gradient(90deg, rgba(9,75,159,0.06) 0%, rgba(9,75,159,0.02) 100%) !important;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -817,11 +892,11 @@ html.dark .glass-panel {
    ═══════════════════════════════════════════════════ */
 html.dark .btn-secondary {
   background: #1c2333 !important;
-  color: #a5b4fc !important;
-  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #93C5FD !important;
+  border-color: rgba(9, 75, 159, 0.35) !important;
 }
 html.dark .btn-secondary:hover {
-  background: rgba(99, 102, 241, 0.12) !important;
+  background: rgba(9, 75, 159, 0.12) !important;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -833,7 +908,7 @@ html.dark .bg-gray-100\/50 { background-color: #131920 !important; }
 html.dark .bg-white\/80,
 html.dark .bg-white\/90    { background-color: rgba(22,27,38,0.9) !important; }
 
-html.dark .bg-indigo-50\/50 { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .bg-indigo-50\/50 { background-color: rgba(9,75,159,0.08) !important; }
 html.dark .bg-blue-50\/50,
 html.dark .bg-blue-50\/30  { background-color: rgba(59,130,246,0.06) !important; }
 html.dark .bg-red-50\/30,
@@ -855,7 +930,7 @@ html.dark [class*="from-blue-50"]    { --tw-gradient-from: rgba(59,130,246,0.05)
 html.dark [class*="from-red-50"]     { --tw-gradient-from: rgba(239,68,68,0.05) !important; }
 html.dark [class*="from-emerald-50"] { --tw-gradient-from: rgba(16,185,129,0.05) !important; }
 html.dark [class*="from-amber-50"]   { --tw-gradient-from: rgba(245,158,11,0.05) !important; }
-html.dark [class*="from-indigo-50"]  { --tw-gradient-from: rgba(99,102,241,0.05) !important; }
+html.dark [class*="from-indigo-50"]  { --tw-gradient-from: rgba(9,75,159,0.05) !important; }
 html.dark [class*="from-purple-50"]  { --tw-gradient-from: rgba(139,92,246,0.05) !important; }
 html.dark [class*="from-orange-50"]  { --tw-gradient-from: rgba(249,115,22,0.05) !important; }
 html.dark [class*="from-gray-50"]    { --tw-gradient-from: rgba(255,255,255,0.02) !important; }
@@ -866,7 +941,7 @@ html.dark [class*="from-gray-50"]    { --tw-gradient-from: rgba(255,255,255,0.02
    gradient start — unreadable on dark backgrounds
    ═══════════════════════════════════════════════════ */
 html.dark [style*="0f172a"][style*="-webkit-text-fill-color"] {
-  background-image: linear-gradient(135deg, #e2e8f0 0%, #a5b4fc 100%) !important;
+  background-image: linear-gradient(135deg, #e2e8f0 0%, #93C5FD 100%) !important;
 }
 html.dark [style*="334155"][style*="-webkit-text-fill-color"] {
   background-image: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%) !important;
@@ -895,7 +970,7 @@ html.dark [style*="f1f5f9"]:not([class*="gradient"]) {
 
 /* Hover states using hardcoded light colors */
 html.dark [style*="f8fafc"] { background: #161b26 !important; }
-html.dark [style*="eef2ff"] { background: rgba(99,102,241,0.1) !important; }
+html.dark [style*="eef2ff"] { background: rgba(9,75,159,0.1) !important; }
 
 /* Inline white card backgrounds */
 html.dark [style*="background: white"],
@@ -903,12 +978,12 @@ html.dark [style*="background:white"],
 html.dark [style*="background: 'white'"] { background: #161b26 !important; }
 
 /* hover:bg-gray-50 and hover:bg-gray-50/50 on table rows */
-html.dark tr:hover { background: rgba(99,102,241,0.05) !important; }
+html.dark tr:hover { background: rgba(9,75,159,0.05) !important; }
 html.dark .hover\:bg-gray-50:hover { background-color: rgba(255,255,255,0.03) !important; }
 html.dark .hover\:bg-gray-50\/50:hover { background-color: rgba(255,255,255,0.02) !important; }
 html.dark .hover\:bg-blue-50\/30:hover { background-color: rgba(59,130,246,0.05) !important; }
 html.dark .hover\:bg-red-50\/30:hover { background-color: rgba(239,68,68,0.05) !important; }
-html.dark .hover\:bg-indigo-50:hover { background-color: rgba(99,102,241,0.08) !important; }
+html.dark .hover\:bg-indigo-50:hover { background-color: rgba(9,75,159,0.08) !important; }
 html.dark .hover\:bg-slate-100:hover { background-color: rgba(255,255,255,0.04) !important; }
 
 /* thead bg-gray-50/80 used in audit */

@@ -58,7 +58,9 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(CACHE_KEY_IS_OWNER, String(owner))
 
       const list: Branch[] = Array.isArray(branchData)
-        ? branchData.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))
+        ? branchData
+            .filter((b: { isActive?: boolean }) => b.isActive !== false)
+            .map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))
         : []
       setBranches(list)
       localStorage.setItem(CACHE_KEY_BRANCHES, JSON.stringify(list))

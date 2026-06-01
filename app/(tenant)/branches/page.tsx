@@ -1,21 +1,52 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState } from 'react'
-import { Plus, Building2, Copy, Check } from 'lucide-react'
+import { useConfirm } from '@/hooks/useConfirm'
+import { useUser } from '@/hooks/useUser'
+import {
+  Plus, Building2, Copy, Check, Phone, MapPin, Users, Receipt,
+  Edit2, PowerOff, X, Save, Loader2, Key, AlertTriangle, CheckCircle,
+  TrendingUp, ToggleLeft, ToggleRight, Globe, MonitorSmartphone
+} from 'lucide-react'
+import toast from 'react-hot-toast'
 
-import toast from 'react-hot-toast';
 interface Branch {
   id: string; name: string; address?: string; phone?: string
   isActive: boolean; activationCode: string; createdAt: string
   _count: { transactions: number; users: number }
 }
 
+const CARD_GRADIENTS = [
+  'from-blue-500 to-violet-600',
+  'from-blue-500 to-cyan-600',
+  'from-emerald-500 to-teal-600',
+  'from-pink-500 to-rose-600',
+  'from-blue-500 to-orange-600',
+  'from-purple-500 to-fuchsia-600',
+]
+
 export default function BranchesPage() {
+  usePageTitle('الفروع');
+  const { confirm, dialog } = useConfirm()
+  const { isElectron } = useUser()
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading]   = useState(true)
-  const [form, setForm]         = useState({ name: '', address: '', phone: '' })
-  const [showForm, setShowForm] = useState(false)
   const [copied, setCopied]     = useState<string | null>(null)
+
+  // Create modal
+  const [createOpen,    setCreateOpen]    = useState(false)
+  const [createForm,    setCreateForm]    = useState({ name: '', address: '', phone: '' })
+  const [createSaving,  setCreateSaving]  = useState(false)
+  const [createdResult, setCreatedResult] = useState<{ activationCode: string; branchToken?: string } | null>(null)
+
+  // Edit modal
+  const [editTarget,  setEditTarget]  = useState<Branch | null>(null)
+  const [editForm,    setEditForm]    = useState({ name: '', address: '', phone: '' })
+  const [editSaving,  setEditSaving]  = useState(false)
+
+  // Deactivate
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -23,123 +54,593 @@ export default function BranchesPage() {
   }
   useEffect(() => { load() }, [])
 
-  async function createBranch(e: React.FormEvent) {
+  // ── Create ──────────────────────────────────────────────────────────────────
+  async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
-    const res = await fetch('/api/branches', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
-    })
-    if (res.ok) { setShowForm(false); setForm({ name: '', address: '', phone: '' }); load() }
-    else { const d = await res.json(); toast(d.error); }
+    if (!createForm.name.trim()) return
+    setCreateSaving(true)
+    try {
+      const res = await fetch('/api/branches', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      })
+      const d = await res.json()
+      if (!res.ok) { toast.error(d.error ?? 'حدث خطأ'); return }
+      setCreatedResult({ activationCode: d.activationCode, branchToken: d.branchToken })
+      load()
+    } catch { toast.error('تعذر الاتصال بالخادم') }
+    finally { setCreateSaving(false) }
   }
 
-  function copyCode(code: string) {
-    navigator.clipboard.writeText(code)
-    setCopied(code)
+  function closeCreate() {
+    setCreateOpen(false)
+    setCreatedResult(null)
+    setCreateForm({ name: '', address: '', phone: '' })
+  }
+
+  // ── Edit ────────────────────────────────────────────────────────────────────
+  function openEdit(b: Branch) {
+    setEditTarget(b)
+    setEditForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '' })
+  }
+
+  async function submitEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTarget) return
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/branches/${editTarget.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'حدث خطأ'); return }
+      toast.success('تم تحديث الفرع')
+      setEditTarget(null)
+      load()
+    } catch { toast.error('تعذر الاتصال بالخادم') }
+    finally { setEditSaving(false) }
+  }
+
+  // ── Deactivate ──────────────────────────────────────────────────────────────
+  async function deactivateBranch(b: Branch) {
+    if (!await confirm({ title: 'إيقاف الفرع', message: `هل تريد إيقاف تشغيل فرع "${b.name}"؟`, variant: 'warning', confirmLabel: 'إيقاف' })) return
+    setDeactivatingId(b.id)
+    try {
+      const res = await fetch(`/api/branches/${b.id}`, { method: 'DELETE' })
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'حدث خطأ'); return }
+      toast.success('تم إيقاف الفرع')
+      load()
+    } catch { toast.error('تعذر الاتصال بالخادم') }
+    finally { setDeactivatingId(null) }
+  }
+
+  function copyText(text: string, key: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(key)
     setTimeout(() => setCopied(null), 2000)
   }
 
+  // ── Derived stats ───────────────────────────────────────────────────────────
+  const totalActive  = branches.filter(b => b.isActive).length
+  const totalUsers   = branches.reduce((s, b) => s + b._count.users, 0)
+  const totalTx      = branches.reduce((s, b) => s + b._count.transactions, 0)
+
+  if (isElectron) return (
+    <div className="flex items-center justify-center min-h-[70vh] animate-fade-in-up" dir="rtl">
+      <div className="relative w-full max-w-lg text-center">
+
+        {/* Background glow blobs */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+          <div className="absolute top-1/2 left-1/2 w-72 h-72 rounded-full opacity-10 blur-3xl -translate-x-1/2 -translate-y-1/2"
+            style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)' }} />
+        </div>
+
+        {/* Card */}
+        <div className="relative rounded-3xl p-10 flex flex-col items-center gap-6"
+          style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 8px 40px rgba(9,75,159,0.1)' }}>
+
+          {/* Icon */}
+          <div className="relative">
+            <div className="w-24 h-24 rounded-3xl flex items-center justify-center relative overflow-hidden"
+              style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)', boxShadow: '0 12px 36px rgba(9,75,159,0.4)' }}>
+              <div className="absolute inset-0 opacity-25"
+                style={{ background: 'linear-gradient(135deg,rgba(255,255,255,0.5) 0%,transparent 60%)' }} />
+              <Globe size={44} className="text-white relative z-10" />
+            </div>
+            {/* Badge */}
+            <div className="absolute -bottom-2 -left-2 w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow: '0 4px 12px rgba(245,158,11,0.4)' }}>
+              <Building2 size={14} className="text-white" />
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-slate-900">إدارة الفروع</h2>
+            <p className="text-slate-400 text-sm font-medium">متاحة عبر لوحة التحكم على الويب</p>
+          </div>
+
+          {/* Divider */}
+          <div className="w-full h-px" style={{ background: 'linear-gradient(90deg,transparent,#e2e8f0,transparent)' }} />
+
+          {/* Description */}
+          <p className="text-slate-600 text-sm font-medium leading-7 max-w-sm">
+            لإضافة فروع جديدة، تعديلها، أو إدارة رموز التفعيل،
+            يرجى الدخول إلى{' '}
+            <span className="font-black text-blue-600">لوحة التحكم على الموقع</span>{' '}
+            حيث تتوفر جميع الصلاحيات والأدوات اللازمة.
+          </p>
+
+          {/* Features list */}
+          <div className="w-full space-y-2.5">
+            {[
+              { text: 'إضافة وتعديل الفروع', color: '#094B9F', bg: 'rgba(9,75,159,0.08)' },
+              { text: 'إدارة رموز التفعيل', color: '#8b5cf6', bg: 'rgba(14,99,212,0.08)' },
+              { text: 'تفعيل وإيقاف الفروع', color: '#06b6d4', bg: 'rgba(6,182,212,0.08)' },
+            ].map(f => (
+              <div key={f.text} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold"
+                style={{ background: f.bg, color: f.color }}>
+                <CheckCircle size={15} style={{ color: f.color }} />
+                {f.text}
+              </div>
+            ))}
+          </div>
+
+          {/* Web badge */}
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full"
+            style={{ background: 'rgba(9,75,159,0.06)', border: '1px solid rgba(9,75,159,0.15)' }}>
+            <MonitorSmartphone size={14} className="text-blue-400" />
+            <span className="text-xs font-bold text-blue-500">متاح عبر الموقع فقط</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}>
-                <div className="absolute inset-0 rounded-xl opacity-40" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%)' }} />
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>الفروع</h1>
-              <p className="text-gray-500 text-sm mt-0.5">{branches.length} فرع</p>
-            </div>
+    <>{dialog}<div className="space-y-6 animate-fade-in-up" dir="rtl">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="relative w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 8px 24px rgba(9,75,159,0.3)' }}>
+            <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%)' }} />
+            <Building2 size={22} className="text-white relative z-10" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900">الفروع</h1>
+            <p className="text-sm text-slate-500 mt-0.5 font-medium">
+              {loading ? '…' : `${branches.length} فرع — ${totalActive} نشط`}
+            </p>
           </div>
         </div>
         <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm transition-colors font-bold shadow-md"
-          style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
+          onClick={() => setCreateOpen(true)}
+          className="flex items-center justify-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-95 w-full sm:w-auto"
+          style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 16px rgba(9,75,159,0.35)' }}
         >
           <Plus className="w-4 h-4" />
-          إضافة فرع
+          إضافة فرع جديد
         </button>
       </div>
 
-      {/* Create form */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <form onSubmit={createBranch} onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
-            <h2 className="text-lg font-semibold">إضافة فرع جديد</h2>
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">اسم الفرع *</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">العنوان</label>
-              <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">الهاتف</label>
-              <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button type="submit" className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm hover:bg-blue-700 transition-colors">إنشاء الفرع</button>
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 border rounded-lg text-sm hover:bg-gray-50 transition-colors">إلغاء</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Branches grid */}
-      {loading ? (
-        <div className="text-center text-gray-400 py-16">جاري التحميل...</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {branches.map(b => (
-            <div key={b.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-blue-500" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{b.name}</h3>
-                    {b.address && <p className="text-xs text-gray-400 mt-0.5">{b.address}</p>}
-                  </div>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${b.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {b.isActive ? 'نشط' : 'غير نشط'}
-                </span>
+      {/* ── Stat cards ── */}
+      {!loading && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'إجمالي الفروع',    value: branches.length,  gradient: 'linear-gradient(135deg,#094B9F,#063A8A)', glow: 'rgba(9,75,159,0.2)' },
+            { label: 'الفروع النشطة',    value: totalActive,       gradient: 'linear-gradient(135deg,#10b981,#059669)', glow: 'rgba(16,185,129,0.2)' },
+            { label: 'الموظفون',         value: totalUsers,         gradient: 'linear-gradient(135deg,#f59e0b,#d97706)', glow: 'rgba(245,158,11,0.2)' },
+            { label: 'إجمالي المعاملات', value: totalTx.toLocaleString('ar-IQ'), gradient: 'linear-gradient(135deg,#06b6d4,#0891b2)', glow: 'rgba(6,182,212,0.2)' },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl p-4 flex items-center gap-3 relative overflow-hidden"
+              style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-full pointer-events-none opacity-10 blur-2xl"
+                style={{ background: s.gradient, transform: 'translate(30%,-30%)' }} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 relative overflow-hidden"
+                style={{ background: s.gradient, boxShadow: `0 4px 12px ${s.glow}` }}>
+                <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%)' }} />
+                <TrendingUp size={16} className="text-white relative z-10" />
               </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-                <div className="bg-gray-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-gray-900">{b._count.transactions.toLocaleString('ar-IQ')}</p>
-                  <p className="text-xs text-gray-500">معاملة</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-gray-900">{b._count.users}</p>
-                  <p className="text-xs text-gray-500">موظف</p>
-                </div>
-              </div>
-
-              <div className="mt-3 p-2 bg-blue-50 rounded-lg flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-blue-500">رمز التفعيل</p>
-                  <p className="font-mono text-sm font-bold text-blue-700">{b.activationCode}</p>
-                </div>
-                <button
-                  onClick={() => copyCode(b.activationCode)}
-                  className="p-1.5 hover:bg-blue-100 rounded transition-colors"
-                  title="نسخ"
-                >
-                  {copied === b.activationCode ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-blue-500" />}
-                </button>
+              <div>
+                <p className="text-xs font-bold text-slate-500 leading-tight">{s.label}</p>
+                <p className="text-2xl font-black text-slate-900 leading-tight">{s.value}</p>
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+
+      {/* ── Loading skeleton ── */}
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-2xl overflow-hidden animate-pulse" style={{ background: 'white', border: '1px solid #e2e8f0' }}>
+              <div className="h-24 bg-slate-200" />
+              <div className="p-5 space-y-3">
+                <div className="h-4 bg-slate-100 rounded-lg w-2/3" />
+                <div className="h-3 bg-slate-100 rounded-lg w-1/2" />
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <div className="h-14 bg-slate-100 rounded-xl" />
+                  <div className="h-14 bg-slate-100 rounded-xl" />
+                </div>
+                <div className="h-10 bg-slate-100 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {!loading && branches.length === 0 && (
+        <div className="rounded-3xl py-20 flex flex-col items-center gap-4 text-center"
+          style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)' }}>
+            <Building2 className="w-8 h-8 text-slate-400" />
+          </div>
+          <div>
+            <p className="text-lg font-bold text-slate-700">لا توجد فروع بعد</p>
+            <p className="text-sm text-slate-400 mt-1">أنشئ فرعك الأول للبدء</p>
+          </div>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="mt-2 flex items-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold"
+            style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)' }}
+          >
+            <Plus className="w-4 h-4" /> إضافة فرع
+          </button>
+        </div>
+      )}
+
+      {/* ── Branches grid ── */}
+      {!loading && branches.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {branches.map((b, idx) => {
+            const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length]
+            return (
+              <div key={b.id} className="rounded-2xl overflow-hidden transition-all hover:shadow-lg"
+                style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
+
+                {/* Card header */}
+                <div className={`relative bg-gradient-to-br ${gradient} p-5 flex items-start justify-between overflow-hidden`}>
+                  <div className="absolute inset-0 opacity-20" style={{ background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.5), transparent 60%)' }} />
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
+                      <Building2 size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-white text-base leading-tight">{b.name}</h3>
+                      <p className="text-white/70 text-xs mt-0.5">
+                        {new Date(b.createdAt).toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`relative z-10 text-[11px] font-extrabold px-2.5 py-1 rounded-full border ${
+                    b.isActive
+                      ? 'bg-white/20 text-white border-white/30'
+                      : 'bg-black/20 text-white/60 border-white/10'
+                  }`}>
+                    {b.isActive ? '● نشط' : '○ موقوف'}
+                  </span>
+                </div>
+
+                {/* Card body */}
+                <div className="p-5 space-y-4">
+
+                  {/* Address / Phone */}
+                  {(b.address || b.phone) && (
+                    <div className="space-y-1.5">
+                      {b.address && (
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <MapPin size={13} className="flex-shrink-0 text-slate-400" />
+                          <span className="text-xs font-medium truncate">{b.address}</span>
+                        </div>
+                      )}
+                      {b.phone && (
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Phone size={13} className="flex-shrink-0 text-slate-400" />
+                          <span className="text-xs font-medium" dir="ltr">{b.phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl p-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Receipt size={12} className="text-blue-500" />
+                        <span className="text-[10px] font-bold text-slate-400">المعاملات</span>
+                      </div>
+                      <p className="text-xl font-black text-slate-800">{b._count.transactions.toLocaleString('ar-IQ')}</p>
+                    </div>
+                    <div className="rounded-xl p-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Users size={12} className="text-violet-500" />
+                        <span className="text-[10px] font-bold text-slate-400">الموظفون</span>
+                      </div>
+                      <p className="text-xl font-black text-slate-800">{b._count.users}</p>
+                    </div>
+                  </div>
+
+                  {/* Activation code */}
+                  <div className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2"
+                    style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.06), rgba(14,99,212,0.04))', border: '1px solid rgba(9,75,159,0.15)' }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Key size={13} className="text-blue-500 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-blue-500">رمز التفعيل</p>
+                        <p className="font-mono text-[11px] font-bold text-blue-700 truncate">{b.activationCode}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => copyText(b.activationCode, b.id)}
+                      className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors flex-shrink-0">
+                      {copied === b.id
+                        ? <Check size={14} className="text-emerald-600" />
+                        : <Copy size={14} className="text-blue-500" />}
+                    </button>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => openEdit(b)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105"
+                      style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.08), rgba(14,99,212,0.06))', border: '1px solid rgba(9,75,159,0.15)', color: '#094B9F' }}
+                    >
+                      <Edit2 size={13} /> تعديل
+                    </button>
+                    {b.isActive && (
+                      <button
+                        onClick={() => deactivateBranch(b)}
+                        disabled={deactivatingId === b.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+                        style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#dc2626' }}
+                      >
+                        {deactivatingId === b.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <PowerOff size={13} />}
+                        إيقاف
+                      </button>
+                    )}
+                    {!b.isActive && (
+                      <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold"
+                        style={{ background: 'rgba(100,116,139,0.06)', border: '1px solid rgba(100,116,139,0.15)', color: '#94a3b8' }}>
+                        <PowerOff size={13} /> موقوف
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      </div>{/* end animate-fade-in-up */}
+
+      {/* ══ Create Modal ═══════════════════════════════════════════════════════ */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => !createSaving && !createdResult && closeCreate()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-6 pt-5 pb-4 flex items-center justify-between"
+              style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 12px rgba(9,75,159,0.3)' }}>
+                  <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                  <Building2 size={16} className="text-white relative z-10" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base">إضافة فرع جديد</h3>
+                  <p className="text-[11px] text-slate-400">أدخل بيانات الفرع</p>
+                </div>
+              </div>
+              {!createSaving && (
+                <button onClick={closeCreate} className="p-1.5 rounded-lg hover:bg-slate-100">
+                  <X size={16} className="text-slate-400" />
+                </button>
+              )}
+            </div>
+
+            {/* Success state */}
+            {createdResult ? (
+              <div className="p-6 space-y-4">
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                    <CheckCircle size={28} className="text-emerald-500" />
+                  </div>
+                  <p className="font-extrabold text-slate-800 text-lg">تم إنشاء الفرع بنجاح!</p>
+                </div>
+
+                {/* Activation code */}
+                <div className="rounded-xl p-4 space-y-1"
+                  style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.06), rgba(14,99,212,0.04))', border: '1px solid rgba(9,75,159,0.2)' }}>
+                  <p className="text-xs font-bold text-blue-600 flex items-center gap-1.5">
+                    <Key size={12} /> رمز التفعيل (للكاشير)
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-sm font-bold text-blue-800 break-all">{createdResult.activationCode}</p>
+                    <button onClick={() => copyText(createdResult!.activationCode, 'code')}
+                      className="p-1.5 rounded-lg hover:bg-blue-100 flex-shrink-0">
+                      {copied === 'code' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} className="text-blue-500" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branch token */}
+                {createdResult.branchToken && (
+                  <div className="rounded-xl p-4 space-y-1"
+                    style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <p className="text-xs font-bold text-blue-600 flex items-center gap-1.5">
+                      <Key size={12} /> توكن الفرع (لتطبيق سطح المكتب)
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-mono text-[11px] font-bold text-blue-800 break-all line-clamp-2">{createdResult.branchToken}</p>
+                      <button onClick={() => copyText(createdResult!.branchToken!, 'token')}
+                        className="p-1.5 rounded-lg hover:bg-blue-100 flex-shrink-0">
+                        {copied === 'token' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} className="text-blue-500" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-2 rounded-xl px-3 py-2.5"
+                  style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                  <AlertTriangle size={14} className="text-rose-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-rose-700 font-medium">احتفظ بهذه البيانات — لن تظهر مجدداً</p>
+                </div>
+
+                <button onClick={closeCreate}
+                  className="w-full py-2.5 rounded-xl font-bold text-white text-sm"
+                  style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)' }}>
+                  تم، إغلاق
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={submitCreate} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">اسم الفرع *</label>
+                  <input
+                    value={createForm.name}
+                    onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                    required minLength={2} placeholder="مثال: الفرع الرئيسي"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                    onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">
+                    العنوان <span className="font-normal text-slate-400 normal-case">(اختياري)</span>
+                  </label>
+                  <input
+                    value={createForm.address}
+                    onChange={e => setCreateForm(f => ({ ...f, address: e.target.value }))}
+                    placeholder="مثال: شارع النصر، بغداد"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                    onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">
+                    رقم الهاتف <span className="font-normal text-slate-400 normal-case">(اختياري)</span>
+                  </label>
+                  <input
+                    value={createForm.phone}
+                    onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                    placeholder="07xxxxxxxxx" dir="ltr"
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                    onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={closeCreate} disabled={createSaving}
+                    className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                    إلغاء
+                  </button>
+                  <button type="submit" disabled={createSaving || !createForm.name.trim()}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+                    style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 16px rgba(9,75,159,0.3)' }}>
+                    {createSaving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    {createSaving ? 'جاري الإنشاء...' : 'إنشاء الفرع'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ Edit Modal ══════════════════════════════════════════════════════════ */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => !editSaving && setEditTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="px-6 pt-5 pb-4 flex items-center justify-between"
+              style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 12px rgba(9,75,159,0.3)' }}>
+                  <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                  <Edit2 size={16} className="text-white relative z-10" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base">تعديل الفرع</h3>
+                  <p className="text-[11px] text-slate-400">{editTarget.name}</p>
+                </div>
+              </div>
+              {!editSaving && (
+                <button onClick={() => setEditTarget(null)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                  <X size={16} className="text-slate-400" />
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={submitEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">اسم الفرع *</label>
+                <input
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  required minLength={2}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">
+                  العنوان <span className="font-normal text-slate-400 normal-case">(اختياري)</span>
+                </label>
+                <input
+                  value={editForm.address}
+                  onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">
+                  رقم الهاتف <span className="font-normal text-slate-400 normal-case">(اختياري)</span>
+                </label>
+                <input
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                  dir="ltr"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditTarget(null)} disabled={editSaving}
+                  className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                  إلغاء
+                </button>
+                <button type="submit" disabled={editSaving}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+                  style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 16px rgba(9,75,159,0.3)' }}>
+                  {editSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {editSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </>
   )
 }

@@ -18,6 +18,7 @@ export async function GET() {
         tenantId: payload.tenantId,
         branchId: payload.branchId,
       },
+      isElectron: process.env.IS_ELECTRON === '1',
     })
   } catch {
     return NextResponse.json({ user: null })

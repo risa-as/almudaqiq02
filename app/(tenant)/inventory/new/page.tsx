@@ -1,447 +1,657 @@
-'use client';
+"use client";
+import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Box, Layers, DollarSign, Barcode, Scan, Save, X, Plus, Search, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Box,
+  Layers,
+  DollarSign,
+  Scan,
+  Save,
+  X,
+  Loader2,
+  Plus,
+  Search,
+  ChevronDown,
+  Package,
+  Tag,
+  Truck,
+  Hash,
+  AlertTriangle,
+  CalendarClock,
+} from "lucide-react";
+import toast from "react-hot-toast";
 
-import toast from 'react-hot-toast';
 interface UnitInput {
-    name: string;
-    conversion: number;
-    barcode: string;
-    price: number;
+  name: string;
+  conversion: number;
+  barcode: string;
+  price: number;
+  initialQty: number;
 }
 
 export default function NewProductPage() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [baseCost, setBaseCost] = useState(0);
+  usePageTitle('إضافة منتج');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledBarcode = searchParams.get("barcode") || "";
 
-    // New Fields
-    const [categories, setCategories] = useState<{ id: number, name: string, parentId: number | null }[]>([]);
-    const [categoryId, setCategoryId] = useState<string>('');
-    const [categorySearch, setCategorySearch] = useState('');
-    const [categoryOpen, setCategoryOpen] = useState(false);
-    const categoryRef = useRef<HTMLDivElement>(null);
-    const [suppliers, setSuppliers] = useState<{ id: number, name: string }[]>([]);
-    const [supplierId, setSupplierId] = useState<string>('');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [baseCost, setBaseCost] = useState(0);
+  const [minimumStock, setMinimumStock] = useState(0);
+  const [expiryDate, setExpiryDate] = useState("");
+  const [saving, setSaving] = useState(false);
 
-    // Read barcode from URL query param (set by inventory page barcode scanner)
-    const prefilledBarcode = searchParams.get('barcode') || '';
+  const [categories, setCategories] = useState<
+    { id: number; name: string; parentId: number | null }[]
+  >([]);
+  const [categoryId, setCategoryId] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const categoryRef = useRef<HTMLDivElement>(null);
 
-    // Default to at least one unit (Piece), with barcode pre-filled if provided
-    const [units, setUnits] = useState<UnitInput[]>([
-        { name: 'قطعة', conversion: 1, barcode: prefilledBarcode, price: 0 }
+  const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>(
+    [],
+  );
+  const [supplierId, setSupplierId] = useState("");
+  const [isPrepaid, setIsPrepaid] = useState(false);
+
+  const [units, setUnits] = useState<UnitInput[]>([
+    {
+      name: "قطعة",
+      conversion: 1,
+      barcode: prefilledBarcode,
+      price: 0,
+      initialQty: 0,
+    },
+  ]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        categoryRef.current &&
+        !categoryRef.current.contains(e.target as Node)
+      )
+        setCategoryOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setCategories(d))
+      .catch(() => {});
+    fetch("/api/suppliers")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setSuppliers(d))
+      .catch(() => {});
+  }, []);
+
+  const addUnit = () =>
+    setUnits((u) => [
+      ...u,
+      {
+        name: "وحدة جديدة",
+        conversion: 1,
+        barcode: "",
+        price: 0,
+        initialQty: 0,
+      },
     ]);
+  const removeUnit = (i: number) =>
+    units.length > 1 && setUnits((u) => u.filter((_, idx) => idx !== i));
+  const updateUnit = (
+    i: number,
+    field: keyof UnitInput,
+    value: string | number,
+  ) =>
+    setUnits((u) =>
+      u.map((unit, idx) => (idx === i ? { ...unit, [field]: value } : unit)),
+    );
 
-    // Close category dropdown on outside click
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (categoryRef.current && !categoryRef.current.contains(e.target as Node)) {
-                setCategoryOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
+  // Total base qty preview
+  const totalBaseQty = units.reduce(
+    (sum, u) => sum + (Number(u.initialQty) || 0) * Number(u.conversion),
+    0,
+  );
 
-    useEffect(() => {
-        fetch('/api/categories')
-            .then(res => res.json())
-            .then(data => {
-                if (Array.isArray(data)) setCategories(data);
-            })
-            .catch(err => console.error(err));
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description,
+          baseCost,
+          minimumStock,
+          units,
+          categoryId: categoryId || null,
+          supplierId: supplierId || null,
+          expiryDate: expiryDate || null,
+          isPrepaid: supplierId ? isPrepaid : false,
+        }),
+      });
+      if (!res.ok) throw new Error("فشل إنشاء المنتج");
+      toast.success("تم إنشاء المنتج بنجاح!");
+      router.push("/inventory");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "حدث خطأ");
+      setSaving(false);
+    }
+  };
 
-        fetch('/api/suppliers')
-            .then(res => res.json())
-            .then(data => {
-                if (Array.isArray(data)) setSuppliers(data);
-            })
-            .catch(err => console.error(err));
-    }, []);
+  const selectedCategoryName = categories.find(
+    (c) => String(c.id) === categoryId,
+  )?.name;
 
-    const addUnit = () => {
-        setUnits([...units, { name: 'وحدة جديدة', conversion: 1, barcode: '', price: 0 }]);
-    };
+  return (
+    <form
+      onSubmit={handleSubmit}
+      dir="rtl"
+      className="flex flex-col gap-4 h-[calc(100vh-5rem)]"
+    >
+      {/* ─── Header bar ─── */}
+      <div className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+            style={{
+              background: "linear-gradient(135deg,#094B9F 0%,#063A8A 100%)",
+              boxShadow: "0 8px 20px rgba(9,75,159,.3)",
+            }}
+          >
+            <Package className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-slate-900">
+              إضافة منتج جديد
+            </h1>
+            <p className="text-xs text-slate-400 font-medium mt-0.5">
+              أدخل بيانات المنتج ووحداته
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/inventory")}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <X size={15} />
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn-primary flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-sm shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {saving ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Save size={15} />
+            )}
+            {saving ? "جاري الحفظ..." : "حفظ المنتج"}
+          </button>
+        </div>
+      </div>
 
-    const removeUnit = (index: number) => {
-        if (units.length > 1) {
-            setUnits(units.filter((_, i) => i !== index));
-        }
-    };
+      {/* ─── Two-column body ─── */}
+      <div className="flex-1 grid grid-cols-5 gap-4 min-h-0">
+        {/* ── LEFT: Basic Details (2 cols) ── */}
+        <div className="col-span-2 glass-panel flex flex-col overflow-hidden">
+          <div
+            className="flex items-center gap-3 px-5 py-4 border-b border-white/40 shrink-0"
+            style={{
+              background:
+                "linear-gradient(135deg,rgba(9,75,159,.05) 0%,transparent 60%)",
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{
+                background: "linear-gradient(135deg,#094B9F,#063A8A)",
+                boxShadow: "0 4px 12px rgba(9,75,159,.3)",
+              }}
+            >
+              <Box className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="font-bold text-slate-700 text-sm">
+              البيانات الأساسية
+            </h2>
+          </div>
 
-    const updateUnit = (index: number, field: keyof UnitInput, value: string | number) => {
-        const newUnits = [...units];
-        newUnits[index] = { ...newUnits[index], [field]: value };
-        setUnits(newUnits);
-    };
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {/* Name */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <Package size={12} className="text-blue-400" />
+                اسم المنتج <span className="text-red-400">*</span>
+              </label>
+              <input
+                required
+                autoFocus
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-slate-300 shadow-sm"
+                placeholder="مثال: بيبسي 330 مل"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            const payload = {
-                name,
-                description,
-                baseCost,
-                units,
-                categoryId: categoryId || null,
-                supplierId: supplierId || null,
+            {/* Description */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <Hash size={12} className="text-blue-400" />
+                الوصف{" "}
+                <span className="text-slate-300 font-normal">(اختياري)</span>
+              </label>
+              <input
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-slate-300 shadow-sm"
+                placeholder="وصف مختصر..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
 
-            };
+            {/* Category */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <Tag size={12} className="text-blue-400" />
+                القسم / التصنيف
+              </label>
+              <div className="relative" ref={categoryRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryOpen((o) => !o);
+                    setCategorySearch("");
+                  }}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-between gap-2 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm"
+                >
+                  <span
+                    className={
+                      selectedCategoryName ? "text-slate-800" : "text-slate-300"
+                    }
+                  >
+                    {selectedCategoryName ?? "-- اختر القسم --"}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className={`text-slate-400 transition-transform ${categoryOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {categoryOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                    <div className="p-2 border-b border-slate-100">
+                      <div className="relative">
+                        <input
+                          autoFocus
+                          className="w-full bg-slate-50 border border-slate-200 py-2 px-3 pr-8 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400 text-slate-800 placeholder-slate-300"
+                          placeholder="ابحث..."
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Escape" && setCategoryOpen(false)
+                          }
+                        />
+                        <Search
+                          size={13}
+                          className="absolute right-3 top-2.5 text-slate-400"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryId("");
+                          setCategoryOpen(false);
+                        }}
+                        className="w-full text-right px-4 py-2 text-xs text-slate-400 hover:bg-slate-50 transition-colors"
+                      >
+                        -- بدون قسم --
+                      </button>
+                      {(() => {
+                        const q = categorySearch.toLowerCase();
+                        const list = q
+                          ? categories.filter((c) =>
+                              c.name.toLowerCase().includes(q),
+                            )
+                          : categories;
+                        return list.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setCategoryId(String(cat.id));
+                              setCategoryOpen(false);
+                            }}
+                            className={`w-full text-right px-4 py-2.5 text-sm transition-colors font-semibold ${String(cat.id) === categoryId ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}
+                          >
+                            {cat.parentId && (
+                              <span className="text-slate-300 ml-1">↳</span>
+                            )}
+                            {cat.name}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
-            const res = await fetch('/api/products', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
+            {/* Supplier */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <Truck size={12} className="text-blue-400" />
+                المورد المعتاد{" "}
+                <span className="text-slate-300 font-normal">(اختياري)</span>
+              </label>
+              <select
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm appearance-none cursor-pointer"
+                value={supplierId}
+                onChange={(e) => { setSupplierId(e.target.value); setIsPrepaid(false); }}
+              >
+                <option value="">-- اختر المورد --</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
-            if (!res.ok) throw new Error('فشل إنشاء المنتج');
+              {/* Prepaid checkbox — يظهر عند اختيار مورد وكمية ابتدائية */}
+              {supplierId && totalBaseQty > 0 && (
+                <label className="flex items-center gap-2.5 cursor-pointer select-none group mt-2.5">
+                  <div className="relative flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={isPrepaid}
+                      onChange={(e) => setIsPrepaid(e.target.checked)}
+                    />
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isPrepaid ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white group-hover:border-blue-400"}`}>
+                      {isPrepaid && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-slate-600">
+                    تم شراء الكمية الابتدائية مسبقاً
+                    <span className="text-slate-400 font-normal mr-1">(مدفوع بالكامل — لا دين على المورد)</span>
+                  </span>
+                </label>
+              )}
+            </div>
 
-            toast.success('تم إنشاء المنتج بنجاح!');
-            router.push('/inventory');
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'حدث خطأ أثناء إنشاء المنتج');
-        }
-    };
+            {/* Base Cost */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <DollarSign size={12} className="text-blue-400" />
+                تكلفة الشراء{" "}
+                <span className="text-slate-400 font-normal">
+                  (للوحدة الأصغر)
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  dir="ltr"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 pl-10 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm text-left"
+                  value={baseCost}
+                  onChange={(e) => setBaseCost(Number(e.target.value))}
+                />
+                <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                السعر الذي تدفعه للمورد مقابل أصغر وحدة
+              </p>
+            </div>
 
-    return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-12" dir="rtl">
-            <div className="max-w-4xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-2xl font-extrabold text-gray-900">إضافة منتج جديد</h1>
-                    <p className="text-gray-500 mt-1">أدخل تفاصيل المنتج، وحدات القياس، والأسعار.</p>
+            {/* Minimum Stock */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <AlertTriangle size={12} className="text-blue-400" />
+                الحد الأدنى للمخزون
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  dir="ltr"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 pl-10 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm text-left"
+                  value={minimumStock}
+                  onChange={(e) => setMinimumStock(Number(e.target.value))}
+                />
+                <AlertTriangle className="absolute left-3 top-2.5 w-4 h-4 text-blue-400" />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                عند انخفاض المخزون لهذا الرقم يُعتبر المنتج ناقصاً في التقارير
+                والتنبيهات
+              </p>
+            </div>
+
+            {/* Expiry Date */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mb-1.5">
+                <CalendarClock size={12} className="text-rose-400" />
+                تاريخ الصلاحية{" "}
+                <span className="text-slate-300 font-normal">(اختياري)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  dir="ltr"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 pl-10 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-400 transition-all shadow-sm text-left"
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                />
+                <CalendarClock className="absolute left-3 top-2.5 w-4 h-4 text-rose-400" />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 font-medium">
+                يُطبَّق على دفعة المخزون الأولية ويُستخدم في تنبيهات قرب انتهاء
+                الصلاحية
+              </p>
+            </div>
+
+            {/* Initial stock summary */}
+            {totalBaseQty > 0 && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                <p className="text-xs font-bold text-emerald-700 mb-0.5">
+                  المخزون الأولي الإجمالي
+                </p>
+                <p className="text-lg font-black text-emerald-600">
+                  {totalBaseQty.toLocaleString()}{" "}
+                  <span className="text-sm font-bold">قطعة (وحدة أساسية)</span>
+                </p>
+                <p className="text-[10px] text-emerald-500 mt-0.5">
+                  = مجموع (الكمية × المعامل) لكل وحدة
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── RIGHT: Units & Pricing (3 cols) ── */}
+        <div className="col-span-3 glass-panel flex flex-col overflow-hidden">
+          <div
+            className="flex items-center justify-between px-4 py-2.5 border-b border-white/40 shrink-0"
+            style={{
+              background:
+                "linear-gradient(135deg,rgba(16,185,129,.05) 0%,transparent 60%)",
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{
+                  background: "linear-gradient(135deg,#10b981,#059669)",
+                  boxShadow: "0 3px 8px rgba(16,185,129,.3)",
+                }}
+              >
+                <Layers className="w-3.5 h-3.5 text-white" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-700 text-sm">
+                  الوحدات والتسعير
+                </h2>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full">
+                  {units.length} وحدة
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={addUnit}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
+              style={{
+                background: "linear-gradient(135deg,#10b981,#059669)",
+                boxShadow: "0 3px 8px rgba(16,185,129,.25)",
+                color: "white",
+              }}
+            >
+              <Plus size={11} />
+              إضافة وحدة
+            </button>
+          </div>
+
+          {/* Column headers */}
+          <div className="grid grid-cols-12 gap-2 px-4 py-1.5 bg-slate-50/60 border-b border-slate-100 shrink-0">
+            {[
+              { label: "اسم الوحدة", cols: "col-span-3" },
+              { label: "المعامل", cols: "col-span-2" },
+              { label: "الباركود", cols: "col-span-2" },
+              { label: "الكمية الأولية", cols: "col-span-2" },
+              { label: "سعر البيع", cols: "col-span-3" },
+            ].map((h) => (
+              <div
+                key={h.label}
+                className={`${h.cols} text-[10px] font-bold text-slate-400 uppercase tracking-wide`}
+              >
+                {h.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Units list */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+            {units.map((unit, i) => (
+              <div
+                key={i}
+                className={`grid grid-cols-12 gap-2 items-center px-3 py-2 rounded-lg border transition-all ${i === 0 ? "bg-emerald-50/40 border-emerald-100" : "bg-white border-slate-100 hover:border-slate-200"}`}
+              >
+                {/* Name */}
+                <div className="col-span-3 relative">
+                  <input
+                    required
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition-all placeholder-slate-300"
+                    value={unit.name}
+                    onChange={(e) => updateUnit(i, "name", e.target.value)}
+                    placeholder="قطعة"
+                  />
+                  {i === 0 && (
+                    <span className="absolute -top-1.5 right-1.5 bg-emerald-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full leading-none">
+                      افتراضية
+                    </span>
+                  )}
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Conversion */}
+                <div className="col-span-2">
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    disabled={i === 0}
+                    className={`w-full border rounded-lg px-2 py-1.5 text-xs font-bold text-center outline-none transition-all ${i === 0 ? "bg-slate-100 border-slate-100 text-slate-400 cursor-not-allowed" : "bg-white border-slate-200 text-slate-800 focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400"}`}
+                    value={unit.conversion}
+                    onChange={(e) =>
+                      updateUnit(i, "conversion", Number(e.target.value))
+                    }
+                  />
+                </div>
 
-                    {/* Basic Details Section */}
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-2 h-full bg-blue-500"></div>
-                        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                            <Box className="text-blue-500" />
-                            البيانات الأساسية
-                        </h2>
+                {/* Barcode */}
+                <div className="col-span-2 relative">
+                  <input
+                    dir="ltr"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 pl-6 text-xs font-mono text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition-all placeholder-slate-300 text-left"
+                    placeholder="Scan..."
+                    value={unit.barcode}
+                    onChange={(e) => updateUnit(i, "barcode", e.target.value)}
+                  />
+                  <Scan className="absolute left-1.5 top-2 w-3 h-3 text-slate-400" />
+                </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="col-span-1 md:col-span-2">
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">اسم المنتج</label>
-                                <input
-                                    required
-                                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 text-gray-900 font-bold"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="مثال: بيبسي 330 مل"
-                                />
-                            </div>
+                {/* Initial Qty */}
+                <div className="col-span-2 relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-all text-center"
+                    value={unit.initialQty || ""}
+                    placeholder="0"
+                    onChange={(e) =>
+                      updateUnit(i, "initialQty", Number(e.target.value))
+                    }
+                  />
+                  {unit.initialQty > 0 && (
+                    <span className="absolute -top-1.5 left-1 text-[8px] font-black text-blue-500 bg-blue-50 border border-blue-100 px-1 py-0.5 rounded-full leading-none whitespace-nowrap">
+                      = {(unit.initialQty * unit.conversion).toLocaleString()} ق
+                    </span>
+                  )}
+                </div>
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">الوصف (اختياري)</label>
-                                <input
-                                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 text-gray-900 font-medium"
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="وصف مختصر للمنتج..."
-                                />
-                            </div>
+                {/* Price + Delete */}
+                <div className="col-span-3 flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0"
+                    className="price-input flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition-all"
+                    value={unit.price}
+                    onChange={(e) =>
+                      updateUnit(i, "price", Number(e.target.value))
+                    }
+                  />
+                  {i > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => removeUnit(i)}
+                      className="w-6 h-6 flex items-center justify-center rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : (
+                    <div className="w-6 shrink-0" />
+                  )}
+                </div>
+              </div>
+            ))}
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">القسم / التصنيف</label>
-                                <div className="relative" ref={categoryRef}>
-                                    {/* Trigger button */}
-                                    <button
-                                        type="button"
-                                        onClick={() => { setCategoryOpen(o => !o); setCategorySearch(''); }}
-                                        className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-gray-900 font-medium flex items-center justify-between gap-2 text-right"
-                                    >
-                                        <span className={categoryId ? 'text-gray-900' : 'text-gray-400'}>
-                                            {categoryId
-                                                ? categories.find(c => String(c.id) === categoryId)?.name ?? '-- اختر القسم --'
-                                                : '-- اختر القسم --'}
-                                        </span>
-                                        <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform ${categoryOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    {/* Dropdown */}
-                                    {categoryOpen && (
-                                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                                            {/* Search input */}
-                                            <div className="p-2 border-b border-gray-100">
-                                                <div className="relative">
-                                                    <input
-                                                        autoFocus
-                                                        type="text"
-                                                        className="w-full bg-gray-50 border border-gray-200 py-2 px-3 pr-9 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-900 placeholder-gray-400"
-                                                        placeholder="ابحث عن قسم..."
-                                                        value={categorySearch}
-                                                        onChange={e => setCategorySearch(e.target.value)}
-                                                        onKeyDown={e => e.key === 'Escape' && setCategoryOpen(false)}
-                                                    />
-                                                    <Search size={15} className="absolute right-3 top-2.5 text-gray-400" />
-                                                </div>
-                                            </div>
-
-                                            {/* Options list */}
-                                            <div
-                                                className="max-h-56 overflow-y-auto"
-                                                onWheel={e => e.stopPropagation()}
-                                            >
-                                                {/* Clear option */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setCategoryId(''); setCategoryOpen(false); }}
-                                                    className="w-full text-right px-4 py-2.5 text-sm text-gray-400 hover:bg-gray-50 transition-colors"
-                                                >
-                                                    -- بدون قسم --
-                                                </button>
-
-                                                {(() => {
-                                                    const q = categorySearch.toLowerCase();
-                                                    const parents = categories.filter(c => !c.parentId);
-                                                    const children = categories.filter(c => c.parentId);
-
-                                                    // Filter: if searching, show all matching regardless of hierarchy
-                                                    if (q) {
-                                                        const matches = categories.filter(c => c.name.toLowerCase().includes(q));
-                                                        if (matches.length === 0) return (
-                                                            <p className="text-center text-sm text-gray-400 py-4">لا توجد نتائج</p>
-                                                        );
-                                                        return matches.map(cat => {
-                                                            const parent = cat.parentId ? categories.find(p => p.id === cat.parentId) : null;
-                                                            const isSelected = String(cat.id) === categoryId;
-                                                            return (
-                                                                <button
-                                                                    key={cat.id}
-                                                                    type="button"
-                                                                    onClick={() => { setCategoryId(String(cat.id)); setCategoryOpen(false); }}
-                                                                    className={`w-full text-right px-4 py-2 text-sm transition-colors flex flex-col gap-0.5 ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-800 hover:bg-gray-50'}`}
-                                                                >
-                                                                    <span className={`font-bold ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{cat.name}</span>
-                                                                    <span className="text-xs text-gray-400">
-                                                                        {parent ? `📁 ${parent.name} ← ${cat.name}` : '📁 قسم رئيسي'}
-                                                                    </span>
-                                                                </button>
-                                                            );
-                                                        });
-                                                    }
-
-                                                    // No search — show full hierarchy
-                                                    const standalone = parents.filter(p => !children.some(c => c.parentId === p.id));
-                                                    const withChildren = parents.filter(p => children.some(c => c.parentId === p.id));
-
-                                                    return (
-                                                        <>
-                                                            {standalone.map(cat => (
-                                                                <button
-                                                                    key={cat.id}
-                                                                    type="button"
-                                                                    onClick={() => { setCategoryId(String(cat.id)); setCategoryOpen(false); }}
-                                                                    className={`w-full text-right px-4 py-2.5 text-sm transition-colors ${String(cat.id) === categoryId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-800 hover:bg-gray-50'}`}
-                                                                >
-                                                                    {cat.name}
-                                                                </button>
-                                                            ))}
-                                                            {withChildren.map(parent => (
-                                                                <div key={parent.id}>
-                                                                    <div className="px-4 py-1.5 text-xs font-bold text-gray-400 bg-gray-50 border-y border-gray-100 flex items-center gap-1">
-                                                                        📁 {parent.name}
-                                                                    </div>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => { setCategoryId(String(parent.id)); setCategoryOpen(false); }}
-                                                                        className={`w-full text-right px-5 py-2.5 text-sm transition-colors ${String(parent.id) === categoryId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
-                                                                    >
-                                                                        {parent.name} (الرئيسي)
-                                                                    </button>
-                                                                    {children
-                                                                        .filter(c => c.parentId === parent.id)
-                                                                        .map(child => (
-                                                                            <button
-                                                                                key={child.id}
-                                                                                type="button"
-                                                                                onClick={() => { setCategoryId(String(child.id)); setCategoryOpen(false); }}
-                                                                                className={`w-full text-right px-7 py-2.5 text-sm transition-colors flex items-center gap-2 ${String(child.id) === categoryId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
-                                                                            >
-                                                                                <span className="text-gray-400">↳</span> {child.name}
-                                                                            </button>
-                                                                        ))
-                                                                    }
-                                                                </div>
-                                                            ))}
-                                                        </>
-                                                    );
-                                                })()}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">المورد (المصدر المعتاد)</label>
-                                <select
-                                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-900 font-medium"
-                                    value={supplierId}
-                                    onChange={(e) => setSupplierId(e.target.value)}
-                                >
-                                    <option value="">-- اختر المورد --</option>
-                                    {suppliers.map(sup => (
-                                        <option key={sup.id} value={sup.id}>{sup.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">تكلفة الشراء (للأصغر وحدة)</label>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className="w-full bg-gray-50 border border-gray-200 p-4 pl-10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 text-left text-gray-900 font-bold"
-                                        dir="ltr"
-                                        value={baseCost}
-                                        onChange={(e) => setBaseCost(Number(e.target.value))}
-                                    />
-                                    <DollarSign className="absolute left-3 top-4 text-gray-400 w-5 h-5" />
-                                </div>
-                                <p className="text-xs text-gray-500 mt-2">السعر الذي تدفعه للمورد مقابل أصغر وحدة.</p>
-                            </div>
-                        </div>
-                    </div>
-
-
-
-
-
-                    {/* Units Configuration Section */}
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-2 h-full bg-green-500"></div>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                <Layers className="text-green-500" />
-                                الوحدات والتسعير
-                            </h2>
-                            <button
-                                type="button"
-                                onClick={addUnit}
-                                className="flex items-center gap-1 text-green-700 hover:text-white hover:bg-green-600 bg-green-50 px-4 py-2 rounded-lg font-bold text-md transition-all"
-                            >
-                                <Plus size={18} />
-                                إضافة وحدة
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            {units.map((unit, index) => (
-                                <div key={index} className="bg-gray-50 p-6 rounded-2xl border border-gray-200 relative group animate-fade-in-up">
-                                    <div className="grid grid-cols-12 gap-4 items-start">
-
-                                        {/* Unit Name */}
-                                        <div className="col-span-4 md:col-span-3">
-                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1" title="مثل: قطعة">اسم الوحدة)</label>
-                                            <input
-                                                required
-                                                className="w-full bg-white border border-gray-200 p-3 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-gray-900 font-bold placeholder-gray-300"
-                                                value={unit.name}
-                                                onChange={(e) => updateUnit(index, 'name', e.target.value)}
-                                                placeholder="مثال: قطعة"
-                                            />
-                                        </div>
-
-                                        {/* Conversion Factor */}
-                                        <div className="col-span-2 md:col-span-2">
-                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">المعامل</label>
-                                            <input
-                                                type="number"
-                                                required
-                                                disabled={index === 0}
-                                                className={`w-full border border-gray-200 p-3 rounded-lg text-center font-bold outline-none text-gray-900 ${index === 0 ? 'bg-gray-200 text-gray-500' : 'bg-white focus:ring-2 focus:ring-green-500'}`}
-                                                value={unit.conversion}
-                                                onChange={(e) => updateUnit(index, 'conversion', Number(e.target.value))}
-                                            />
-                                        </div>
-
-                                        {/* Barcode */}
-                                        <div className="col-span-6 md:col-span-4 relative">
-                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">الباركود</label>
-                                            <div className="relative">
-                                                <input
-                                                    required
-                                                    className="w-full bg-white border border-gray-200 p-3 pl-10 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-left text-gray-900 font-bold"
-                                                    dir="ltr"
-                                                    value={unit.barcode}
-                                                    onChange={(e) => updateUnit(index, 'barcode', e.target.value)}
-                                                    placeholder="Scan..."
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault(); // Prevent form submission
-                                                            // Find and focus the price input in the same row
-                                                            const priceInput = e.currentTarget.parentElement?.parentElement?.nextElementSibling?.querySelector('input[type="number"]');
-                                                            if (priceInput instanceof HTMLInputElement) {
-                                                                priceInput.focus();
-                                                                priceInput.select();
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <Scan className="absolute left-3 top-3.5 text-gray-400 w-4 h-4" />
-                                            </div>
-                                        </div>
-
-                                        {/* Sell Price */}
-                                        <div className="col-span-6 md:col-span-3 flex items-center gap-2">
-                                            <div className="flex-1">
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">سعر البيع</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    required
-                                                    className="w-full bg-white border border-gray-200 p-3 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-bold text-gray-900"
-                                                    value={unit.price}
-                                                    onChange={(e) => updateUnit(index, 'price', Number(e.target.value))}
-                                                />
-                                            </div>
-                                            {index > 0 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeUnit(index)}
-                                                    className="mt-6 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                                                    title="حذف الوحدة"
-                                                >
-                                                    <X size={20} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {index === 0 && <span className="absolute -top-3 left-4 bg-green-100 text-green-700 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-green-200">الافتراضية</span>}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex flex-col-reverse md:flex-row gap-4 pt-4">
-                        <button
-                            type="button"
-                            onClick={() => router.back()}
-                            className="px-8 py-4 bg-white text-gray-600 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 hover:text-gray-900 transition-all flex items-center justify-center gap-2"
-                        >
-                            <X size={20} />
-                            إلغاء التغييرات
-                        </button>
-                        <button
-                            type="submit"
-                            className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-blue-200 hover:-translate-y-1 transition-all flex items-center justify-center gap-2 text-lg"
-                        >
-                            <Save size={20} />
-                            حفظ المنتج الجديد
-                        </button>
-                    </div>
-                </form>
-            </div >
-        </div >
-    );
+            {units.length === 1 && (
+              <button
+                type="button"
+                onClick={addUnit}
+                className="w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-[11px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-1.5"
+              >
+                <Plus size={12} />
+                أضف وحدة أخرى (كرتون، صندوق، ...)
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </form>
+  );
 }

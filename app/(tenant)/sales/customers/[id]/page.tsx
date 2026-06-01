@@ -42,8 +42,25 @@ export default async function CustomerStatementPage({ params }: { params: Promis
         let note = '';
 
         if (tx.type === 'SALE') {
-            debit = Number(tx.totalAmount);
-            note = `فاتورة مبيعات رقـم #${tx.id} (${tx.items.length} مواد)`;
+            const txTotal = Number(tx.totalAmount);
+            const paid    = Number((tx as any).paidAmount ?? txTotal);
+            const method  = (tx as any).paymentMethod ?? 'CASH';
+
+            debit = txTotal;
+
+            if (method === 'CREDIT') {
+                // Fully deferred — nothing paid yet
+                credit = 0;
+            } else if (method === 'SPLIT') {
+                // Partial upfront payment
+                credit = paid;
+            } else {
+                // CASH or CARD — paid in full at point of sale
+                credit = txTotal;
+            }
+
+            const methodLabel = method === 'CREDIT' ? 'آجل' : method === 'CARD' ? 'بطاقة' : method === 'SPLIT' ? 'دفع جزئي' : 'نقدي';
+            note = `فاتورة مبيعات رقـم #${tx.id} (${tx.items.length} مواد) - ${methodLabel}`;
         } else if (tx.type === 'PAYMENT') {
             credit = Number(tx.totalAmount);
             note = `تسديد دفعة نقدي سند رقم #${tx.id}`;
@@ -101,7 +118,7 @@ export default async function CustomerStatementPage({ params }: { params: Promis
                                 title="كشف حساب عميل تفصيلي"
                                 subtitle={`تاريخ الكشف: ${new Date().toLocaleDateString('ar-IQ')} - ${new Date().toLocaleTimeString('ar-IQ')}`}
                                 icon={FileText}
-                                gradient="linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)"
+                                gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
                                 actions={
                                     <div className="text-left bg-[var(--bg-page)] p-4 rounded-xl border border-[var(--border-color)] min-w-[250px] mr-auto">
                                         <div className="flex items-center gap-2 font-bold mb-1" style={{ color: 'var(--value-neutral)' }}>
@@ -121,37 +138,38 @@ export default async function CustomerStatementPage({ params }: { params: Promis
                     </div>
 
                     {/* Ledger Table */}
-                    <div className="overflow-x-auto">
+                    <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
+                        <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
-                            <thead className="bg-gray-100 text-gray-700 font-bold">
+                            <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
-                                    <th className="p-3 border-y border-gray-300 rounded-tr-lg">التاريخ</th>
-                                    <th className="p-3 border-y border-gray-300">البيان (التفاصيل)</th>
-                                    <th className="p-3 border-y border-gray-300 text-center text-red-700">مدين (عليه)</th>
-                                    <th className="p-3 border-y border-gray-300 text-center text-green-700">دائن (إله)</th>
-                                    <th className="p-3 border-y border-gray-300 rounded-tl-lg text-left">الرصيد التراكمي</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التاريخ</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المدقق (التفاصيل)</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center text-red-700">مدين (عليه)</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center text-green-700">دائن (إله)</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-left">الرصيد التراكمي</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-gray-50">
                                 {displayEntries.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-400 font-medium">لا توجد حركات سابقة لهذا العميل.</td></tr>
+                                    <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">لا توجد حركات سابقة لهذا العميل.</td></tr>
                                 ) : (
                                     displayEntries.map((entry, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50">
-                                            <td className="p-3 text-gray-600 whitespace-nowrap">
+                                        <tr key={idx} className="hover:bg-blue-50/50 transition-colors group">
+                                            <td className="px-6 py-4 text-gray-600 whitespace-nowrap">
                                                 {new Date(entry.date).toLocaleDateString('ar-IQ')} <br />
                                                 <span className="text-xs text-gray-400">{new Date(entry.date).toLocaleTimeString('ar-IQ')}</span>
                                             </td>
-                                            <td className="p-3 font-medium text-gray-800">
+                                            <td className="px-6 py-4 font-medium text-gray-800">
                                                 {entry.note}
                                             </td>
-                                            <td className="p-3 text-center text-red-600 font-bold">
+                                            <td className="px-6 py-4 text-center text-red-600 font-bold">
                                                 {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
                                             </td>
-                                            <td className="p-3 text-center text-green-600 font-bold">
+                                            <td className="px-6 py-4 text-center text-green-600 font-bold">
                                                 {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
                                             </td>
-                                            <td className="p-3 text-left font-bold bg-gray-50/50">
+                                            <td className="px-6 py-4 text-left font-bold bg-gray-50/50">
                                                 <span dir="ltr">{formatCurrency(entry.balance)}</span>
                                             </td>
                                         </tr>
@@ -160,19 +178,20 @@ export default async function CustomerStatementPage({ params }: { params: Promis
                             </tbody>
                             <tfoot className="bg-gray-800 text-white font-bold">
                                 <tr>
-                                    <td colSpan={2} className="p-4 rounded-tr-lg">الإجماليات الكلية</td>
-                                    <td className="p-4 text-center text-red-300">
+                                    <td colSpan={2} className="px-6 py-4">الإجماليات الكلية</td>
+                                    <td className="px-6 py-4 text-center text-red-300">
                                         {formatCurrency(ledgerEntries.reduce((s, i) => s + i.debit, 0))}
                                     </td>
-                                    <td className="p-4 text-center text-green-300">
+                                    <td className="px-6 py-4 text-center text-green-300">
                                         {formatCurrency(ledgerEntries.reduce((s, i) => s + i.credit, 0))}
                                     </td>
-                                    <td className="p-4 text-left rounded-tl-lg text-xl">
+                                    <td className="px-6 py-4 text-left text-xl">
                                         صافي: <span dir="ltr">{formatCurrency(Number(customer.balance))}</span>
                                     </td>
                                 </tr>
                             </tfoot>
                         </table>
+                        </div>
                     </div>
 
                     {/* Print Footer */}

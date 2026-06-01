@@ -17,13 +17,13 @@ export default function ActionableInsights({ data }: ActionableInsightsProps) {
 
             {/* Top 5 Products Table */}
             <div className="bg-white rounded-[20px] shadow-card border border-gray-100 overflow-hidden">
-                <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white flex items-center justify-between">
+                <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2">
-                            <Trophy size={20} className="text-amber-500" />
+                        <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2">
+                            <Trophy size={20} className="text-blue-500" />
                             أفضل 5 منتجات مبيعاً
                         </h3>
-                        <p className="text-xs text-amber-600/70 mt-1">حسب الكمية وتأثيرها على الأرباح</p>
+                        <p className="text-xs text-blue-600/70 mt-1">حسب الكمية وتأثيرها على الأرباح</p>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -40,9 +40,9 @@ export default function ActionableInsights({ data }: ActionableInsightsProps) {
                                 <tr><td colSpan={3} className="px-5 py-8 text-center text-gray-400">لا توجد مبيعات في هذه الفترة.</td></tr>
                             ) : (
                                 data.topProducts.map((product, index) => (
-                                    <tr key={index} className="hover:bg-amber-50/30 transition-colors">
+                                    <tr key={index} className="hover:bg-blue-50/30 transition-colors">
                                         <td className="px-5 py-3 font-semibold text-gray-800 flex items-center gap-2">
-                                            <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">{index + 1}</span>
+                                            <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">{index + 1}</span>
                                             {product.name}
                                         </td>
                                         <td className="px-5 py-3 font-bold text-gray-700">{product.quantity.toLocaleString()}</td>

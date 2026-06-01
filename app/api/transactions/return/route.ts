@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 export async function POST(req: NextRequest) {
     const auth = await getAuthContext();
@@ -16,6 +17,14 @@ export async function POST(req: NextRequest) {
 
         if (!items || items.length === 0) {
             return NextResponse.json({ error: 'No items to return' }, { status: 400 });
+        }
+
+        // Validate each item carries the fields needed to create the return line.
+        const invalid = items.some((it: any) =>
+            !it.productId || !it.unitId || isNaN(Number(it.quantity)) || isNaN(Number(it.price))
+        );
+        if (invalid) {
+            return NextResponse.json({ error: 'بيانات المواد المرتجعة غير مكتملة' }, { status: 400 });
         }
 
         // 1. Get Original Transaction (scoped to tenant)
@@ -104,6 +113,27 @@ export async function POST(req: NextRequest) {
 
             return returnTx;
         });
+
+        enqueueSync('transactions', 'INSERT', result.id, {
+            cloudId:       result.id,
+            type:          'RETURN',
+            totalAmount:   -refundTotal,
+            date:          result.date ?? new Date(),
+            userId:        originalTx.userId ?? null,
+            customerId:    originalTx.customerId ?? null,
+            notes:         `إرجاع من فاتورة ${originalTransactionId}`,
+            discount:      0,
+            paymentMethod: 'CASH',
+            paidAmount:    0,
+            originalTxId:  originalTransactionId,
+            items:         items.map((item: any) => ({
+                productId: item.productId,
+                unitId:    item.unitId,
+                quantity:  Number(item.quantity),
+                price:     -Number(item.price),
+                cost:      0,
+            })),
+        })
 
         return NextResponse.json({ success: true, returnId: result.id });
 

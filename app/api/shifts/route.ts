@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
                 tenantId,
                 userId,
                 closedAt: null
+            },
+            include: {
+                user: { select: { username: true } }
             }
         });
 
@@ -56,7 +60,13 @@ export async function POST(request: NextRequest) {
                 user: { connect: { id: userId } },
                 openingAmount: Number(body.openingAmount || 0),
                 openedAt: new Date()
-            }
+            },
+            include: { user: { select: { username: true } } }
+        });
+
+        enqueueSync('cashierShifts', 'INSERT', newShift.id, {
+            cloudId: newShift.id, tenantId, branchId, userId,
+            openingAmount: newShift.openingAmount, openedAt: newShift.openedAt,
         });
 
         return NextResponse.json({ success: true, shift: newShift });

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { logAction } from '@/lib/audit';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,6 +96,11 @@ export async function POST(request: NextRequest) {
             });
 
             // D. Handle Supplier Ledger (Enterprise Feature)
+            // We capture the ledger row ids returned by Prisma so we can enqueue
+            // them with the SAME ids after the transaction — that way the cloud
+            // upserts them idempotently instead of creating duplicates.
+            let purchaseLedger: any = null;
+            let paymentLedger: any = null;
             if (supplierId) {
                 // Number(quantity) represents the quantity of the *selected* unit
                 // costPrice represents the price of the *selected* unit
@@ -102,7 +109,7 @@ export async function POST(request: NextRequest) {
                 const creditAmount = totalInvoiceAmount - paid;
 
                 // 1. Record the Purchase Invoice (Debit to Supplier's perspective, or we owe them Credit)
-                await tx.supplierLedger.create({
+                purchaseLedger = await tx.supplierLedger.create({
                     data: {
                         supplierId: supplierId,
                         branchId: branchId,
@@ -114,7 +121,7 @@ export async function POST(request: NextRequest) {
 
                 // 2. Record the Payment if any
                 if (paid > 0) {
-                    await tx.supplierLedger.create({
+                    paymentLedger = await tx.supplierLedger.create({
                         data: {
                             supplierId: supplierId,
                             branchId: branchId,
@@ -143,8 +150,62 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            return { batch, updatedProduct };
+            return { batch, updatedProduct, purchaseLedger, paymentLedger };
         });
+
+        const { batch, updatedProduct, purchaseLedger, paymentLedger } = result;
+
+        // Sync ONLY the batch + WAC change.  Supplier ledger entries are synced
+        // separately below with their real ids so cloud doesn't double-create them.
+        enqueueSync('productBatches', 'INSERT', batch.id, {
+            id:               batch.id,
+            productId:        batch.productId,
+            branchId:         branchId,
+            quantity:         baseQuantityToAdd,
+            costPrice:        Number(batch.costPrice),
+            batchNumber:      batchNumber || null,
+            expiryDate:       expiryDate || null,
+            newBaseStock:     Number(updatedProduct.baseStock),
+            newCostPrice:     Number(updatedProduct.costPrice),
+        });
+
+        // Sync ledger entries with their local ids (push handler derives the
+        // supplier.balance delta from each entry's type — no separate balance sync needed).
+        if (purchaseLedger) {
+            enqueueSync('supplierLedger', 'INSERT', purchaseLedger.id, {
+                id:          purchaseLedger.id,
+                supplierId:  purchaseLedger.supplierId,
+                branchId:    purchaseLedger.branchId,
+                type:        purchaseLedger.type,
+                amount:      Number(purchaseLedger.amount),
+                description: purchaseLedger.description,
+                date:        purchaseLedger.date,
+            });
+        }
+        if (paymentLedger) {
+            enqueueSync('supplierLedger', 'INSERT', paymentLedger.id, {
+                id:          paymentLedger.id,
+                supplierId:  paymentLedger.supplierId,
+                branchId:    paymentLedger.branchId,
+                type:        paymentLedger.type,
+                amount:      Number(paymentLedger.amount),
+                description: paymentLedger.description,
+                date:        paymentLedger.date,
+            });
+        }
+
+        const userRecord = auth.userId
+            ? await prisma.user.findUnique({ where: { id: auth.userId }, select: { username: true } })
+            : null;
+        await logAction(
+            'PURCHASE',
+            'ProductBatch',
+            batch.id,
+            JSON.stringify({ product: updatedProduct.name, qty: baseQuantityToAdd, costPrice: Number(costPrice) }),
+            userRecord?.username ?? 'System',
+            tenantId,
+            branchId
+        );
 
         return NextResponse.json({
             success: true,

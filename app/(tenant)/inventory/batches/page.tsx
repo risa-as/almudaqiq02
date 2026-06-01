@@ -1,7 +1,8 @@
 'use client';
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Package, Search, Calendar, Filter, Database, FileSpreadsheet, AlertTriangle, CheckCircle2, Clock, Pencil, X, Save } from 'lucide-react';
+import { Package, Search, Calendar, Filter, Database, FileSpreadsheet, AlertTriangle, CheckCircle2, Clock, Pencil, X, Save, Loader2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import { formatCurrency } from '@/lib/format';
 import { useBranch } from '@/contexts/BranchContext';
@@ -33,6 +34,7 @@ interface EditForm {
 }
 
 export default function BatchesManagementPage() {
+  usePageTitle('إدارة الدُفعات');
     const router = useRouter();
     const { selectedBranch, loading: branchLoading } = useBranch();
     const [batches, setBatches] = useState<BatchItem[]>([]);
@@ -126,27 +128,145 @@ export default function BatchesManagementPage() {
         }
     };
 
-    const handleExport = () => {
-        const headers = ['رقم التشغيلة', 'المنتج', 'المورد', 'الفرع', 'تاريخ الصلاحية', 'الكمية (الوحدات)', 'سعر التكلفة للوحدة', 'تاريخ الادخال'];
-        const csvContent = [
-            headers.join(','),
-            ...filteredBatches.map(b => [
-                `"${b.batchNumber}"`,
-                `"${b.productName}"`,
-                `"${b.supplierName}"`,
-                `"${b.branchName}"`,
-                b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('en-GB') : 'غير محدد',
+    const handleExport = async () => {
+        const XLSX = await import('xlsx');
+
+        const now = new Date();
+        const exportDate = now.toLocaleString('ar-IQ');
+        const fileName = `تقرير_الدفعات_${now.toISOString().split('T')[0]}.xlsx`;
+
+        const STATUS_LABEL: Record<string, string> = {
+            GOOD:          'سارية وصالحة',
+            EXPIRING_SOON: 'قاربت الانتهاء',
+            EXPIRED:       'منتهية الصلاحية',
+            LOW_STOCK:     'رصيد منخفض',
+            OUT_OF_STOCK:  'نفاد الكمية',
+        };
+
+        const daysLabel = (expiryDate: string | null): string => {
+            if (!expiryDate) return 'غير محدد';
+            const diff = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000);
+            if (diff < 0) return `منتهي منذ ${Math.abs(diff)} يوم`;
+            if (diff === 0) return 'ينتهي اليوم';
+            return `${diff} يوم`;
+        };
+
+        const filterLabel =
+            statusFilter === 'ALL'          ? 'الكل' :
+            statusFilter === 'EXPIRED'      ? 'منتهية الصلاحية' :
+            statusFilter === 'EXPIRING_SOON'? 'قاربت الانتهاء'  :
+            statusFilter === 'LOW_STOCK'    ? 'رصيد منخفض'      : 'سارية';
+
+        // ════ SHEET 1: تقرير الدفعات التفصيلي ════
+        const sheet1: (string | number)[][] = [
+            ['تقرير الدفعات / الوجبات — إدارة المخزون'],
+            [`تاريخ التصدير: ${exportDate}`, '', `الفلتر: ${filterLabel}`, '', `العدد: ${filteredBatches.length} دفعة`],
+            [],
+            [
+                '#', 'رقم الدفعة', 'المنتج', 'القسم', 'المورد', 'الفرع',
+                'الكمية المتاحة', 'سعر التكلفة/الوحدة', 'إجمالي قيمة الدفعة',
+                'تاريخ الصلاحية', 'الأيام المتبقية', 'حالة الدفعة', 'تاريخ الإدخال',
+            ],
+            ...filteredBatches.map((b, i) => [
+                i + 1,
+                b.batchNumber,
+                b.productName,
+                b.categoryName,
+                b.supplierName || 'غير محدد',
+                b.branchName,
                 b.quantity,
                 b.costPrice,
-                new Date(b.createdAt).toLocaleString('en-GB')
-            ].join(','))
-        ].join('\n');
+                b.quantity * b.costPrice,
+                b.expiryDate ? new Date(b.expiryDate).toLocaleDateString('ar-IQ') : 'غير محدد',
+                daysLabel(b.expiryDate),
+                STATUS_LABEL[getBatchStatus(b)] ?? getBatchStatus(b),
+                new Date(b.createdAt).toLocaleString('ar-IQ'),
+            ]),
+            [],
+            [
+                '', '', '', '', '',
+                'الإجمالي:',
+                filteredBatches.reduce((s, b) => s + b.quantity, 0),
+                '',
+                filteredBatches.reduce((s, b) => s + b.quantity * b.costPrice, 0),
+                '', '', '', '',
+            ],
+        ];
 
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `batches_inventory_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
+        const ws1 = XLSX.utils.aoa_to_sheet(sheet1);
+        ws1['!cols'] = [
+            { wch: 5  }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 20 },
+            { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 16 },
+            { wch: 22 }, { wch: 22 }, { wch: 22 },
+        ];
+
+        // ════ SHEET 2: الملخص الإحصائي ════
+        const totalValue = filteredBatches.reduce((s, b) => s + b.quantity * b.costPrice, 0);
+        const totalQty   = filteredBatches.reduce((s, b) => s + b.quantity, 0);
+
+        const statusCounts: Record<string, number> = {
+            GOOD: 0, EXPIRING_SOON: 0, EXPIRED: 0, LOW_STOCK: 0, OUT_OF_STOCK: 0,
+        };
+        filteredBatches.forEach(b => {
+            const s = getBatchStatus(b);
+            if (s in statusCounts) statusCounts[s]++;
+        });
+
+        const supplierMap: Record<string, { count: number; value: number }> = {};
+        filteredBatches.forEach(b => {
+            const n = b.supplierName || 'غير محدد';
+            if (!supplierMap[n]) supplierMap[n] = { count: 0, value: 0 };
+            supplierMap[n].count++;
+            supplierMap[n].value += b.quantity * b.costPrice;
+        });
+        const topSuppliers = Object.entries(supplierMap)
+            .sort((a, b) => b[1].value - a[1].value).slice(0, 7);
+
+        const catMap: Record<string, { count: number; value: number }> = {};
+        filteredBatches.forEach(b => {
+            const n = b.categoryName || 'غير مصنف';
+            if (!catMap[n]) catMap[n] = { count: 0, value: 0 };
+            catMap[n].count++;
+            catMap[n].value += b.quantity * b.costPrice;
+        });
+        const topCats = Object.entries(catMap)
+            .sort((a, b) => b[1].value - a[1].value).slice(0, 7);
+
+        const sheet2: (string | number)[][] = [
+            ['الملخص الإحصائي — تقرير الدفعات'],
+            [`تاريخ التصدير: ${exportDate}`],
+            [],
+            ['المؤشرات الرئيسية', ''],
+            ['إجمالي الدفعات',               filteredBatches.length],
+            ['إجمالي الكمية (وحدات)',         totalQty],
+            ['إجمالي قيمة المخزون الشرائية', totalValue],
+            ['متوسط قيمة الدفعة الواحدة',    filteredBatches.length ? +(totalValue / filteredBatches.length).toFixed(2) : 0],
+            ['متوسط كمية الدفعة الواحدة',    filteredBatches.length ? +(totalQty   / filteredBatches.length).toFixed(1) : 0],
+            [],
+            ['توزيع الدفعات حسب الحالة', '', ''],
+            ['الحالة', 'عدد الدفعات', 'النسبة %'],
+            ...Object.entries(statusCounts).map(([s, c]) => [
+                STATUS_LABEL[s] ?? s,
+                c,
+                filteredBatches.length ? `${((c / filteredBatches.length) * 100).toFixed(1)}%` : '0%',
+            ]),
+            [],
+            ['أبرز الموردين (حسب قيمة المخزون)', '', ''],
+            ['المورد', 'عدد الدفعات', 'إجمالي القيمة'],
+            ...topSuppliers.map(([name, { count, value }]) => [name, count, +value.toFixed(2)]),
+            [],
+            ['أبرز الأقسام (حسب قيمة المخزون)', '', ''],
+            ['القسم', 'عدد الدفعات', 'إجمالي القيمة'],
+            ...topCats.map(([name, { count, value }]) => [name, count, +value.toFixed(2)]),
+        ];
+
+        const ws2 = XLSX.utils.aoa_to_sheet(sheet2);
+        ws2['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 20 }];
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws1, 'تقرير الدفعات');
+        XLSX.utils.book_append_sheet(wb, ws2, 'الملخص الإحصائي');
+        XLSX.writeFile(wb, fileName);
     };
 
     const openEdit = (batch: BatchItem) => {
@@ -203,13 +323,84 @@ export default function BatchesManagementPage() {
     const expiringCount = batches.filter(b => getBatchStatus(b) === 'EXPIRING_SOON').length;
     const expiredCount = batches.filter(b => getBatchStatus(b) === 'EXPIRED').length;
 
+    if (loading) return (
+        <div className="min-h-screen p-6 md:p-8 space-y-8" dir="rtl" style={{ background: 'var(--bg-page)' }}>
+            {/* Hero */}
+            <div className="flex flex-col items-center justify-center pt-10 pb-4 gap-5">
+                <div className="relative">
+                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center relative overflow-hidden"
+                        style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)', boxShadow: '0 12px 40px rgba(9,75,159,0.4)' }}>
+                        <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg,rgba(255,255,255,0.5) 0%,transparent 60%)' }} />
+                        <Database size={36} className="text-white relative z-10 sk-spin" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white sk-pulse"
+                        style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)', boxShadow: '0 2px 8px rgba(14,99,212,0.5)' }} />
+                </div>
+                <div className="text-center space-y-1.5">
+                    <p className="text-xl font-black text-slate-800">جاري تحميل إدارة الدفعات</p>
+                    <div className="flex items-center justify-center gap-1.5">
+                        {[0, 0.2, 0.4].map((delay, i) => (
+                            <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400 sk-pulse" style={{ animationDelay: `${delay}s` }} />
+                        ))}
+                    </div>
+                    <p className="text-sm text-slate-400 font-medium">يتم تحميل الدفعات وبيانات الصلاحيات والمخزون</p>
+                </div>
+            </div>
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="rounded-2xl p-5 space-y-3" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+                        <div className="flex items-center justify-between">
+                            <div className="skeleton h-3 w-20" />
+                            <div className="skeleton w-9 h-9 rounded-xl" />
+                        </div>
+                        <div className="skeleton h-7 w-24" />
+                        <div className="skeleton h-2.5 w-16" />
+                    </div>
+                ))}
+            </div>
+            {/* Filter bar */}
+            <div className="flex gap-3 flex-wrap">
+                <div className="skeleton h-10 flex-1 min-w-[200px] rounded-xl" />
+                <div className="skeleton h-10 w-36 rounded-xl" />
+                <div className="skeleton h-10 w-32 rounded-xl" />
+                <div className="skeleton h-10 w-28 rounded-xl" />
+            </div>
+            {/* Table */}
+            <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+                <div className="grid grid-cols-8 gap-2 px-6 py-3.5 border-b border-slate-100">
+                    {[8, 20, 16, 12, 12, 12, 12, 8].map((w, i) => (
+                        <div key={i} className="skeleton h-3" style={{ width: `${w}%` }} />
+                    ))}
+                </div>
+                <div className="divide-y divide-slate-50">
+                    {Array.from({ length: 7 }).map((_, i) => (
+                        <div key={i} className="grid grid-cols-8 gap-2 px-6 py-4 items-center">
+                            <div className="skeleton h-6 w-14 rounded-lg" />
+                            <div className="space-y-1.5">
+                                <div className="skeleton h-3.5 w-28" />
+                                <div className="skeleton h-2.5 w-18" />
+                            </div>
+                            <div className="skeleton h-3.5 w-16" />
+                            <div className="skeleton h-3.5 w-12" />
+                            <div className="skeleton h-6 w-16 rounded-full" />
+                            <div className="skeleton h-3.5 w-14" />
+                            <div className="skeleton h-3.5 w-20" />
+                            <div className="skeleton h-7 w-16 rounded-xl" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <div className="min-h-screen p-6 md:p-8" dir="rtl" style={{ background: 'var(--bg-page)' }}>
             <PageHeader
                 title="إدارة الدفعات / الوجبات (Batches)"
                 subtitle="مراقبة كمية وصلاحيات المواد بشكل مفصل استناداً لمعرفات الشراء."
                 icon={Database}
-                gradient="linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)"
+                gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
                 actions={
                     <>
                         <button
@@ -272,9 +463,10 @@ export default function BatchesManagementPage() {
                         <button
                             key={f}
                             onClick={() => setStatusFilter(f)}
+                            style={statusFilter === f ? { background: '#094B9F', color: '#fff', fontWeight: 700 } : undefined}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                                 statusFilter === f
-                                ? 'bg-blue-600 text-white shadow-md'
+                                ? 'shadow-md'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}
                         >
@@ -288,46 +480,46 @@ export default function BatchesManagementPage() {
             </div>
 
             <main className="max-w-[1600px] mx-auto w-full">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-right">
-                            <thead className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-200">
+                            <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
-                                    <th className="px-4 py-4 font-bold"># / رقم الدفعة</th>
-                                    <th className="px-4 py-4 font-bold">المنتج المنتمي للمورد</th>
-                                    <th className="px-4 py-4 font-bold whitespace-nowrap text-center">تاريخ الصلاحية</th>
-                                    <th className="px-4 py-4 font-bold text-center">الرصيد المتاح</th>
-                                    <th className="px-4 py-4 font-bold text-center">سعر التكلفة</th>
-                                    <th className="px-4 py-4 font-bold text-center whitespace-nowrap">تاريخ الادخال</th>
-                                    <th className="px-4 py-4 font-bold text-center w-32">حالة الدفعة</th>
-                                    <th className="px-4 py-4 font-bold text-center">تعديل</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider"># / رقم الدفعة</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المنتج المنتمي للمورد</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap text-center">تاريخ الصلاحية</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">الرصيد المتاح</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">سعر التكلفة</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center whitespace-nowrap">تاريخ الادخال</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-32">حالة الدفعة</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">تعديل</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100 text-sm">
+                            <tbody className="divide-y divide-gray-50">
                                 {loading ? (
-                                    <tr><td colSpan={8} className="p-8 text-center text-gray-400 font-bold">جاري تحميل بيانات المخزون...</td></tr>
+                                    <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-400">جاري تحميل بيانات المخزون...</td></tr>
                                 ) : filteredBatches.length === 0 ? (
-                                    <tr><td colSpan={8} className="p-12 text-center text-gray-400 font-bold">لا توجد دفعات مطابقة لخيارات البحث</td></tr>
+                                    <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-400">لا توجد دفعات مطابقة لخيارات البحث</td></tr>
                                 ) : (
                                     filteredBatches.map((batch, idx) => {
                                         const status = getBatchStatus(batch);
                                         const { date, time } = formatDateTime(batch.createdAt);
                                         return (
-                                            <tr key={batch.id} className="hover:bg-blue-50/50 transition-colors">
-                                                <td className="px-4 py-4">
+                                            <tr key={batch.id} className="hover:bg-blue-50/50 transition-colors group">
+                                                <td className="px-6 py-4">
                                                     <span className="font-bold text-gray-400 text-[10px] block mb-0.5">#{idx + 1}</span>
                                                     <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded text-xs select-all border border-gray-200 block w-fit">
                                                         {batch.batchNumber}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-4">
+                                                <td className="px-6 py-4">
                                                     <div className="font-bold text-gray-800 text-base">{batch.productName}</div>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">{batch.categoryName}</span>
                                                         <span className="text-xs text-gray-500 flex items-center gap-1">المورد: <span className="font-bold text-gray-700">{batch.supplierName}</span></span>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-4 text-center align-middle">
+                                                <td className="px-6 py-4 text-center align-middle">
                                                     <div className="flex justify-center items-center gap-1.5 w-full">
                                                         {batch.expiryDate ? (
                                                             <>
@@ -339,24 +531,24 @@ export default function BatchesManagementPage() {
                                                         ) : <span className="text-gray-400 text-xs bg-gray-50 px-2 py-1 rounded">بدون تاريخ</span>}
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-4 text-center align-middle w-24">
+                                                <td className="px-6 py-4 text-center align-middle w-24">
                                                     <span className={`inline-block px-3 py-1 font-extrabold text-base rounded-lg shadow-sm border ${batch.quantity === 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-blue-700 border-blue-200'}`}>
                                                         {batch.quantity}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-4 text-center font-extrabold text-green-700 align-middle">
+                                                <td className="px-6 py-4 text-center font-extrabold text-green-700 align-middle">
                                                     {formatCurrency(batch.costPrice)}
                                                 </td>
-                                                <td className="px-4 py-4 text-center align-middle">
+                                                <td className="px-6 py-4 text-center align-middle">
                                                     <span className="block text-xs font-bold text-gray-700">{date}</span>
                                                     <span className="block text-[11px] text-gray-400 mt-0.5">{time}</span>
                                                 </td>
-                                                <td className="px-4 py-4 align-middle">
+                                                <td className="px-6 py-4 align-middle">
                                                     <div className="flex justify-center">
                                                         <StatusBadge status={status} />
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-4 text-center align-middle">
+                                                <td className="px-6 py-4 text-center align-middle">
                                                     <button
                                                         onClick={() => openEdit(batch)}
                                                         className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
@@ -438,9 +630,9 @@ export default function BatchesManagementPage() {
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold transition-colors disabled:opacity-50"
+                                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                <Save size={16} />
+                                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                                 {saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
                             </button>
                             <button

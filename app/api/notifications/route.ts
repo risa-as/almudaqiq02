@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { markAllRead } from '@/lib/notifications/in-app'
+import { getAuthContext } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  const tenantId = request.headers.get('x-tenant-id') ?? ''
-  const userId   = request.headers.get('x-user-id')   ?? ''
-  if (!tenantId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(_request: NextRequest) {
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { tenantId, userId } = auth
 
   const notifications = await prisma.notification.findMany({
     where: {
@@ -24,9 +25,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const tenantId = request.headers.get('x-tenant-id') ?? ''
-  const userId   = request.headers.get('x-user-id')   ?? ''
-  if (!tenantId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { tenantId, userId } = auth
 
   const body = await request.json().catch(() => ({}))
 

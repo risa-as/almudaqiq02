@@ -20,6 +20,7 @@
 # production
 /build
 /dist
+/dist2
 
 # misc
 .DS_Store
@@ -48,3 +49,26 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Cloud dev build
+.next-cloud/
+
+# Local SQLite databases — never commit real data
+prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
+prisma/prisma/
+
+# Backups
+backups/
+
+# Electron/desktop local files
+activation_params.json
+offline-queue.js
+
+# Temp / utility scripts
+tmp_files.txt
+check-db.js
+
+# Claude Code local settings
+.claude/settings.local.json

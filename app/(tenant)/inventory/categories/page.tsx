@@ -1,11 +1,14 @@
 'use client';
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useConfirm } from '@/hooks/useConfirm';
 import Link from 'next/link';
 import {
   FolderTree, Plus, Edit3, Trash2, X, Save, Search,
   ArrowRight, ChevronRight, Sparkles, CheckCircle, AlertCircle,
-  FolderOpen, Folder, Loader2, MoveRight, RefreshCw
+  FolderOpen, Folder, Loader2, MoveRight, RefreshCw,
+  ArrowUp, ArrowDown, GripVertical,
 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -14,6 +17,7 @@ interface Category {
   name: string;
   description?: string | null;
   parentId?: string | null;
+  sortOrder: number;
   parent?: { name: string } | null;
   _count?: { products: number };
   children?: Category[];
@@ -65,35 +69,79 @@ function CategoryNode({
   depth,
   onEdit,
   onDelete,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
+  reorderMode,
+  draggedId,
+  dragOverId,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   cat: Category;
   depth: number;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
+  onMoveUp: (cat: Category) => void;
+  onMoveDown: (cat: Category) => void;
+  isFirst: boolean;
+  isLast: boolean;
+  reorderMode: boolean;
+  draggedId: string | null;
+  dragOverId: string | null;
+  onDragStart: (cat: Category) => void;
+  onDragOver: (e: React.DragEvent, cat: Category) => void;
+  onDrop: (cat: Category) => void;
+  onDragEnd: () => void;
 }) {
   const [expanded, setExpanded] = useState(depth === 0);
   const hasChildren = cat.children && cat.children.length > 0;
   const productCount = cat._count?.products ?? 0;
+  const isDragging = reorderMode && depth === 0 && draggedId === cat.id;
+  const isDragOver = reorderMode && depth === 0 && dragOverId === cat.id;
 
   return (
     <div>
       <div
-        className={`flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-primary-light)] transition-all group border-b border-[var(--border-color)] last:border-0 ${depth > 0 ? 'bg-[var(--bg-page)]/40' : 'bg-[var(--bg-card)]'
-          }`}
+        draggable={reorderMode && depth === 0}
+        onDragStart={() => { if (reorderMode && depth === 0) onDragStart(cat); }}
+        onDragOver={(e) => { if (reorderMode && depth === 0) onDragOver(e, cat); }}
+        onDrop={() => { if (reorderMode && depth === 0) onDrop(cat); }}
+        onDragEnd={onDragEnd}
+        className={`flex items-center gap-3 px-4 py-3 transition-all group border-b border-[var(--border-color)] last:border-0 ${
+          depth > 0 ? 'bg-[var(--bg-page)]/40' : 'bg-[var(--bg-card)]'
+        } ${reorderMode && depth === 0 ? 'cursor-grab active:cursor-grabbing' : 'hover:bg-[var(--color-primary-light)]'} ${
+          isDragging ? 'opacity-40 scale-[0.99]' : ''
+        } ${isDragOver ? 'border-t-2 border-blue-400 bg-blue-50' : ''}`}
         style={{ paddingRight: `${16 + depth * 28}px` }}
       >
-        {/* Expand toggle */}
-        <button
-          type="button"
-          onClick={() => setExpanded(e => !e)}
-          className={`shrink-0 w-5 h-5 flex items-center justify-center rounded transition-colors ${hasChildren ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]' : 'invisible'
+        {/* Reorder handle / Expand toggle */}
+        {reorderMode && depth === 0 ? (
+          <GripVertical size={16} className="shrink-0 text-slate-300" />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setExpanded(e => !e)}
+            className={`shrink-0 w-5 h-5 flex items-center justify-center rounded transition-colors ${
+              hasChildren ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]' : 'invisible'
             }`}
-        >
-          <ChevronRight
-            size={14}
-            className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-          />
-        </button>
+          >
+            <ChevronRight
+              size={14}
+              className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+            />
+          </button>
+        )}
+
+        {/* Sort order badge — visible in reorder mode */}
+        {reorderMode && depth === 0 && (
+          <span className="shrink-0 w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 text-xs font-black flex items-center justify-center">
+            {cat.sortOrder + 1}
+          </span>
+        )}
 
         {/* Icon */}
         <div className="shrink-0">
@@ -105,53 +153,90 @@ function CategoryNode({
 
         {/* Name + parent badge */}
         <div className="flex-1 min-w-0">
-          <span className={`font-bold ${depth === 0 ? 'text-[var(--value-neutral)] text-base' : 'text-[var(--value-muted)] text-sm'}`}>
+          {/* unicodeBidi isolate prevents Arabic shaper from treating adjacent
+              inline spans as one text run, which causes the last character to
+              show its medial form instead of the correct final/isolated form. */}
+          <span
+            style={{ unicodeBidi: 'isolate' }}
+            className={`font-bold ${depth === 0 ? 'text-[var(--value-neutral)] text-base' : 'text-[var(--value-muted)] text-sm'}`}
+          >
             {cat.name}
           </span>
           {cat.parent && (
             <span className="mr-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)]">
-              فرع: {cat.parent.name}
+              {'فرع: '}<bdi>{cat.parent.name}</bdi>
             </span>
           )}
           {cat.description && (
             <span className="mr-2 text-xs text-[var(--value-muted)] opacity-70 hidden md:inline">
-              — {cat.description}
+              {'— '}<bdi>{cat.description}</bdi>
             </span>
           )}
         </div>
 
         {/* Product count badge */}
-        <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${productCount > 0
+        <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${
+          productCount > 0
             ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
             : 'bg-slate-100 text-slate-400'
-          }`}>
+        }`}>
           {productCount} منتج
         </span>
 
         {/* Actions */}
-        <div className="shrink-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(cat)}
-            className="p-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] transition-all"
-            title="تعديل"
-          >
-            <Edit3 size={14} />
-          </button>
-          <button
-            onClick={() => onDelete(cat)}
-            className="p-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-danger)] hover:bg-red-50 transition-all"
-            title="حذف"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        {reorderMode && depth === 0 ? (
+          <div className="shrink-0 flex gap-1">
+            <button
+              disabled={isFirst}
+              onClick={() => onMoveUp(cat)}
+              className="p-1.5 r-btn bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              title="تحريك لأعلى"
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              disabled={isLast}
+              onClick={() => onMoveDown(cat)}
+              className="p-1.5 r-btn bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              title="تحريك لأسفل"
+            >
+              <ArrowDown size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="shrink-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => onEdit(cat)}
+              className="p-1.5 r-btn bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] transition-all"
+              title="تعديل"
+            >
+              <Edit3 size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(cat)}
+              className="p-1.5 r-btn bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--color-danger)] hover:bg-red-50 transition-all"
+              title="حذف"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Children */}
       {expanded && hasChildren && (
         <div>
-          {cat.children!.map(child => (
-            <CategoryNode key={child.id} cat={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} />
+          {cat.children!.map((child, ci) => (
+            <CategoryNode
+              key={child.id} cat={child} depth={depth + 1}
+              onEdit={onEdit} onDelete={onDelete}
+              onMoveUp={onMoveUp} onMoveDown={onMoveDown}
+              isFirst={ci === 0} isLast={ci === cat.children!.length - 1}
+              reorderMode={reorderMode}
+              draggedId={draggedId} dragOverId={dragOverId}
+              onDragStart={onDragStart} onDragOver={onDragOver}
+              onDrop={onDrop} onDragEnd={onDragEnd}
+            />
           ))}
         </div>
       )}
@@ -161,6 +246,8 @@ function CategoryNode({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CategoriesPage() {
+  usePageTitle('الفئات');
+  const { confirm, dialog } = useConfirm();
   const [categories, setCategories] = useState<Category[]>([]);
   const [tree, setTree] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +256,12 @@ export default function CategoriesPage() {
 
   // Seed state
   const [seeding, setSeeding] = useState(false);
+
+  // Reorder mode
+  const [reorderMode, setReorderMode] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -287,7 +380,7 @@ export default function CategoriesPage() {
     const msg = productCount > 0
       ? `⚠️ هذا القسم يحتوي على ${productCount} منتج. هل أنت متأكد من حذفه؟`
       : `هل تريد حذف قسم "${cat.name}"؟`;
-    if (!confirm(msg)) return;
+    if (!await confirm({ title: 'حذف القسم', message: msg, variant: 'danger', confirmLabel: 'حذف' })) return;
 
     try {
       const res = await fetch(`/api/categories?id=${cat.id}`, { method: 'DELETE' });
@@ -300,6 +393,93 @@ export default function CategoriesPage() {
       }
     } catch {
       showToast('error', 'حدث خطأ أثناء الحذف');
+    }
+  };
+
+  // ── Reorder helpers ───────────────────────────────────────────────────────
+  const getRootsSorted = () =>
+    [...categories]
+      .filter(c => !c.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+  const handleDragStart = (cat: Category) => setDraggedId(cat.id);
+
+  const handleDragOver = (e: React.DragEvent, cat: Category) => {
+    e.preventDefault();
+    if (cat.id !== draggedId) setDragOverId(cat.id);
+  };
+
+  const handleDrop = (targetCat: Category) => {
+    if (!draggedId || draggedId === targetCat.id) {
+      setDraggedId(null); setDragOverId(null); return;
+    }
+    const roots = getRootsSorted();
+    const fromIdx = roots.findIndex(c => c.id === draggedId);
+    const toIdx = roots.findIndex(c => c.id === targetCat.id);
+    if (fromIdx === -1 || toIdx === -1) { setDraggedId(null); setDragOverId(null); return; }
+    const newOrder = [...roots];
+    const [removed] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, removed);
+    const orderMap = new Map(newOrder.map((c, i) => [c.id, i]));
+    const updated = categories.map(c => orderMap.has(c.id) ? { ...c, sortOrder: orderMap.get(c.id)! } : c);
+    const sorted = [...updated].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    setCategories(updated);
+    setTree(buildTree(sorted));
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => { setDraggedId(null); setDragOverId(null); };
+
+  const handleMoveUp = (cat: Category) => {
+    const roots = getRootsSorted();
+    const idx = roots.findIndex(c => c.id === cat.id);
+    if (idx <= 0) return;
+    const newOrder = [...roots];
+    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    const orderMap = new Map(newOrder.map((c, i) => [c.id, i]));
+    const updated = categories.map(c => orderMap.has(c.id) ? { ...c, sortOrder: orderMap.get(c.id)! } : c);
+    const sorted = [...updated].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    setCategories(updated);
+    setTree(buildTree(sorted));
+  };
+
+  const handleMoveDown = (cat: Category) => {
+    const roots = getRootsSorted();
+    const idx = roots.findIndex(c => c.id === cat.id);
+    if (idx >= roots.length - 1) return;
+    const newOrder = [...roots];
+    [newOrder[idx + 1], newOrder[idx]] = [newOrder[idx], newOrder[idx + 1]];
+    const orderMap = new Map(newOrder.map((c, i) => [c.id, i]));
+    const updated = categories.map(c => orderMap.has(c.id) ? { ...c, sortOrder: orderMap.get(c.id)! } : c);
+    const sorted = [...updated].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    setCategories(updated);
+    setTree(buildTree(sorted));
+  };
+
+  const handleSaveOrder = async () => {
+    setSavingOrder(true);
+    try {
+      const items = categories
+        .filter(c => !c.parentId)
+        .map(c => ({ id: c.id, sortOrder: c.sortOrder }));
+      const res = await fetch('/api/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (res.ok) {
+        showToast('success', 'تم حفظ الترتيب بنجاح');
+        setReorderMode(false);
+        await fetchCategories();
+      } else {
+        showToast('error', 'فشل حفظ الترتيب');
+      }
+    } catch {
+      showToast('error', 'حدث خطأ أثناء الحفظ');
+    } finally {
+      setSavingOrder(false);
     }
   };
 
@@ -320,6 +500,7 @@ export default function CategoriesPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-8 text-right" dir="rtl" style={{ background: 'var(--bg-page)' }}>
+      {dialog}
       <div className="max-w-5xl mx-auto">
 
         {/* Back */}
@@ -339,10 +520,43 @@ export default function CategoriesPage() {
           icon={FolderTree}
           gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
           actions={
-            <button onClick={openAdd} className="btn-primary">
-              <Plus size={18} />
-              قسم جديد
-            </button>
+            <div className="flex gap-3">
+              {reorderMode ? (
+                <>
+                  <button
+                    onClick={() => { setReorderMode(false); fetchCategories(); }}
+                    className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                  >
+                    <X size={16} />
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleSaveOrder}
+                    disabled={savingOrder}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {savingOrder ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {savingOrder ? 'جاري الحفظ...' : 'حفظ الترتيب'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {categories.length > 0 && (
+                    <button
+                      onClick={() => setReorderMode(true)}
+                      className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                      <GripVertical size={16} />
+                      ترتيب الأقسام
+                    </button>
+                  )}
+                  <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+                    <Plus size={18} />
+                    قسم جديد
+                  </button>
+                </>
+              )}
+            </div>
           }
         />
 
@@ -449,24 +663,40 @@ export default function CategoriesPage() {
                   </div>
 
                   {searchQuery
-                    ? // Flat filtered results
-                    filteredFlat!.map(cat => (
+                    ? // Flat filtered results (reorder disabled in search)
+                    filteredFlat!.map((cat, i) => (
                       <CategoryNode
                         key={cat.id}
                         cat={{ ...cat, children: [] }}
                         depth={cat.parentId ? 1 : 0}
                         onEdit={openEdit}
                         onDelete={handleDelete}
+                        onMoveUp={handleMoveUp}
+                        onMoveDown={handleMoveDown}
+                        isFirst={i === 0}
+                        isLast={i === filteredFlat!.length - 1}
+                        reorderMode={false}
+                        draggedId={null} dragOverId={null}
+                        onDragStart={handleDragStart} onDragOver={handleDragOver}
+                        onDrop={handleDrop} onDragEnd={handleDragEnd}
                       />
                     ))
                     : // Tree view
-                    displayTree.map(root => (
+                    displayTree.map((root, i) => (
                       <CategoryNode
                         key={root.id}
                         cat={root}
                         depth={0}
                         onEdit={openEdit}
                         onDelete={handleDelete}
+                        onMoveUp={handleMoveUp}
+                        onMoveDown={handleMoveDown}
+                        isFirst={i === 0}
+                        isLast={i === displayTree.length - 1}
+                        reorderMode={reorderMode}
+                        draggedId={draggedId} dragOverId={dragOverId}
+                        onDragStart={handleDragStart} onDragOver={handleDragOver}
+                        onDrop={handleDrop} onDragEnd={handleDragEnd}
                       />
                     ))
                   }
@@ -525,13 +755,13 @@ export default function CategoriesPage() {
                   <option value="">— بدون (قسم رئيسي) —</option>
                   
                   {parentOptions.filter(c => !c.parentId).map(root => (
-                    <optgroup key={`group-${root.id}`} label={`📦 ${root.name}`}>
+                    <optgroup key={`group-${root.id}`} label={`📦 ‫${root.name}‬`}>
                       <option value={root.id}>
-                        {root.name} (نفسه كقسم أب)
+                        {`‫${root.name}‬`}{' (نفسه كقسم أب)'}
                       </option>
                       {parentOptions.filter(sub => sub.parentId === root.id).map(sub => (
                         <option key={sub.id} value={sub.id}>
-                          ↳ {sub.name}
+                          {`↳ ‫${sub.name}‬`}
                         </option>
                       ))}
                     </optgroup>
@@ -574,7 +804,7 @@ export default function CategoriesPage() {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {isSaving ? 'جاري الحفظ...' : 'حفظ'}

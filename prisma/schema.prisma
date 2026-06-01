@@ -31,12 +31,13 @@ model SubscriptionPlan {
 }
 
 model Tenant {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique // internal identifier
-  status    String   @default("TRIAL") // TRIAL | ACTIVE | GRACE | SUSPENDED | CANCELLED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique // internal identifier
+  status       String   @default("TRIAL") // TRIAL | ACTIVE | GRACE | SUSPENDED | CANCELLED
+  aiDailyLimit Int      @default(50)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   subscription   TenantSubscription?
   branches       Branch[]
@@ -57,6 +58,9 @@ model Tenant {
   cashierShifts  CashierShift[]
   syncLogs       SyncLog[]
   paymentRecords PaymentRecord[]
+  aiUsageLogs      AiUsageLog[]
+  productUnits     ProductUnit[]
+  cloudDeleteLogs  CloudDeleteLog[]
 }
 
 model TenantSubscription {
@@ -112,6 +116,7 @@ model Branch {
   storeSettings      StoreSettings[]
   auditLogs          AuditLog[]
   supplierLedgers    SupplierLedger[]
+  offers             Offer[]
 
   @@unique([tenantId, name])
 }
@@ -187,6 +192,7 @@ model Category {
   name        String
   description String?
   parentId    String?
+  sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
   tenant   Tenant     @relation(fields: [tenantId], references: [id])
@@ -199,16 +205,18 @@ model Category {
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  tenantId    String
-  name        String
-  description String?
-  categoryId  String?
-  supplierId  String?
-  costPrice   Decimal  @default(0)
-  baseStock   Int      @default(0) // legacy — prefer ProductBatch per branch
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  description  String?
+  categoryId   String?
+  supplierId   String?
+  costPrice     Decimal  @default(0)
+  baseStock     Int      @default(0) // legacy — prefer ProductBatch per branch
+  minimumStock  Int      @default(0)
+  isQuickSale   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
@@ -223,13 +231,17 @@ model Product {
 model ProductUnit {
   id               String  @id @default(cuid())
   productId        String
+  tenantId         String
   name             String
   conversionFactor Int     @default(1)
-  barcode          String  @unique
+  barcode          String?
   price            Decimal @default(0)
 
   product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
   transactionItems TransactionItem[]
+
+  @@index([barcode, tenantId])
 }
 
 model ProductBatch {
@@ -311,14 +323,19 @@ model Transaction {
   customerId    String?
   notes         String?
   discount      Decimal  @default(0)
+  priceEdited   Boolean  @default(false) // true if any line price was changed from the catalog price at sale time
+  taxAmount     Decimal  @default(0)
   paymentMethod String   @default("CASH") // CASH | CREDIT | SPLIT
   paidAmount    Decimal?
   originalTxId  String?
+  offerId       String?
+  receiptNumber String?  // tenant-scoped sequential number, stored permanently
 
   tenant   Tenant            @relation(fields: [tenantId], references: [id])
   branch   Branch            @relation(fields: [branchId], references: [id])
   user     User?             @relation(fields: [userId], references: [id])
   customer Customer?         @relation(fields: [customerId], references: [id])
+  offer    Offer?            @relation(fields: [offerId], references: [id])
   items    TransactionItem[]
 }
 
@@ -375,6 +392,7 @@ model CashierShift {
 model Offer {
   id          String    @id @default(cuid())
   tenantId    String
+  branchId    String?
   name        String
   type        String // FIXED_DISCOUNT | PERCENTAGE_DISCOUNT | BUY_X_GET_Y
   value       Decimal
@@ -388,9 +406,11 @@ model Offer {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  product  Product?  @relation(fields: [productId], references: [id])
-  category Category? @relation(fields: [categoryId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  branch       Branch?       @relation(fields: [branchId], references: [id])
+  product      Product?      @relation(fields: [productId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  transactions Transaction[]
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -403,6 +423,8 @@ model StoreSettings {
   storeAddress  String?
   storePhone    String?
   taxNumber     String?
+  taxRate       Decimal  @default(0)
+  currency      String   @default("ريال")
   footerMessage String?
   autoPrint     Boolean  @default(false)
   updatedAt     DateTime @updatedAt
@@ -505,7 +527,52 @@ model AnnouncementRecipient {
   @@unique([announcementId, tenantId])
 }
 
+// ─── AI Usage Tracking ───────────────────────────────────────────────────────
+
+model AiUsageLog {
+  id       String @id @default(cuid())
+  tenantId String
+  date     String // YYYY-MM-DD
+  count    Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, date])
+}
+
+// ─── Sync Delete Log ──────────────────────────────────────────────────────────
+// Records every hard-delete that happens on cloud so desktop can mirror it.
+// Pull route returns entries newer than pullCursor; desktop applyPull deletes
+// the matching local rows. Entries older than HISTORY_DAYS are pruned by cleanup.
+
+model CloudDeleteLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  table     String   // 'products' | 'categories' | 'customers' | 'suppliers' | 'offers' | 'expenses'
+  recordId  String   // primary key of the deleted row
+  deletedAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, deletedAt])
+}
+
 // ─── Desktop App Licenses ─────────────────────────────────────────────────────
+
+// ─── Platform Payment Methods (managed by super-admin) ───────────────────────
+
+model PlatformPaymentMethod {
+  id            String   @id @default(cuid())
+  type          String   // ZAINCASH | SUPERKEY | MASTERCARD | OTHER
+  name          String   // "زين كاش", "سوبر كي", "ماستر كارد"
+  accountNumber String?  // رقم الحساب / رقم الهاتف
+  accountName   String?  // اسم صاحب الحساب
+  instructions  String?  // تعليمات إضافية
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
 
 model LicenseLog {
   id             String    @id @default(cuid())

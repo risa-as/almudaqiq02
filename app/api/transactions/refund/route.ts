@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getAuthContext } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,34 @@ export async function POST(request: NextRequest) {
 
         if (!originalTx || originalTx.type !== 'SALE') {
             return NextResponse.json({ error: 'معرف الفاتورة الأصلية غير صحيح' }, { status: 400 });
+        }
+
+        // ── Guard against over-returning ──────────────────────────────────────
+        // Sum what was sold per line and what was already returned (REFUND/RETURN
+        // linked to this sale), then reject if a requested qty exceeds the remainder.
+        const [soldLines, priorReturns] = await Promise.all([
+            prisma.transactionItem.findMany({
+                where: { transactionId: originalTxId },
+                select: { productId: true, unitId: true, quantity: true },
+            }),
+            prisma.transactionItem.findMany({
+                where: { transaction: { originalTxId, type: { in: ['REFUND', 'RETURN'] } } },
+                select: { productId: true, unitId: true, quantity: true },
+            }),
+        ]);
+        const soldMap = new Map<string, number>();
+        for (const l of soldLines) soldMap.set(`${l.productId}|${l.unitId}`, (soldMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Number(l.quantity));
+        const returnedMap = new Map<string, number>();
+        for (const l of priorReturns) returnedMap.set(`${l.productId}|${l.unitId}`, (returnedMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Math.abs(Number(l.quantity)));
+
+        for (const it of items) {
+            const key = `${it.productId}|${it.unitId}`;
+            const remaining = (soldMap.get(key) ?? 0) - (returnedMap.get(key) ?? 0);
+            if (Number(it.quantity) > remaining) {
+                return NextResponse.json({
+                    error: `الكمية المطلوب إرجاعها تتجاوز المتاح (المتبقّي: ${Math.max(0, remaining)})`,
+                }, { status: 400 });
+            }
         }
 
         // Use auth branchId, or fall back to the original transaction's branch
@@ -131,6 +160,27 @@ export async function POST(request: NextRequest) {
 
             return newTx;
         });
+
+        enqueueSync('transactions', 'INSERT', refundTx.id, {
+            cloudId:       refundTx.id,
+            type:          'REFUND',
+            totalAmount:   Number(totalAmount),
+            date:          refundTx.date ?? new Date(),
+            userId:        currentUserId ?? null,
+            customerId:    originalTx.customerId ?? null,
+            notes:         notes ?? null,
+            discount:      0,
+            paymentMethod: paymentMethod || 'CASH',
+            paidAmount:    paidAmount ? Number(paidAmount) : Number(totalAmount),
+            originalTxId,
+            items:         items.map((item: any) => ({
+                productId: item.productId,
+                unitId:    item.unitId,
+                quantity:  Number(item.quantity),
+                price:     Number(item.price),
+                cost:      Number(item.cost ?? 0),
+            })),
+        })
 
         return NextResponse.json({ success: true, transaction: refundTx });
 

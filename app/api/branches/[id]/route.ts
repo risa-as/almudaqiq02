@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { prisma } from '@/lib/multi-tenant/prisma'
+import { prisma } from '@/lib/prisma'
+import { getTenantId } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(r: NextRequest) { return r.headers.get('x-tenant-id') ?? '' }
-
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const tenantId = getTenantId(request)
+  const tenantId = await getTenantId()
 
   const branch = await prisma.branch.findFirst({
     where: { id, tenantId },
@@ -30,7 +29,7 @@ const UpdateSchema = z.object({
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const tenantId = getTenantId(request)
+  const tenantId = await getTenantId()
   const body = await request.json().catch(() => null)
   const parsed = UpdateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
@@ -43,9 +42,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json({ success: true })
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const tenantId = getTenantId(request)
+  const tenantId = await getTenantId()
 
   // Check for transactions before archiving
   const txCount = await prisma.transaction.count({ where: { branchId: id, tenantId } })

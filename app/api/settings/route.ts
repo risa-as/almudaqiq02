@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { verifyAccessToken } from '@/lib/auth'
+import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,7 @@ export async function GET() {
       data: {
         tenant:        { connect: { id: tenantId } },
         branch:        { connect: { id: branchId } },
-        storeName:     'البيان ميني ماركت',
+        storeName:     'المدقق ميني ماركت',
         storePhone:    'رقم الهاتف: 07XX XXX XXXX',
         storeAddress:  'العنوان: العراق',
         footerMessage: 'البضاعة المباعة لا ترد ولا تستبدل بعد 3 أيام',
@@ -64,7 +65,7 @@ export async function PUT(request: NextRequest) {
     if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
 
     const body = await request.json()
-    const { storeName, storePhone, storeAddress, footerMessage, autoPrint } = body
+    const { storeName, storePhone, storeAddress, footerMessage, autoPrint, currency } = body
 
     // Find existing settings by tenant only — branchId not needed for updates
     const existing = await prisma.storeSettings.findFirst({ where: { tenantId } })
@@ -78,8 +79,16 @@ export async function PUT(request: NextRequest) {
           storeAddress:  storeAddress  ?? existing.storeAddress,
           footerMessage: footerMessage ?? existing.footerMessage,
           autoPrint:     autoPrint     ?? existing.autoPrint,
+          currency:      currency      ?? existing.currency,
         },
       })
+
+      enqueueSync('storeSettings', 'UPDATE', updated.id, {
+        id: updated.id, storeName: updated.storeName, storePhone: updated.storePhone,
+        storeAddress: updated.storeAddress, footerMessage: updated.footerMessage,
+        autoPrint: updated.autoPrint, currency: updated.currency,
+      })
+
       return NextResponse.json({ success: true, settings: updated })
     }
 

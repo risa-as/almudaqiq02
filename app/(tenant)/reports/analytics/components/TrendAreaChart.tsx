@@ -64,7 +64,7 @@ export default function TrendAreaChart({ data }: TrendAreaChartProps) {
                         <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
                         <YAxis
                             axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }}
-                            tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+                            tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(1)} مليون` : val >= 1000 ? `${(val / 1000).toFixed(0)} الف` : val}
                             dx={-10}
                         />
                         <Tooltip content={<CustomTooltip />} />

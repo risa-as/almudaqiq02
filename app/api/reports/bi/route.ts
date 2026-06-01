@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
 
-export async function GET(request: Request) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+export async function GET(_request: Request) {
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
-    const callerRole = request.headers.get('x-user-role') || 'CASHIER';
-    const isAdmin = ['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER'].includes(callerRole);
-
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER'].includes(auth.role);
     if (!isAdmin) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

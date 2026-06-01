@@ -15,20 +15,21 @@ export async function GET(request: NextRequest) {
 
   const { branchId } = branchPayload
 
-  const lastSync = await prisma.syncLog.findFirst({
-    where: { branchId, status: 'SUCCESS' },
-    orderBy: { completedAt: 'desc' },
-    select: { completedAt: true, recordsPushed: true, recordsPulled: true },
-  })
-
-  const pendingConflicts = await prisma.syncLog.count({
-    where: { branchId, conflicts: { not: null } },
-  })
+  // Pull and push are recorded as separate sync logs, so read the most recent
+  // value of each independently.
+  const [lastSync, pendingConflicts] = await Promise.all([
+    prisma.syncLog.findFirst({
+      where: { branchId, status: 'SUCCESS' },
+      orderBy: { completedAt: 'desc' },
+      select: { completedAt: true, recordsPushed: true, recordsPulled: true },
+    }),
+    prisma.syncLog.count({ where: { branchId, NOT: { conflicts: null } } }),
+  ])
 
   return NextResponse.json({
-    lastSyncAt: lastSync?.completedAt ?? null,
-    lastPushed: lastSync?.recordsPushed ?? 0,
-    lastPulled: lastSync?.recordsPulled ?? 0,
+    lastSyncAt:       lastSync?.completedAt   ?? null,
+    lastPushed:       lastSync?.recordsPushed ?? 0,
+    lastPulled:       lastSync?.recordsPulled ?? 0,
     pendingConflicts,
     serverTime: new Date().toISOString(),
   })

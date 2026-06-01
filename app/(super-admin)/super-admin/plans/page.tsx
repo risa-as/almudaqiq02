@@ -1,7 +1,8 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Check, X, Crown, Loader2, Users, GitBranch, AlertTriangle, Sparkles } from 'lucide-react'
+import { Plus, Pencil, Check, X, Crown, Loader2, Users, GitBranch, AlertTriangle, Sparkles, Trash2 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 
 interface Plan {
@@ -19,18 +20,24 @@ const fmt = (n: number | string) => Number(n).toLocaleString('en-US')
 
 // Color palette per plan index
 const PLAN_COLORS = [
-  { bg: 'from-blue-500 to-indigo-600', badge: 'bg-blue-50 text-blue-700 border-blue-200', icon: 'text-blue-500' },
+  { bg: 'from-blue-500 to-blue-600', badge: 'bg-blue-50 text-blue-700 border-blue-200', icon: 'text-blue-500' },
   { bg: 'from-violet-500 to-purple-600', badge: 'bg-violet-50 text-violet-700 border-violet-200', icon: 'text-violet-500' },
-  { bg: 'from-amber-500 to-orange-500', badge: 'bg-amber-50 text-amber-700 border-amber-200', icon: 'text-amber-500' },
+  { bg: 'from-blue-500 to-orange-500', badge: 'bg-blue-50 text-blue-700 border-blue-200', icon: 'text-blue-500' },
   { bg: 'from-emerald-500 to-teal-600', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'text-emerald-500' },
 ]
 
 export default function PlansPage() {
+  usePageTitle('خطط الاشتراك');
   const [plans, setPlans]         = useState<Plan[]>([])
   const [editing, setEditing]     = useState<string | null>(null)
   const [form, setForm]           = useState<Partial<Plan>>({})
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null)
+  const [deleting, setDeleting]         = useState(false)
+  const [deleteError, setDeleteError]   = useState('')
 
   // Create modal state
   const [showCreate, setShowCreate] = useState(false)
@@ -63,6 +70,26 @@ export default function PlansPage() {
     setEditing(null)
     setSaving(false)
     load()
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/super-admin/plans/${deleteTarget.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteError(data.error || 'فشل الحذف')
+      } else {
+        setDeleteTarget(null)
+        load()
+      }
+    } catch {
+      setDeleteError('تعذر الاتصال بالخادم')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -98,7 +125,7 @@ export default function PlansPage() {
         <div>
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
+                style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)' }}>
                 <div className="absolute inset-0 rounded-xl opacity-40" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%)' }} />
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
             </div>
@@ -111,7 +138,7 @@ export default function PlansPage() {
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
-          style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)' }}
         >
           <Plus className="w-5 h-5" />
           خطة جديدة
@@ -235,10 +262,10 @@ export default function PlansPage() {
                       <button
                         onClick={() => save(p.id)}
                         disabled={saving}
-                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        حفظ
+                        {saving ? 'جاري الحفظ...' : 'حفظ'}
                       </button>
                       <button
                         onClick={() => setEditing(null)}
@@ -249,18 +276,78 @@ export default function PlansPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => { setEditing(p.id); setForm({}) }}
-                      className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-sm py-2.5 rounded-xl transition-all"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      تعديل الخطة
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setEditing(p.id); setForm({}) }}
+                        className="flex-1 flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-sm py-2.5 rounded-xl transition-all"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        تعديل
+                      </button>
+                      <button
+                        onClick={() => { setDeleteTarget(p); setDeleteError('') }}
+                        disabled={p._count.subscriptions > 0}
+                        title={p._count.subscriptions > 0 ? `لا يمكن الحذف — ${p._count.subscriptions} مشترك` : 'حذف الخطة'}
+                        className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-sm border transition-all
+                          enabled:bg-red-50 enabled:border-red-200 enabled:text-red-600 enabled:hover:bg-red-100
+                          disabled:bg-slate-50 disabled:border-slate-200 disabled:text-slate-300 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !deleting && setDeleteTarget(null)} />
+          <div className="relative w-full max-w-sm glass-panel rounded-3xl p-7 shadow-2xl" dir="rtl">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent rounded-t-3xl" />
+
+            <div className="flex flex-col items-center text-center gap-4 mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-800">حذف الخطة</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  هل أنت متأكد من حذف خطة <span className="font-bold text-slate-800">"{deleteTarget.name}"</span>؟
+                  <br />لا يمكن التراجع عن هذه العملية.
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="mb-5 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-red-600 hover:bg-red-700 text-white flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deleting ? 'جاري الحذف...' : 'حذف نهائياً'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -350,10 +437,10 @@ export default function PlansPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  إنشاء الخطة
+                  {creating ? 'جاري الإنشاء...' : 'إنشاء الخطة'}
                 </button>
               </div>
             </form>

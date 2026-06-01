@@ -1,16 +1,18 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight, Building2, Save, Loader2, AlertTriangle,
   ShieldCheck, Mail, Lock, Hash, Calendar, CreditCard,
-  CheckCircle, Copy
+  CheckCircle, Copy, Bot
 } from 'lucide-react'
 
 interface Plan { id: string; name: string; monthlyPrice: number }
 
 export default function NewTenantPage() {
+  usePageTitle('إضافة مستأجر');
   const router = useRouter()
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
@@ -24,6 +26,7 @@ export default function NewTenantPage() {
     adminEmail:    '',
     adminPassword: '',
     trialDays:     14,
+    aiDailyLimit:  50,
   })
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export default function NewTenantPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const field = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 outline-none focus:ring-4 focus:border-indigo-500 transition-all font-medium placeholder:text-slate-300'
+  const field = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 outline-none focus:ring-4 focus:border-blue-500 transition-all font-medium placeholder:text-slate-300'
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (createdEmail) {
@@ -90,14 +93,14 @@ export default function NewTenantPage() {
           </div>
 
           <div className="rounded-2xl p-5 text-right space-y-3"
-            style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))', border: '1px solid rgba(99,102,241,0.15)' }}>
+            style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.05), rgba(139,92,246,0.05))', border: '1px solid rgba(9,75,159,0.15)' }}>
             <div>
               <p className="text-[10px] font-extrabold text-slate-400 mb-1 uppercase tracking-wider">رابط الدخول</p>
               <p className="text-sm font-bold text-slate-600">{typeof window !== 'undefined' ? window.location.origin : ''}/login</p>
             </div>
-            <div className="border-t border-indigo-100 pt-3">
+            <div className="border-t border-blue-100 pt-3">
               <p className="text-[10px] font-extrabold text-slate-400 mb-1 uppercase tracking-wider">البريد الإلكتروني</p>
-              <p className="text-base font-black" style={{ color: '#4f46e5' }}>{createdEmail}</p>
+              <p className="text-base font-black" style={{ color: '#073D82' }}>{createdEmail}</p>
             </div>
           </div>
 
@@ -113,7 +116,7 @@ export default function NewTenantPage() {
           <button
             onClick={() => router.push('/super-admin/tenants')}
             className="w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.35)' }}
+            style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 16px rgba(9,75,159,0.35)' }}
           >
             العودة إلى قائمة المنظمات
           </button>
@@ -137,7 +140,7 @@ export default function NewTenantPage() {
           </button>
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.3)' }}>
+              style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 16px rgba(9,75,159,0.3)' }}>
               <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
               <Building2 className="w-5 h-5 text-white relative z-10" />
             </div>
@@ -165,7 +168,7 @@ export default function NewTenantPage() {
             <div className="px-6 py-4 flex items-center gap-3"
               style={{ background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid #e2e8f0' }}>
               <div className="relative w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}>
+                style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)' }}>
                 <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
                 <Building2 className="w-4 h-4 text-white relative z-10" />
               </div>
@@ -266,21 +269,61 @@ export default function NewTenantPage() {
             </div>
           </div>
 
+          {/* ── Section 3 — AI limit ───────────────────────── */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div className="px-6 py-4 flex items-center gap-3"
+              style={{ background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid #e2e8f0' }}>
+              <div className="relative w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)' }}>
+                <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
+                <Bot className="w-4 h-4 text-white relative z-10" />
+              </div>
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-700 uppercase tracking-wider">حد استخدام المساعد الذكي</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">عدد الاستفسارات المسموح بها يومياً لهذه المنظمة</p>
+              </div>
+            </div>
+
+            <div className="p-6 bg-white">
+              <div className="flex items-center gap-3 mb-3">
+                <input
+                  type="number" min="0" max="10000" dir="ltr"
+                  className={`${field} text-center flex-1`}
+                  value={form.aiDailyLimit}
+                  onChange={e => setForm(f => ({ ...f, aiDailyLimit: parseInt(e.target.value) || 0 }))}
+                />
+                <div className="flex gap-2 shrink-0">
+                  {[20, 50, 100, 200].map(n => (
+                    <button key={n} type="button"
+                      onClick={() => setForm(f => ({ ...f, aiDailyLimit: n }))}
+                      className="px-3 py-2 rounded-xl text-sm font-bold border transition-all"
+                      style={form.aiDailyLimit === n
+                        ? { background: 'linear-gradient(135deg,#094B9F,#063A8A)', color: 'white', border: '1px solid #094B9F', boxShadow: '0 4px 12px rgba(9,75,159,0.3)' }
+                        : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">0 = بلا حد | القيمة الافتراضية: 50 استفسار/يوم</p>
+            </div>
+          </div>
+
           {/* ── Actions ────────────────────────────────────── */}
           <div className="flex justify-end gap-3 pt-1 pb-6">
             <button
               type="button" onClick={() => router.back()} disabled={loading}
-              className="px-6 py-2.5 rounded-xl font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all text-sm disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               إلغاء
             </button>
             <button
               type="submit" disabled={loading}
-              className="px-8 py-2.5 rounded-xl font-bold text-white flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 text-sm"
-              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.35)' }}
+              className="px-8 py-2.5 rounded-xl font-bold text-white flex items-center gap-2 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+              style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 16px rgba(9,75,159,0.35)' }}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              حفظ وإنشاء السجل
+              {loading ? 'جاري الإنشاء...' : 'حفظ وإنشاء السجل'}
             </button>
           </div>
 

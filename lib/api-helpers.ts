@@ -25,3 +25,17 @@ export async function getAuthContext(): Promise<{ tenantId: string; userId: stri
     return null
   }
 }
+
+/** Verified super-admin context (no tenant). Returns null for non-super-admin tokens. */
+export async function getSuperAdminContext(): Promise<{ superAdminId: string } | null> {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get('auth-token')?.value
+    if (!token) return null
+    const payload = await verifyAccessToken(token)
+    if (payload.role !== 'SUPER_ADMIN') return null
+    return { superAdminId: payload.sub }
+  } catch {
+    return null
+  }
+}

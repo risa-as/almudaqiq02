@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/multi-tenant/prisma'
+import { prisma } from '@/lib/prisma'
 import { verifyRefreshToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {

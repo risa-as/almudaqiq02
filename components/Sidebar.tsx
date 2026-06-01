@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useConfirm } from '@/hooks/useConfirm';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     Home, ShoppingCart, Package, BarChart3, Settings,
     Users, LogOut, Menu, X, FileText, Activity,
-    Tag, TrendingDown, ChevronDown, Boxes,
+    Tag, TrendingDown, ChevronDown, Boxes, CalendarX2,
     ArrowDownToLine, Receipt, Calculator, PieChart,
     Building2, BrainCircuit, Database, Store, Wallet,
-    Shield, Star, Zap
+    Shield, Star, Zap, Monitor
 } from 'lucide-react';
 import { getRoleLabel, ROLE_LABELS } from '@/lib/roles';
 
@@ -30,8 +31,8 @@ interface NavSection {
 
 // Role → avatar gradient color
 const ROLE_COLORS: Record<string, { gradient: string; badge: string; icon: React.ElementType }> = {
-    SUPER_ADMIN:    { gradient: 'from-amber-400 to-orange-500',  badge: 'bg-amber-500/20 text-amber-300',   icon: Shield },
-    ADMIN:          { gradient: 'from-indigo-400 to-violet-500', badge: 'bg-indigo-500/20 text-indigo-300', icon: Star },
+    SUPER_ADMIN:    { gradient: 'from-blue-400 to-orange-500',  badge: 'bg-blue-500/20 text-blue-300',   icon: Shield },
+    ADMIN:          { gradient: 'from-blue-400 to-violet-500', badge: 'bg-blue-500/20 text-blue-300', icon: Star },
     BRANCH_MANAGER: { gradient: 'from-cyan-400 to-blue-500',    badge: 'bg-cyan-500/20 text-cyan-300',     icon: Store },
     STOCK_KEEPER:   { gradient: 'from-emerald-400 to-teal-500', badge: 'bg-emerald-500/20 text-emerald-300', icon: Package },
     CASHIER:        { gradient: 'from-slate-400 to-slate-500',  badge: 'bg-slate-500/20 text-slate-300',   icon: Zap },
@@ -60,8 +61,10 @@ export default function Sidebar() {
         if (isMobile) setIsOpen(false);
     }, [pathname, isMobile]);
 
+    const { confirm, dialog } = useConfirm();
+
     const handleLogout = async () => {
-        if (!confirm('هل أنت متأكد من تسجيل الخروج؟')) return;
+        if (!await confirm({ title: 'تسجيل الخروج', message: 'هل أنت متأكد من تسجيل الخروج من النظام؟', variant: 'logout', confirmLabel: 'خروج' })) return;
         await fetch('/api/auth/logout', { method: 'POST' });
         router.push('/login');
     };
@@ -76,11 +79,12 @@ export default function Sidebar() {
     };
 
     const allNavHrefs = [
-        '/inventory', '/inventory/batches',
+        '/inventory', '/inventory/batches', '/inventory/expiry',
         '/purchases/suppliers', '/purchases/suppliers/smart-buy',
         '/sales/invoices', '/sales/customers',
         '/accounting/expenses', '/accounting/shifts', '/accounting/financials',
         '/reports/sales', '/reports/inventory', '/reports/stock-movement', '/reports/analytics',
+        '/reports/branches', '/reports/audit', '/reports/customers-debt',
         '/marketing/offers',
     ];
 
@@ -102,8 +106,8 @@ export default function Sidebar() {
             key: 'sales',
             label: 'المبيعات',
             icon: ShoppingCart,
-            gradient: 'from-blue-500 to-indigo-600',
-            color: '#6366f1',
+            gradient: 'from-blue-500 to-blue-600',
+            color: '#094B9F',
             items: [
                 { href: '/sales/invoices', icon: FileText, label: 'سجل الفواتير' },
                 { href: '/sales/customers', icon: Users, label: 'العملاء والديون' },
@@ -113,11 +117,12 @@ export default function Sidebar() {
             key: 'purchases',
             label: 'المشتريات والمخزون',
             icon: Package,
-            gradient: 'from-amber-400 to-orange-500',
+            gradient: 'from-blue-400 to-orange-500',
             color: '#f59e0b',
             items: [
                 { href: '/inventory', icon: Boxes, label: 'المنتجات والمخزون' },
-                { href: '/inventory/batches', icon: Database, label: 'إدارة الدفعات' },
+                { href: '/inventory/batches', icon: Database,   label: 'إدارة الدفعات' },
+                { href: '/inventory/expiry', icon: CalendarX2, label: 'إدارة الصلاحيات' },
                 { href: '/purchases/suppliers', icon: Building2, label: 'الموردين' },
                 { href: '/purchases/suppliers/smart-buy', icon: BrainCircuit, label: 'مستشار المشتريات' },
             ]
@@ -127,7 +132,7 @@ export default function Sidebar() {
             label: 'المحاسبة',
             icon: Calculator,
             gradient: 'from-violet-500 to-purple-600',
-            color: '#8b5cf6',
+            color: '#094B9F',
             items: [
                 { href: '/accounting/expenses', icon: TrendingDown, label: 'المصروفات' },
                 { href: '/accounting/shifts', icon: Receipt, label: 'الورديات' },
@@ -144,7 +149,10 @@ export default function Sidebar() {
                 { href: '/reports/sales', icon: Activity, label: 'تقرير المبيعات' },
                 { href: '/reports/inventory', icon: PieChart, label: 'جرد المخزون' },
                 { href: '/reports/stock-movement', icon: ArrowDownToLine, label: 'حركة المخزون' },
+                { href: '/reports/branches', icon: Building2, label: 'مقارنة الفروع' },
                 { href: '/reports/analytics', icon: BarChart3, label: 'لوحة BI الذكية' },
+                { href: '/reports/audit', icon: Shield, label: 'سجل المراجعة' },
+                { href: '/reports/customers-debt', icon: Users, label: 'ذمم العملاء' },
             ]
         },
         {
@@ -171,22 +179,22 @@ export default function Sidebar() {
             }}
         >
             {/* Ambient glow top */}
-            <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10 pointer-events-none"
-                style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)', transform: 'translate(20%, -30%)' }} />
+            <div className="absolute top-0 right-0 w-56 h-56 rounded-full opacity-20 pointer-events-none"
+                style={{ background: 'radial-gradient(circle, #094B9F 0%, transparent 70%)', transform: 'translate(20%, -30%)' }} />
 
             {/* ── Header ── */}
             <div className="px-5 py-5 relative overflow-hidden flex-shrink-0">
                 <div className="absolute inset-0 opacity-30"
-                    style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.4) 0%, transparent 60%)' }} />
+                    style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.4) 0%, transparent 60%)' }} />
                 <div className="relative flex items-center gap-3.5">
                     <div className="w-11 h-11 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-lg relative overflow-hidden"
-                        style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}>
+                        style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 16px rgba(9,75,159,0.4)' }}>
                         <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 50%)' }} />
                         <Store size={20} className="text-white relative z-10" />
                     </div>
                     <div>
-                        <p className="text-white font-black text-[15px] tracking-wide leading-tight">نظام البيان</p>
-                        <p className="text-indigo-300/70 text-[10px] font-semibold mt-0.5 tracking-widest uppercase">SaaS Pro</p>
+                        <p className="text-white font-black text-[15px] tracking-wide leading-tight">نظام المدقق</p>
+                        <p className="text-blue-300/70 text-[10px] font-semibold mt-0.5 tracking-widest uppercase">SaaS Pro</p>
                     </div>
                 </div>
             </div>
@@ -201,23 +209,23 @@ export default function Sidebar() {
                             : 'text-slate-400 hover:text-white'
                     }`}
                     style={isActive('/') ? {
-                        background: 'linear-gradient(90deg, rgba(99,102,241,0.3) 0%, rgba(99,102,241,0.08) 100%)',
-                        boxShadow: '0 0 20px rgba(99,102,241,0.15), inset 0 1px 0 rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(99,102,241,0.3)',
+                        background: 'linear-gradient(90deg, rgba(9,75,159,0.3) 0%, rgba(9,75,159,0.08) 100%)',
+                        boxShadow: '0 0 20px rgba(9,75,159,0.15), inset 0 1px 0 rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(9,75,159,0.3)',
                     } : {}}
                 >
-                    <div className={`p-1.5 rounded-lg transition-all ${isActive('/') ? 'bg-indigo-500/30' : 'bg-white/5 group-hover:bg-white/8'}`}>
-                        <Home size={16} className={isActive('/') ? 'text-indigo-300' : 'text-slate-400 group-hover:text-white'} />
+                    <div className={`p-1.5 rounded-lg transition-all ${isActive('/') ? 'bg-blue-500/30' : 'bg-white/5 group-hover:bg-white/8'}`}>
+                        <Home size={16} className={isActive('/') ? 'text-blue-300' : 'text-slate-400 group-hover:text-white'} />
                     </div>
                     لوحة القيادة
                     {isActive('/') && (
-                        <div className="mr-auto w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        <div className="mr-auto w-1.5 h-1.5 rounded-full bg-blue-400" />
                     )}
                 </Link>
             </div>
 
             {/* ── POS Quick Access ── */}
-            <div className="px-4 pb-3 flex-shrink-0">
+            <div className="px-4 pb-1 flex-shrink-0">
                 <Link
                     href="/pos"
                     className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-emerald-300 transition-all duration-300 group"
@@ -230,8 +238,21 @@ export default function Sidebar() {
                 </Link>
             </div>
 
+            {/* ── Customer Screen Quick Access ── */}
+            <div className="px-4 pb-3 flex-shrink-0">
+                <Link
+                    href="/customer-screen"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-violet-300 transition-all duration-300 group"
+                >
+                    <div className="p-1.5 rounded-lg bg-white/5 group-hover:bg-violet-500/15 transition-colors">
+                        <Monitor size={16} className="text-slate-400 group-hover:text-violet-400" />
+                    </div>
+                    شاشة فاحص الأسعار
+                </Link>
+            </div>
+
             {/* ── Divider ── */}
-            <div className="mx-4 mb-3 h-px flex-shrink-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)' }} />
+            <div className="mx-4 mb-3 h-px flex-shrink-0" style={{ background: 'linear-gradient(90deg, transparent, rgba(9,75,159,0.15), transparent)' }} />
 
             {/* ── Sections ── */}
             <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5"
@@ -291,7 +312,7 @@ export default function Sidebar() {
                 {/* ── Settings ── */}
                 {(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN' || userRole === 'BRANCH_MANAGER') && (
                     <>
-                        <div className="mx-1 my-3 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)' }} />
+                        <div className="mx-1 my-3 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(9,75,159,0.15), transparent)' }} />
                         <Link
                             href="/settings"
                             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${
@@ -312,8 +333,8 @@ export default function Sidebar() {
             {/* ── Footer: User Info ── */}
             <div className="flex-shrink-0 p-3 mx-3 mb-3 rounded-2xl"
                 style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    background: 'rgba(9,75,159,0.05)',
+                    border: '1px solid rgba(9,75,159,0.12)',
                 }}>
                 <div className="flex items-center gap-3">
                     {/* Avatar */}
@@ -343,6 +364,7 @@ export default function Sidebar() {
 
     return (
         <>
+            {dialog}
             {/* Mobile Toggle */}
             <button
                 onClick={() => setIsOpen(true)}

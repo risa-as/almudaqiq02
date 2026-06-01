@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Conflict Resolution Rules:
  * - transactions:   local wins  (never reject an offline sale)
  * - products:       cloud wins  (catalog is managed centrally)

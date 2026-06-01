@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId, getAuthContext } from '@/lib/api-helpers';
+import { enqueueSync } from '@/lib/sync-enqueue';
+import { logCloudDelete } from '@/lib/sync-delete-log';
 
 export async function GET(req: NextRequest) {
     const tenantId = await getTenantId();
@@ -69,6 +71,11 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        enqueueSync('expenses', 'INSERT', expense.id, {
+            cloudId: expense.id, title, amount: Number(amount),
+            category, description, date: expense.date, tenantId, branchId: finalBranchId,
+        });
+
         return NextResponse.json(expense);
     } catch (error) {
         return NextResponse.json({ error: 'Failed' }, { status: 500 });
@@ -96,6 +103,9 @@ export async function DELETE(req: NextRequest) {
         await prisma.expense.delete({
             where: { id }
         });
+
+        enqueueSync('expenses', 'DELETE', id, { id });
+        await logCloudDelete(tenantId, 'expenses', id)
 
         return NextResponse.json({ success: true });
     } catch (error) {
@@ -128,6 +138,11 @@ export async function PUT(req: NextRequest) {
                 description,
                 date: date ? new Date(date) : undefined
             }
+        });
+
+        enqueueSync('expenses', 'UPDATE', expense.id, {
+            id: expense.id, title, amount: Number(amount),
+            category, description, date: expense.date,
         });
 
         return NextResponse.json(expense);

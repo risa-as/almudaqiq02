@@ -1,18 +1,20 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, DollarSign, TrendingUp, ShoppingBag, CreditCard } from 'lucide-react';
+import { ArrowUp, ArrowDown, DollarSign, TrendingUp, ShoppingBag, CreditCard, RotateCcw } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 
 interface Kpis {
     revenue: number; profit: number; aov: number; transactions: number;
+    grossRevenue?: number; returns?: number;
     prevRevenue: number; prevProfit: number; prevAov: number; prevTransactions: number;
 }
 
 interface KpiCardsProps { data: Kpis }
 
 const CARDS = [
-    { key: 'revenue',      label: 'إجمالي الإيرادات', prev: 'prevRevenue',      currency: true,  icon: DollarSign,  gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', glow: 'rgba(99,102,241,0.2)' },
+    { key: 'revenue',      label: 'صافي الإيرادات',   prev: 'prevRevenue',      currency: true,  icon: DollarSign,  gradient: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', glow: 'rgba(9,75,159,0.2)' },
+    { key: 'returns',      label: 'المرتجعات',        prev: null,               currency: true,  icon: RotateCcw,   gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', glow: 'rgba(239,68,68,0.2)' },
     { key: 'profit',       label: 'صافي الربح',        prev: 'prevProfit',       currency: true,  icon: TrendingUp,  gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', glow: 'rgba(16,185,129,0.2)' },
-    { key: 'aov',          label: 'متوسط الفاتورة',    prev: 'prevAov',          currency: true,  icon: CreditCard,  gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', glow: 'rgba(139,92,246,0.2)' },
+    { key: 'aov',          label: 'متوسط الفاتورة',    prev: 'prevAov',          currency: true,  icon: CreditCard,  gradient: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', glow: 'rgba(14,99,212,0.2)' },
     { key: 'transactions', label: 'إجمالي الفواتير',   prev: 'prevTransactions', currency: false, icon: ShoppingBag, gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: 'rgba(245,158,11,0.2)' },
 ] as const;
 
@@ -23,10 +25,11 @@ export default function KpiCards({ data }: KpiCardsProps) {
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
             {CARDS.map(card => {
-                const val  = data[card.key as keyof Kpis] as number;
-                const prev = data[card.prev as keyof Kpis] as number;
+                const val  = (data[card.key as keyof Kpis] as number) ?? 0;
+                const hasPrev = card.prev != null;
+                const prev = hasPrev ? (data[card.prev as keyof Kpis] as number) : 0;
                 const g    = growth(val, prev);
                 const pos  = g >= 0;
                 const Icon = card.icon;
@@ -57,13 +60,17 @@ export default function KpiCards({ data }: KpiCardsProps) {
                                 {card.currency ? formatCurrency(val) : val.toLocaleString('en-US')}
                             </h3>
 
-                            <div className="flex items-center gap-2">
-                                <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${pos ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                                    {pos ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
-                                    {Math.abs(g).toFixed(1)}%
-                                </span>
-                                <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>مقارنة بالفترة السابقة</span>
-                            </div>
+                            {hasPrev ? (
+                                <div className="flex items-center gap-2">
+                                    <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${pos ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                        {pos ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+                                        {Math.abs(g).toFixed(1)}%
+                                    </span>
+                                    <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>مقارنة بالفترة السابقة</span>
+                                </div>
+                            ) : (
+                                <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>تُخصم من الإيرادات</span>
+                            )}
                         </div>
                     </div>
                 );

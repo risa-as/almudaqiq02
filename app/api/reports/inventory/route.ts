@@ -1,86 +1,147 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
+import { getAuthContext } from '@/lib/api-helpers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-    const tenantId = request.headers.get('x-tenant-id') ?? ''
-    const userBranchId = request.headers.get('x-branch-id') ?? ''
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const tenantId     = auth.tenantId;
+    const userBranchId = auth.branchId ?? '';
+
     const { searchParams } = new URL(request.url);
-    const branchId = searchParams.get('branchId') || userBranchId || undefined;
-    const branchFilter = branchId ? { branchId } : {}
+    const branchId    = searchParams.get('branchId') || userBranchId || undefined;
+    const useBranch   = branchId && branchId !== 'all';
 
     try {
+        // ── Fetch products (no branchId on Product model) ─────────────
         const products = await prisma.product.findMany({
             where: { tenantId },
-            include: {
-                category: true,
-                supplier: true
-            }
+            include: { category: true, supplier: true }
         });
 
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        // ── Fetch batches for the selected branch (or all) ─────────────
+        const batches = await prisma.productBatch.findMany({
+            where: {
+                tenantId,
+                ...(useBranch ? { branchId } : {}),
+                quantity: { gt: 0 }
+            },
+            include: { product: { include: { category: true } } }
+        });
+
+        // ── Build per-product stock map from batches ───────────────────
+        // When a branch is selected, stock = sum of batches for that branch
+        // When no branch selected, fall back to product.baseStock (global)
+        const batchStockMap = new Map<string, number>();
+        for (const b of batches) {
+            batchStockMap.set(b.productId, (batchStockMap.get(b.productId) ?? 0) + Number(b.quantity));
+        }
+
+        const getStock = (p: any): number =>
+            useBranch
+                ? (batchStockMap.get(p.id) ?? 0)
+                : p.baseStock;
+
+        // ── Expiring batches (≤ 30 days) ───────────────────────────────
+        const now = new Date();
+        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
 
         const expiringBatches = await prisma.productBatch.findMany({
             where: {
                 tenantId,
-                ...branchFilter,
-                expiryDate: { lte: thirtyDaysFromNow },
+                ...(useBranch ? { branchId } : {}),
+                expiryDate: { not: null, lte: thirtyDaysFromNow },
                 quantity: { gt: 0 }
             },
-            include: { product: true },
+            include: { product: { include: { category: true } } },
             orderBy: { expiryDate: 'asc' }
         });
 
-        // Calculate Valuation
+        // ── Compute stats using branch-scoped stock ────────────────────
         let totalValuation = 0;
-        let totalItems = 0;
+        let totalItems     = 0;
+        const valuationByCategory: Record<string, number> = {};
 
-        products.forEach(p => {
-            totalValuation += Number(p.costPrice) * p.baseStock;
-            totalItems += p.baseStock;
+        // Only count products that have stock in this branch
+        const activeProducts = useBranch
+            ? products.filter(p => (batchStockMap.get(p.id) ?? 0) > 0 || batchStockMap.has(p.id))
+            : products;
+
+        for (const p of (useBranch ? products : products)) {
+            const stock = getStock(p);
+            if (useBranch && stock === 0 && !batchStockMap.has(p.id)) continue;
+            const val = Number(p.costPrice) * stock;
+            totalValuation += val;
+            totalItems     += stock;
+            const cat = p.category?.name || 'بدون تصنيف';
+            valuationByCategory[cat] = (valuationByCategory[cat] ?? 0) + val;
+        }
+
+        // Stock classifications using branch-scoped stock
+        const productsWithStock = products.map(p => ({ ...p, branchStock: getStock(p) }));
+        // When branch is selected, only show products that exist in that branch's batches
+        const scopedProducts = useBranch
+            ? productsWithStock.filter(p => batchStockMap.has(p.id) || p.branchStock === 0)
+            : productsWithStock;
+
+        const outOfStock   = scopedProducts.filter(p => p.branchStock === 0 && (!useBranch || batchStockMap.has(p.id)));
+        const lowStock     = scopedProducts.filter(p => p.branchStock > 0 && p.branchStock <= 5);
+        const warningStock = scopedProducts.filter(p => p.branchStock > 5 && p.branchStock <= 20);
+
+        // ── Expiry enrichment ──────────────────────────────────────────
+        const enrichedBatches = expiringBatches.map((b: any) => {
+            const expiry   = new Date(b.expiryDate);
+            const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / 86400000);
+            const urgency  = daysLeft <= 0 ? 'expired' : daysLeft <= 7 ? 'critical' : 'warning';
+            return {
+                id:          b.id,
+                batchNumber: b.batchNumber || '—',
+                productName: b.product.name,
+                category:    b.product.category?.name || '—',
+                expiryDate:  b.expiryDate,
+                daysLeft,
+                urgency,
+                quantity:    Number(b.quantity)
+            };
         });
 
-        // Filter Low Stock
-        const lowStockItems = products.filter(p => p.baseStock <= 10);
-
-        // Group by Category (for valuation distribution)
-        const valuationByCategory: any = {};
-        products.forEach(p => {
-            const catName = p.category?.name || 'Uncategorized';
-            if (!valuationByCategory[catName]) valuationByCategory[catName] = 0;
-            valuationByCategory[catName] += Number(p.costPrice) * p.baseStock;
-        });
-
-        const distribution = Object.keys(valuationByCategory).map(key => ({
-            name: key,
-            value: valuationByCategory[key]
-        }));
+        const distribution = Object.entries(valuationByCategory)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
 
         return NextResponse.json({
             stats: {
                 totalValuation,
-                totalProducts: products.length,
+                totalProducts:    useBranch ? scopedProducts.length : products.length,
                 totalItems,
-                lowStockCount: lowStockItems.length,
-                expiringCount: expiringBatches.length
+                outOfStockCount:  outOfStock.length,
+                lowStockCount:    lowStock.length,
+                warningStockCount: warningStock.length,
+                expiringCount:    enrichedBatches.length,
+                expiredCount:     enrichedBatches.filter((b: any) => b.urgency === 'expired').length,
+                criticalCount:    enrichedBatches.filter((b: any) => b.urgency === 'critical').length,
             },
-            lowStockItems: lowStockItems.map(p => ({
-                id: p.id,
-                name: p.name,
-                stock: p.baseStock,
-                cost: p.costPrice,
-                supplier: p.supplier?.name || '-'
+            outOfStock: outOfStock.map(p => ({
+                id: p.id, name: p.name,
+                supplier: p.supplier?.name || '—',
+                category: p.category?.name || '—',
+                cost: Number(p.costPrice)
             })),
-            expiringBatches: expiringBatches.map(b => ({
-                id: b.id,
-                batchNumber: b.batchNumber || '-',
-                productName: b.product.name,
-                expiryDate: b.expiryDate,
-                quantity: b.quantity
+            lowStockItems: lowStock.map(p => ({
+                id: p.id, name: p.name, stock: p.branchStock,
+                cost: Number(p.costPrice),
+                supplier: p.supplier?.name || '—',
+                category: p.category?.name || '—'
             })),
+            warningItems: warningStock.map(p => ({
+                id: p.id, name: p.name, stock: p.branchStock,
+                cost: Number(p.costPrice),
+                supplier: p.supplier?.name || '—',
+                category: p.category?.name || '—'
+            })),
+            expiringBatches: enrichedBatches,
             valuationDistribution: distribution
         });
 

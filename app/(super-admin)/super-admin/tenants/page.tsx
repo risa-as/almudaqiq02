@@ -1,10 +1,12 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Plus, Search, Building2, CheckCircle, XCircle, Clock,
   SearchX, AlertTriangle, DollarSign, Edit2, X, Save,
-  Loader2, TrendingUp, Users, Ban, Trash2
+  Loader2, TrendingUp, Users, Ban, Trash2, Bot
 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 
@@ -13,6 +15,7 @@ interface Plan { id: string; name: string }
 
 interface Tenant {
   id: string; name: string; status: string; createdAt: string
+  aiDailyLimit: number
   users: { email: string | null }[]
   subscription?: {
     plan: { id: string; name: string }
@@ -30,9 +33,9 @@ interface Stats {
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_BADGE: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
   ACTIVE:    { label: 'نشط',        cls: 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25', icon: CheckCircle },
-  TRIAL:     { label: 'تجربة',      cls: 'bg-indigo-500/10 text-indigo-700 ring-1 ring-indigo-500/25',   icon: Clock },
+  TRIAL:     { label: 'تجربة',      cls: 'bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/25',   icon: Clock },
   GRACE:     { label: 'فترة مهلة',  cls: 'bg-orange-500/10 text-orange-700 ring-1 ring-orange-500/25',   icon: AlertTriangle },
-  SUSPENDED: { label: 'معلق',       cls: 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25',      icon: XCircle },
+  SUSPENDED: { label: 'معلق',       cls: 'bg-blue-500/10 text-blue-700 ring-1 ring-blue-500/25',      icon: XCircle },
   CANCELLED: { label: 'ملغى',       cls: 'bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/25',         icon: Ban },
 }
 
@@ -47,7 +50,7 @@ function rowHighlight(t: Tenant) {
   if (t.status === 'SUSPENDED' || t.status === 'CANCELLED') return 'bg-slate-50/80'
   if (t.subscription?.endDate) {
     const diff = new Date(t.subscription.endDate).getTime() - Date.now()
-    if (diff > 0 && diff < 7 * 86400_000) return 'bg-amber-50/50'
+    if (diff > 0 && diff < 7 * 86400_000) return 'bg-blue-50/50'
   }
   return ''
 }
@@ -60,6 +63,8 @@ function endDateDisplay(t: Tenant) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function TenantsPage() {
+  usePageTitle('المستأجرون');
+  const router = useRouter()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [total,   setTotal]   = useState(0)
   const [search,  setSearch]  = useState('')
@@ -72,7 +77,7 @@ export default function TenantsPage() {
   // Edit modal
   const [editOpen,   setEditOpen]   = useState(false)
   const [editTarget, setEditTarget] = useState<Tenant | null>(null)
-  const [editForm,   setEditForm]   = useState({ name: '', planId: '', endDate: '', status: '' })
+  const [editForm,   setEditForm]   = useState({ name: '', planId: '', endDate: '', status: '', aiDailyLimit: 50 })
   const [editSaving, setEditSaving] = useState(false)
   const [editError,  setEditError]  = useState('')
 
@@ -150,10 +155,11 @@ export default function TenantsPage() {
   function openEdit(t: Tenant) {
     setEditTarget(t)
     setEditForm({
-      name:    t.name,
-      planId:  t.subscription?.plan?.id ?? '',
-      endDate: t.subscription?.endDate ? t.subscription.endDate.slice(0, 10) : '',
-      status:  t.status,
+      name:         t.name,
+      planId:       t.subscription?.plan?.id ?? '',
+      endDate:      t.subscription?.endDate ? t.subscription.endDate.slice(0, 10) : '',
+      status:       t.status,
+      aiDailyLimit: t.aiDailyLimit ?? 50,
     })
     setEditError('')
     setEditOpen(true)
@@ -167,10 +173,11 @@ export default function TenantsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name:    editForm.name,
-          status:  editForm.status,
-          planId:  editForm.planId || undefined,
-          endDate: editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
+          name:         editForm.name,
+          status:       editForm.status,
+          planId:       editForm.planId || undefined,
+          endDate:      editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
+          aiDailyLimit: Number(editForm.aiDailyLimit),
         }),
       })
       if (!res.ok) {
@@ -209,6 +216,7 @@ export default function TenantsPage() {
         return
       }
       setPayOpen(false)
+      router.refresh()
       loadTenants()
       fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
     } catch { setPayError('تعذر الاتصال بالخادم') }
@@ -243,7 +251,7 @@ export default function TenantsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
           { label: 'نشط',               val: c?.active,       gradient: 'linear-gradient(135deg,#10b981,#059669)', glow: 'rgba(16,185,129,0.2)' },
-          { label: 'تجربة',             val: c?.trial,        gradient: 'linear-gradient(135deg,#6366f1,#8b5cf6)', glow: 'rgba(99,102,241,0.2)' },
+          { label: 'تجربة',             val: c?.trial,        gradient: 'linear-gradient(135deg,#094B9F,#063A8A)', glow: 'rgba(9,75,159,0.2)' },
           { label: 'ينتهي خلال 7 أيام', val: c?.expiringSoon, gradient: 'linear-gradient(135deg,#f59e0b,#d97706)', glow: 'rgba(245,158,11,0.2)' },
           { label: 'فترة المهلة',       val: c?.grace,        gradient: 'linear-gradient(135deg,#f97316,#ea580c)', glow: 'rgba(249,115,22,0.2)' },
           { label: 'معلق / منتهٍ',      val: (c?.suspended ?? 0) + (c?.cancelled ?? 0), gradient: 'linear-gradient(135deg,#ef4444,#dc2626)', glow: 'rgba(239,68,68,0.2)' },
@@ -307,21 +315,22 @@ export default function TenantsPage() {
           <p className="text-sm text-slate-500 mt-2">لم يتم العثور على أي نتائج مطابقة.</p>
         </div>
       ) : (
-        <div className="rounded-[20px] overflow-hidden" style={{ background: 'white', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
+        <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-right" style={{ borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '2px solid #e2e8f0' }}>
-                  <th className="px-5 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">المتجر</th>
-                  <th className="px-4 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">البريد الإلكتروني</th>
-                  <th className="px-4 py-3.5 text-right text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الخطة</th>
-                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الفروع / المستخدمون</th>
-                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">تاريخ الانتهاء</th>
-                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">الحالة</th>
-                  <th className="px-4 py-3.5 text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">إجراءات</th>
+            <table className="w-full text-right">
+              <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المتجر</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">البريد الإلكتروني</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">الخطة</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">الفروع / المستخدمون</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">حد الذكاء الاصطناعي</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">تاريخ الانتهاء</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">الحالة</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">إجراءات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-gray-50">
                 {tenants.map(t => {
                   const badge = STATUS_BADGE[t.status] ?? STATUS_BADGE.SUSPENDED
                   const Icon  = badge.icon
@@ -330,18 +339,17 @@ export default function TenantsPage() {
                     && new Date(t.subscription.endDate) > new Date()
                   return (
                     <tr key={t.id}
-                      className="transition-all hover:bg-indigo-50/30 group"
-                      style={{
-                        background: t.status === 'GRACE' ? 'rgba(255,237,213,0.3)' :
-                          (t.status === 'SUSPENDED' || t.status === 'CANCELLED') ? 'rgba(248,250,252,0.8)' :
-                          isExpiringSoon ? 'rgba(255,251,235,0.4)' : undefined
-                      }}>
+                      className={`hover:bg-blue-50/50 transition-colors group ${
+                        t.status === 'GRACE' ? 'bg-orange-50/30' :
+                        (t.status === 'SUSPENDED' || t.status === 'CANCELLED') ? 'bg-slate-50/80' :
+                        isExpiringSoon ? 'bg-blue-50/40' : ''
+                      }`}>
 
                       {/* Name */}
-                      <td className="px-5 py-3.5 min-w-[200px]">
+                      <td className="px-6 py-4 min-w-[200px]">
                         <div className="flex items-center gap-3">
                           <div className="relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 2px 8px rgba(99,102,241,0.25)' }}>
+                            style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 2px 8px rgba(9,75,159,0.25)' }}>
                             <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
                             <Building2 className="w-4 h-4 text-white relative z-10" />
                           </div>
@@ -353,7 +361,7 @@ export default function TenantsPage() {
                       </td>
 
                       {/* Admin Email */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-6 py-4">
                         {t.users[0]?.email ? (
                           <span className="text-[12px] font-medium text-slate-600 dir-ltr" dir="ltr">
                             {t.users[0].email}
@@ -364,7 +372,7 @@ export default function TenantsPage() {
                       </td>
 
                       {/* Plan */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-6 py-4">
                         {t.subscription?.plan?.name ? (
                           <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
                             {t.subscription.plan.name}
@@ -375,9 +383,9 @@ export default function TenantsPage() {
                       </td>
 
                       {/* Branches / Users */}
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
                             <Building2 className="w-3 h-3" />{t._count.branches}
                           </span>
                           <span className="text-slate-200 text-xs">|</span>
@@ -387,13 +395,21 @@ export default function TenantsPage() {
                         </div>
                       </td>
 
+                      {/* AI Daily Limit */}
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                          <Bot className="w-3 h-3" />
+                          {t.aiDailyLimit === 0 ? '∞ بلا حد' : `${t.aiDailyLimit}/يوم`}
+                        </span>
+                      </td>
+
                       {/* End Date */}
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-6 py-4 text-center">
                         <span className={`inline-flex items-center gap-1 text-[12px] font-bold px-2.5 py-1 rounded-lg ${
                           t.status === 'GRACE'
                             ? 'bg-orange-50 text-orange-600 border border-orange-100'
                             : isExpiringSoon
-                              ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                              ? 'bg-blue-50 text-blue-600 border border-blue-100'
                               : 'text-slate-500'
                         }`}>
                           {(t.status === 'GRACE' || isExpiringSoon) && <AlertTriangle className="w-3 h-3" />}
@@ -402,17 +418,17 @@ export default function TenantsPage() {
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-6 py-4 text-center">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-extrabold ${badge.cls}`}>
                           <Icon className="w-3 h-3" />{badge.label}
                         </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
                           <a href={`/super-admin/tenants/${t.id}`}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all"
                             title="التفاصيل">
                             <TrendingUp className="w-3.5 h-3.5" />
                           </a>
@@ -422,7 +438,7 @@ export default function TenantsPage() {
                             <DollarSign className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => openEdit(t)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all"
                             title="تعديل">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -439,7 +455,7 @@ export default function TenantsPage() {
                           <button onClick={() => openPay(t)}
                             className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">تسديد</button>
                           <button onClick={() => openEdit(t)}
-                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">تعديل</button>
+                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100">تعديل</button>
                           <button onClick={() => openDelete(t)}
                             className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">حذف</button>
                         </div>
@@ -519,7 +535,7 @@ export default function TenantsPage() {
                       ? delName.trim() === delTarget.name.trim()
                         ? 'border-emerald-400 bg-emerald-50 text-emerald-700 focus:ring-emerald-400/30'
                         : 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-400/30'
-                      : 'border-slate-200 text-slate-800 focus:ring-indigo-500/30'
+                      : 'border-slate-200 text-slate-800 focus:ring-blue-500/30'
                   }`}
                 />
               </div>
@@ -556,15 +572,15 @@ export default function TenantsPage() {
 
             <div className="flex gap-3 pt-1">
               <button onClick={() => setDelOpen(false)} disabled={delSaving}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-40">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 إلغاء
               </button>
               <button
                 onClick={submitDelete}
                 disabled={delSaving || delName.trim() !== delTarget.name.trim() || !delEmail || !delPassword}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-rose-600 text-white hover:bg-rose-700 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                className="flex-1 py-2.5 rounded-xl font-bold bg-rose-600 text-white hover:bg-rose-700 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 {delSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                حذف نهائي
+                {delSaving ? 'جاري الحذف...' : 'حذف نهائي'}
               </button>
             </div>
           </div>
@@ -583,7 +599,7 @@ export default function TenantsPage() {
               style={{ borderBottom: '1px solid #f1f5f9' }}>
               <div className="flex items-center gap-3">
                 <div className="relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                  style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
+                  style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 12px rgba(9,75,159,0.3)' }}>
                   <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 60%)' }} />
                   <Edit2 className="w-4 h-4 text-white relative z-10" />
                 </div>
@@ -604,7 +620,7 @@ export default function TenantsPage() {
                 <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
                   style={{ boxShadow: 'none' }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }} />
               </div>
 
@@ -613,7 +629,7 @@ export default function TenantsPage() {
                 <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">خطة الاشتراك</label>
                 <select value={editForm.planId} onChange={e => setEditForm(f => ({ ...f, planId: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none appearance-none cursor-pointer transition-all"
-                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
                   <option value="">— بدون تغيير —</option>
                   {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -625,7 +641,7 @@ export default function TenantsPage() {
                 <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">تاريخ انتهاء الاشتراك</label>
                 <input type="date" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none transition-all"
-                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }} />
               </div>
 
@@ -634,7 +650,7 @@ export default function TenantsPage() {
                 <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">حالة الحساب</label>
                 <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:outline-none appearance-none cursor-pointer transition-all"
-                  onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
                   <option value="ACTIVE">✅ نشط</option>
                   <option value="TRIAL">🔵 تجربة</option>
@@ -642,6 +658,37 @@ export default function TenantsPage() {
                   <option value="SUSPENDED">🟡 معلق</option>
                   <option value="CANCELLED">🔴 ملغى</option>
                 </select>
+              </div>
+
+              {/* AI Daily Limit */}
+              <div>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5 text-blue-400" />
+                  حد استخدام المساعد الذكي يومياً
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number" min="0" max="10000" dir="ltr"
+                    value={editForm.aiDailyLimit}
+                    onChange={e => setEditForm(f => ({ ...f, aiDailyLimit: parseInt(e.target.value) || 0 }))}
+                    className="flex-1 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:outline-none transition-all text-center"
+                    onFocus={e => { e.currentTarget.style.borderColor = '#094B9F'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9,75,159,0.12)' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}
+                  />
+                  <div className="flex gap-1.5">
+                    {[20, 50, 100, 200].map(n => (
+                      <button key={n} type="button"
+                        onClick={() => setEditForm(f => ({ ...f, aiDailyLimit: n }))}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all"
+                        style={editForm.aiDailyLimit === n
+                          ? { background: 'linear-gradient(135deg,#094B9F,#063A8A)', color: 'white', border: '1px solid #094B9F' }
+                          : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">0 = بدون حد | القيمة الافتراضية: 50 استفسار/يوم</p>
               </div>
             </div>
 
@@ -653,14 +700,14 @@ export default function TenantsPage() {
 
             <div className="flex gap-3 px-6 pb-5 pt-1">
               <button onClick={() => setEditOpen(false)} disabled={editSaving}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-40">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 إلغاء
               </button>
               <button onClick={submitEdit} disabled={editSaving}
-                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md"
-                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.3)' }}>
+                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+                style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 4px 16px rgba(9,75,159,0.3)' }}>
                 {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                حفظ التعديلات
+                {editSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
             </div>
           </div>
@@ -765,14 +812,14 @@ export default function TenantsPage() {
 
             <div className="flex gap-3 px-6 pb-5 pt-1">
               <button onClick={() => setPayOpen(false)} disabled={paySaving}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-40">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 إلغاء
               </button>
               <button onClick={submitPay} disabled={paySaving}
-                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md"
+                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
                 style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 16px rgba(16,185,129,0.3)' }}>
                 {paySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                تأكيد التسديد
+                {paySaving ? 'جاري التسديد...' : 'تأكيد التسديد'}
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 'use client'
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState } from 'react'
 import { Building2, Users, AlertTriangle, TrendingUp, CalendarDays, Key } from 'lucide-react'
@@ -37,6 +38,7 @@ function StatCard({ title, value, sub, icon: Icon, colorClass, bgClass }: {
 }
 
 export default function SuperAdminDashboard() {
+  usePageTitle('لوحة تحكم المشرف');
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -80,7 +82,7 @@ export default function SuperAdminDashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center relative overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', boxShadow: '0 8px 24px rgba(124,58,237,0.3)' }}>
+            style={{ background: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)', boxShadow: '0 8px 24px rgba(14,99,212,0.3)' }}>
             <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%)' }} />
             <Building2 size={22} className="text-white relative z-10" />
           </div>
@@ -92,7 +94,7 @@ export default function SuperAdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard title="إجمالي المنظمات" value={stats.totalTenants} icon={Building2} colorClass="text-indigo-600" bgClass="bg-indigo-500" />
+        <StatCard title="إجمالي المنظمات" value={stats.totalTenants} icon={Building2} colorClass="text-blue-600" bgClass="bg-blue-500" />
         <StatCard title="نشط" value={stats.activeTenants} sub={`${stats.trialTenants} في فترة تجربة`} icon={TrendingUp} colorClass="text-emerald-600" bgClass="bg-emerald-500" />
         <StatCard title="الفروع النشطة" value={stats.totalBranches} icon={Building2} colorClass="text-violet-600" bgClass="bg-violet-500" />
         <StatCard title="معلق" value={stats.suspendedTenants} icon={AlertTriangle} colorClass="text-rose-500" bgClass="bg-rose-500" />
@@ -102,8 +104,8 @@ export default function SuperAdminDashboard() {
         {/* Expiring soon */}
         <div className="glass-panel rounded-[20px] p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-amber-500/10 rounded-xl">
-               <Key className="w-5 h-5 text-amber-600" />
+            <div className="p-2 bg-blue-500/10 rounded-xl">
+               <Key className="w-5 h-5 text-blue-600" />
             </div>
             <h2 className="text-[1rem] font-bold text-slate-800">اشتراكات تنتهي قريباً</h2>
           </div>
@@ -119,10 +121,10 @@ export default function SuperAdminDashboard() {
             
             <div className="group flex items-center justify-between p-4 bg-white/50 hover:bg-white rounded-xl border border-slate-100 transition-all shadow-sm hover:shadow-md">
               <div className="flex items-center gap-3">
-                 <div className="w-2 h-2 rounded-full bg-amber-400" />
+                 <div className="w-2 h-2 rounded-full bg-blue-400" />
                  <span className="text-[13px] font-bold text-slate-700">تنتهي خلال 30 يوماً</span>
               </div>
-              <span className="px-3 py-1 bg-amber-50 text-amber-700 font-bold rounded-lg text-sm">{stats.expiringSoon30}</span>
+              <span className="px-3 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg text-sm">{stats.expiringSoon30}</span>
             </div>
           </div>
         </div>
@@ -136,7 +138,7 @@ export default function SuperAdminDashboard() {
             <h2 className="text-[1rem] font-bold text-slate-800">هذا الشهر</h2>
           </div>
 
-          <div className="flex items-center gap-5 p-5 bg-gradient-to-br from-blue-50 to-indigo-50/50 rounded-2xl border border-blue-100/50 shadow-inner">
+          <div className="flex items-center gap-5 p-5 bg-gradient-to-br from-blue-50 to-blue-50/50 rounded-2xl border border-blue-100/50 shadow-inner">
             <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center">
               <Users className="w-6 h-6 text-blue-600" />
             </div>

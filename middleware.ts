@@ -19,14 +19,21 @@ const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
   '/api/auth/refresh',
+  '/api/auth/desktop-verify',
+  '/api/sync/',
   '/_next',
   '/favicon.ico',
   '/logo.png',
+  '/logo.jpg',
+  '/logo.ico',
   '/activate',
 ]
 
 function isPublic(pathname: string) {
-  return PUBLIC_PATHS.some(p => pathname.startsWith(p))
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) return true
+  // Branch activation — called by desktop main process with activationCode, no user JWT
+  if (/^\/api\/branches\/[^/]+\/activate$/.test(pathname)) return true
+  return false
 }
 
 // ─── Super Admin paths ────────────────────────────────────────────────────────
@@ -47,29 +54,23 @@ const CASHIER_ALLOWED = [
   '/api/auth',
 ]
 
+// Pages the stock-keeper can visit
 const STOCK_KEEPER_ALLOWED = [
-  '/dashboard/inventory',
-  '/dashboard/purchases',
-  '/dashboard/suppliers',
-  '/dashboard/transfers',
+  '/inventory',
+  '/purchases/suppliers',
   '/api/inventory',
-  '/api/purchases',
-  '/api/suppliers',
-  '/api/transfers',
   '/api/products',
-  '/api/auth',
+  '/api/suppliers',
+  '/api/purchases',
   '/api/batches',
+  '/api/transfers',
+  '/api/auth',
 ]
 
-const BRANCH_MANAGER_ALLOWED = [
-  '/dashboard',
-  '/api/dashboard',
-  '/api/reports',
-  '/api/expenses',
-  '/api/discounts',
-  '/api/audit',
-  ...CASHIER_ALLOWED,
-  ...STOCK_KEEPER_ALLOWED,
+// Sub-paths inside allowed prefixes that stock-keepers must NOT access
+const STOCK_KEEPER_BLOCKED = [
+  '/purchases/suppliers/smart-buy',
+  '/transfers',
 ]
 
 function isAllowed(pathname: string, allowList: string[]): boolean {
@@ -104,12 +105,7 @@ export async function middleware(request: NextRequest) {
   let payload: Awaited<ReturnType<typeof verifyAccessToken>>
   try {
     payload = await verifyAccessToken(token)
-  } catch (err: any) {
-    const isDev = process.env.NODE_ENV === 'development'
-    const isTransient = err?.code !== 'ERR_JWT_EXPIRED' && err?.code !== 'ERR_JWS_INVALID'
-    if (isDev && isTransient && token && token.length > 20) {
-      return NextResponse.next()
-    }
+  } catch {
     return redirectOrUnauthorized(request, pathname)
   }
 
@@ -125,12 +121,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // ── Inject tenant context headers ────────────────────────────────────────
+  // NOTE: tenant/user context is derived from the verified token inside each
+  // route via getAuthContext() — never trust client-supplied x-* headers.
   const response = NextResponse.next()
-  response.headers.set('x-tenant-id', payload.tenantId ?? '')
-  response.headers.set('x-user-id',   payload.sub)
-  response.headers.set('x-user-role', role)
-  if (payload.branchId) response.headers.set('x-branch-id', payload.branchId)
 
   // ── Role-based path restrictions ─────────────────────────────────────────
 
@@ -140,16 +133,13 @@ export async function middleware(request: NextRequest) {
       : NextResponse.redirect(new URL('/pos', request.url))
   }
 
-  if (role === 'STOCK_KEEPER' && !isAllowed(pathname, STOCK_KEEPER_ALLOWED)) {
-    return pathname.startsWith('/api/')
-      ? NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
-      : NextResponse.redirect(new URL('/dashboard/inventory', request.url))
-  }
-
-  if (role === 'BRANCH_MANAGER' && !isAllowed(pathname, BRANCH_MANAGER_ALLOWED)) {
-    return pathname.startsWith('/api/')
-      ? NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
-      : NextResponse.redirect(new URL('/dashboard', request.url))
+  if (role === 'STOCK_KEEPER') {
+    const blocked = STOCK_KEEPER_BLOCKED.some(p => pathname.startsWith(p))
+    if (blocked || !isAllowed(pathname, STOCK_KEEPER_ALLOWED)) {
+      return pathname.startsWith('/api/')
+        ? NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
+        : NextResponse.redirect(new URL('/inventory', request.url))
+    }
   }
 
   return response
@@ -163,5 +153,5 @@ function redirectOrUnauthorized(request: NextRequest, pathname: string) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo\\.png|logo\\.jpg|logo\\.ico).*)'],
 }

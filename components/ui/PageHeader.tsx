@@ -13,7 +13,7 @@ export default function PageHeader({
     title,
     subtitle,
     icon: Icon,
-    gradient = 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    gradient = 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)',
     actions
 }: PageHeaderProps) {
     const isCSS = gradient.includes('(');
@@ -26,7 +26,7 @@ export default function PageHeader({
                     className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 relative overflow-hidden"
                     style={{
                         background: isCSS ? gradient : undefined,
-                        boxShadow: '0 8px 24px rgba(99,102,241,0.25)',
+                        boxShadow: '0 8px 24px rgba(9,75,159,0.25)',
                     }}
                 >
                     {!isCSS && (

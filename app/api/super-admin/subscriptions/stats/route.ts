@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/multi-tenant/prisma'
+import { withCloudDb } from '@/lib/cloud-guard'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET() { return withCloudDb(async () => {
   const now     = new Date()
   const in7Days = new Date(Date.now() + 7 * 86400_000)
 
@@ -48,4 +49,4 @@ export async function GET() {
     },
     lists: { active, trial, expiringSoon, grace, suspended, cancelled },
   })
-}
+}) }

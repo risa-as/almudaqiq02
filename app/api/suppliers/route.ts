@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,21 +59,66 @@ export async function POST(request: NextRequest) {
     const { tenantId } = auth
 
     const body = await request.json()
-    const { name, phone, address, balance, creditLimit, notes } = body
+    const { name, phone, address, balance, creditLimit, notes, branchId } = body
 
     if (!name) return NextResponse.json({ error: 'اسم المورد مطلوب' }, { status: 400 })
 
-    const supplier = await prisma.supplier.create({
-      data: {
-        tenant:  { connect: { id: tenantId } },
-        name,
-        phone:   phone   || undefined,
-        address: address || undefined,
-        balance: Number(balance) || 0,
-        creditLimit: creditLimit ? Number(creditLimit) : null,
-        notes: notes || null,
-      },
+    const openingBalance = Number(balance) || 0
+    // Attribute the opening balance to the active branch so branch-scoped and
+    // global views stay consistent. Falls back to the user's branch, else null.
+    const openingBranch =
+      branchId && branchId !== 'all' ? String(branchId) : (auth.branchId ?? null)
+
+    const { supplier, openingEntry } = await prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.create({
+        data: {
+          tenant:  { connect: { id: tenantId } },
+          name,
+          phone:   phone   || undefined,
+          address: address || undefined,
+          balance: openingBalance,
+          creditLimit: creditLimit ? Number(creditLimit) : null,
+          notes: notes || null,
+        },
+      })
+
+      // Mirror the opening balance as a ledger entry so supplier.balance always
+      // equals the ledger sum (prevents the stored/ledger divergence bug).
+      let openingEntry = null
+      if (openingBalance !== 0) {
+        openingEntry = await tx.supplierLedger.create({
+          data: {
+            supplierId:  supplier.id,
+            branchId:    openingBranch,
+            type:        openingBalance > 0 ? 'PURCHASE' : 'PAYMENT',
+            amount:      Math.abs(openingBalance),
+            description: 'رصيد افتتاحي',
+          },
+        })
+      }
+
+      return { supplier, openingEntry }
     })
+
+    // balance is intentionally synced as 0 — the opening-balance ledger entry
+    // below drives the cloud balance via increment (avoids double-counting).
+    enqueueSync('suppliers', 'INSERT', supplier.id, {
+      id: supplier.id, tenantId, name, phone: phone || null,
+      address: address || null, balance: 0,
+      creditLimit: creditLimit ? Number(creditLimit) : null, notes: notes || null,
+    })
+
+    if (openingEntry) {
+      enqueueSync('supplierLedger', 'INSERT', openingEntry.id, {
+        id:          openingEntry.id,
+        supplierId:  supplier.id,
+        branchId:    openingEntry.branchId,
+        type:        openingEntry.type,
+        amount:      Number(openingEntry.amount),
+        description: openingEntry.description,
+        date:        openingEntry.date,
+      })
+    }
 
     return NextResponse.json(supplier)
   } catch (error) {

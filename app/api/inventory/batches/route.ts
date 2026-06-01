@@ -40,10 +40,24 @@ export async function GET(request: NextRequest) {
             ]
         });
 
+        // Build per-product sequential counters for auto-numbering null/INITIAL batches
+        const productSeq = new Map<string, number>();
+
         // Some minor post-processing to easily map on frontend
-        const result = batches.map(batch => ({
+        const result = batches.map(batch => {
+            let batchNumber = batch.batchNumber;
+            if (!batchNumber || batchNumber === 'INITIAL') {
+                const seq = (productSeq.get(batch.productId) ?? 0) + 1;
+                productSeq.set(batch.productId, seq);
+                const d = new Date(batch.createdAt);
+                const yy = String(d.getFullYear()).slice(2);
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                batchNumber = `B${yy}${mm}${dd}-${String(seq).padStart(2, '0')}`;
+            }
+            return {
             id: batch.id,
-            batchNumber: batch.batchNumber || 'N/A',
+            batchNumber,
             productId: batch.productId,
             productName: batch.product.name,
             categoryId: batch.product.categoryId,
@@ -56,7 +70,8 @@ export async function GET(request: NextRequest) {
             quantity: batch.quantity,
             costPrice: Number(batch.costPrice),
             createdAt: batch.createdAt
-        }));
+            };
+        });
 
         return NextResponse.json(result);
     } catch (error) {
