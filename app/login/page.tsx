@@ -51,21 +51,11 @@ export default function LoginPage() {
     /* Outer wrapper — LTR so left/right are visual, inner text stays RTL */
     <div className="h-screen overflow-hidden flex" dir="ltr">
 
-      {/* ── LEFT PANEL — Login Form ── */}
+      {/* ── LEFT PANEL — Login Form (theme-aware: clean white in light, proper dark in dark) ── */}
       <div
         className="w-full lg:w-[42%] flex flex-col justify-center items-center px-8 relative overflow-hidden"
-        style={{ background: '#0d0b1e' }}
+        style={{ background: 'var(--bg-page)' }}
       >
-        {/* subtle top-left blob */}
-        <div
-          className="absolute w-72 h-72 rounded-full opacity-10 blur-3xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #6366f1, transparent)', top: '-10%', left: '-10%' }}
-        />
-        <div
-          className="absolute w-56 h-56 rounded-full opacity-8 blur-3xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #a78bfa, transparent)', bottom: '5%', right: '0%' }}
-        />
-
         <div className="w-full max-w-sm relative z-10" dir="rtl">
 
           {/* Logo + brand */}
@@ -74,18 +64,19 @@ export default function LoginPage() {
               className="w-20 h-20 overflow-hidden mb-4 flex items-center justify-center"
               style={{
                 borderRadius: '10px',
-                boxShadow: '0 8px 32px rgba(99,102,241,0.45)',
-                border: '1.5px solid rgba(255,255,255,0.12)',
+                background: 'var(--bg-card)',
+                boxShadow: '0 8px 28px rgba(99,102,241,0.18)',
+                border: '1px solid var(--border-color)',
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">
+            <h1 className="text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
               نظام{' '}
               <span
                 style={{
-                  background: 'linear-gradient(90deg, #818cf8, #a78bfa)',
+                  background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -93,35 +84,32 @@ export default function LoginPage() {
                 المدقق
               </span>
             </h1>
-            <p className="text-slate-500 text-xs mt-1 font-medium">إدارة متكاملة لمتجرك</p>
+            <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>إدارة متكاملة لمتجرك</p>
           </div>
 
           {/* Card */}
           <div
             className="rounded-2xl p-6"
             style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 24px 48px rgba(0,0,0,0.35)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 12px 40px rgba(15,23,42,0.08)',
             }}
           >
             <div className="mb-5">
-              <h2 className="text-xl font-bold text-white mb-1">تسجيل الدخول</h2>
-              <p className="text-slate-400 text-sm">أدخل بياناتك للوصول إلى لوحة التحكم</p>
+              <h2 className="text-xl font-bold mb-1" style={{ color: 'var(--text-primary)' }}>تسجيل الدخول</h2>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>أدخل بياناتك للوصول إلى لوحة التحكم</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-3.5">
               {/* Email */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 block">
+                <label className="text-xs font-bold block" style={{ color: 'var(--text-secondary)' }}>
                   البريد الإلكتروني أو اسم المستخدم
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none z-10">
-                    <Mail
-                      size={16}
-                      className="text-slate-500 group-focus-within:text-indigo-400 transition-colors"
-                    />
+                    <Mail size={16} style={{ color: 'var(--text-muted)' }} />
                   </div>
                   <input
                     type="text"
@@ -132,17 +120,17 @@ export default function LoginPage() {
                     dir="ltr"
                     className="w-full pr-10 pl-4 py-3 rounded-xl text-sm font-medium outline-none transition-all"
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.09)',
-                      color: 'white',
+                      background: 'var(--bg-page)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
                     }}
                     onFocus={e => {
-                      e.currentTarget.style.border = '1px solid rgba(99,102,241,0.6)'
-                      e.currentTarget.style.background = 'rgba(99,102,241,0.08)'
+                      e.currentTarget.style.border = '1px solid #6366f1'
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'
                     }}
                     onBlur={e => {
-                      e.currentTarget.style.border = '1px solid rgba(255,255,255,0.09)'
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                      e.currentTarget.style.border = '1px solid var(--border-color)'
+                      e.currentTarget.style.boxShadow = 'none'
                     }}
                   />
                 </div>
@@ -150,13 +138,10 @@ export default function LoginPage() {
 
               {/* Password */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 block">كلمة المرور</label>
+                <label className="text-xs font-bold block" style={{ color: 'var(--text-secondary)' }}>كلمة المرور</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none z-10">
-                    <Lock
-                      size={16}
-                      className="text-slate-500 group-focus-within:text-indigo-400 transition-colors"
-                    />
+                    <Lock size={16} style={{ color: 'var(--text-muted)' }} />
                   </div>
                   <input
                     type="password"
@@ -166,17 +151,17 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     className="w-full pr-10 pl-4 py-3 rounded-xl text-sm font-medium outline-none transition-all"
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.09)',
-                      color: 'white',
+                      background: 'var(--bg-page)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
                     }}
                     onFocus={e => {
-                      e.currentTarget.style.border = '1px solid rgba(99,102,241,0.6)'
-                      e.currentTarget.style.background = 'rgba(99,102,241,0.08)'
+                      e.currentTarget.style.border = '1px solid #6366f1'
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'
                     }}
                     onBlur={e => {
-                      e.currentTarget.style.border = '1px solid rgba(255,255,255,0.09)'
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                      e.currentTarget.style.border = '1px solid var(--border-color)'
+                      e.currentTarget.style.boxShadow = 'none'
                     }}
                   />
                 </div>
@@ -186,9 +171,9 @@ export default function LoginPage() {
                 <div
                   className="text-sm font-semibold p-3 rounded-xl text-center"
                   style={{
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.2)',
-                    color: '#fca5a5',
+                    background: 'rgba(239,68,68,0.12)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#ef4444',
                   }}
                 >
                   {error}
@@ -220,7 +205,7 @@ export default function LoginPage() {
             </form>
           </div>
 
-          <p className="text-center text-xs text-slate-600 mt-4 font-medium">
+          <p className="text-center text-xs mt-4 font-medium" style={{ color: 'var(--text-muted)' }}>
             نظام المدقق — الإصدار 2.0 &nbsp;·&nbsp; جميع الحقوق محفوظة
           </p>
         </div>
