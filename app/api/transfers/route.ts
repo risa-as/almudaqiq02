@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const blocked = await guardFeature('stock_transfers'); if (blocked) return blocked
   const tenantId = auth.tenantId
   const { searchParams } = request.nextUrl
   const status   = searchParams.get('status') ?? undefined
@@ -40,6 +42,7 @@ const CreateSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const blocked = await guardFeature('stock_transfers'); if (blocked) return blocked
   const tenantId = auth.tenantId
   const userId   = auth.userId
   const body = await request.json().catch(() => null)

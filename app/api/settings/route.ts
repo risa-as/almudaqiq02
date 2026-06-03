@@ -6,20 +6,20 @@ import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
 
-async function getTenantId(): Promise<string | null> {
+async function getAuthPayload(): Promise<{ tenantId: string; branchId: string | null; role: string } | null> {
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get('auth-token')?.value
     if (!token) return null
     const payload = await verifyAccessToken(token)
-    return payload.tenantId ?? null
+    if (!payload.tenantId) return null
+    return { tenantId: payload.tenantId, branchId: payload.branchId ?? null, role: payload.role ?? '' }
   } catch {
     return null
   }
 }
 
-async function getBranchId(tenantId: string, fromToken?: string): Promise<string | null> {
-  if (fromToken) return fromToken
+async function firstBranchId(tenantId: string): Promise<string | null> {
   const branch = await prisma.branch.findFirst({
     where: { tenantId },
     select: { id: true },
@@ -28,18 +28,41 @@ async function getBranchId(tenantId: string, fromToken?: string): Promise<string
   return branch?.id ?? null
 }
 
-export async function GET() {
+/**
+ * Each branch owns its own store settings (name, phone, address, footer…).
+ * Owners (ADMIN / SUPER_ADMIN) oversee all branches and freely target the branch
+ * selected in the UI — even if their token carries a branchId. Only branch-bound
+ * roles (cashier, stock keeper, branch manager) are locked to their own branch.
+ */
+async function resolveBranchId(
+  tenantId: string,
+  tokenBranchId: string | null,
+  role: string,
+  candidate?: string | null,
+): Promise<string | null> {
+  const isOwner = role === 'ADMIN' || role === 'SUPER_ADMIN'
+  if (!isOwner && tokenBranchId) return tokenBranchId
+  if (candidate && candidate !== 'all') {
+    const b = await prisma.branch.findFirst({ where: { id: candidate, tenantId }, select: { id: true } })
+    if (b) return b.id
+  }
+  return tokenBranchId ?? firstBranchId(tenantId)
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const tenantId = await getTenantId()
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    const auth = await getAuthPayload()
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    const { tenantId } = auth
 
-    // Return existing settings if found
-    const existing = await prisma.storeSettings.findFirst({ where: { tenantId } })
-    if (existing) return NextResponse.json(existing)
-
-    // First time — need branchId to create
-    const branchId = await getBranchId(tenantId)
+    const branchId = await resolveBranchId(
+      tenantId, auth.branchId, auth.role, request.nextUrl.searchParams.get('branchId'),
+    )
     if (!branchId) return NextResponse.json({ error: 'لا يوجد فرع للمستأجر' }, { status: 400 })
+
+    // Settings are per-branch — return this branch's row (or create its default)
+    const existing = await prisma.storeSettings.findFirst({ where: { tenantId, branchId } })
+    if (existing) return NextResponse.json(existing)
 
     const settings = await prisma.storeSettings.create({
       data: {
@@ -61,14 +84,19 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const tenantId = await getTenantId()
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    const auth = await getAuthPayload()
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    const { tenantId } = auth
 
     const body = await request.json()
-    const { storeName, storePhone, storeAddress, footerMessage, autoPrint, currency } = body
+    const { storeName, storePhone, storeAddress, footerMessage, autoPrint, currency, branchId: bodyBranchId } = body
 
-    // Find existing settings by tenant only — branchId not needed for updates
-    const existing = await prisma.storeSettings.findFirst({ where: { tenantId } })
+    // Resolve the target branch — each branch saves its own settings row.
+    const branchId = await resolveBranchId(tenantId, auth.branchId, auth.role, bodyBranchId)
+    if (!branchId) return NextResponse.json({ error: 'لا يوجد فرع للمستأجر' }, { status: 400 })
+
+    // Look up this branch's settings (scoped by branch, not just tenant)
+    const existing = await prisma.storeSettings.findFirst({ where: { tenantId, branchId } })
 
     if (existing) {
       const updated = await prisma.storeSettings.update({
@@ -92,19 +120,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, settings: updated })
     }
 
-    // No existing settings — create with branchId
-    const cookieStore = await cookies()
-    const token = cookieStore.get('auth-token')?.value
-    const payload = token ? await verifyAccessToken(token).catch(() => null) : null
-    const branchId = await getBranchId(tenantId, payload?.branchId)
-    if (!branchId) return NextResponse.json({ error: 'لا يوجد فرع للمستأجر' }, { status: 400 })
-
+    // No row for this branch yet — create it
     const created = await prisma.storeSettings.create({
       data: {
         tenant:        { connect: { id: tenantId } },
         branch:        { connect: { id: branchId } },
         storeName, storePhone, storeAddress, footerMessage,
         autoPrint: autoPrint ?? false,
+        ...(currency ? { currency } : {}),
       },
     })
     return NextResponse.json({ success: true, settings: created })

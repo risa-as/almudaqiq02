@@ -34,6 +34,9 @@ yarn-error.log*
 
 # env files — keep .env.production (template only, no real secrets) but ignore actual .env
 .env
+.env.bak
+.env.*.bak
+*.bak
 .env.local
 .env.development.local
 .env.test.local
@@ -52,6 +55,9 @@ next-env.d.ts
 
 # Cloud dev build
 .next-cloud/
+
+# Electron/desktop build output (Next standalone + bundled node_modules)
+.next-build/
 
 # Local SQLite databases — never commit real data
 prisma/dev.db

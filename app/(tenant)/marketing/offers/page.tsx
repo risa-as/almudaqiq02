@@ -149,6 +149,71 @@ export default function OffersPage() {
         expired:  offers.filter(isExpired).length,
     }), [offers]);
 
+    if (loading) return (
+        <div className="min-h-screen p-6" dir="rtl" style={{ background: 'var(--bg-page)' }}>
+            <div className="max-w-7xl mx-auto space-y-6">
+                {/* Hero loader */}
+                <div className="flex flex-col items-center justify-center pt-10 pb-4 gap-5">
+                    <div className="relative">
+                        <div className="w-20 h-20 rounded-3xl flex items-center justify-center relative overflow-hidden"
+                            style={{ background: 'linear-gradient(135deg,#ec4899,#be185d)', boxShadow: '0 12px 40px rgba(236,72,153,0.4)' }}>
+                            <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg,rgba(255,255,255,0.5) 0%,transparent 60%)' }} />
+                            <Tag size={36} className="text-white relative z-10 sk-spin" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white sk-pulse"
+                            style={{ background: 'linear-gradient(135deg,#f472b6,#ec4899)', boxShadow: '0 2px 8px rgba(236,72,153,0.5)' }} />
+                    </div>
+                    <div className="text-center space-y-1.5">
+                        <p className="text-xl font-black text-slate-800">جاري تحميل العروض التسويقية</p>
+                        <div className="flex items-center justify-center gap-1.5">
+                            {[0, 0.2, 0.4].map((delay, i) => (
+                                <div key={i} className="w-1.5 h-1.5 rounded-full bg-pink-400 sk-pulse" style={{ animationDelay: `${delay}s` }} />
+                            ))}
+                        </div>
+                        <p className="text-sm text-slate-400 font-medium">يتم استرجاع العروض والخصومات الحالية</p>
+                    </div>
+                </div>
+
+                {/* KPI skeletons */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="rounded-2xl p-5 space-y-3" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+                            <div className="flex items-center justify-between">
+                                <div className="skeleton h-3 w-20" />
+                                <div className="skeleton w-9 h-9 rounded-xl" />
+                            </div>
+                            <div className="skeleton h-7 w-16" />
+                        </div>
+                    ))}
+                </div>
+
+                {/* Toolbar skeleton */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+                    <div className="skeleton h-9 flex-1 min-w-[180px] max-w-xs rounded-xl" />
+                    <div className="skeleton h-9 w-48 rounded-xl" />
+                </div>
+
+                {/* Offer card skeletons */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+                            <div className="skeleton h-24 w-full" />
+                            <div className="p-4 space-y-2.5">
+                                <div className="skeleton h-3 w-2/3" />
+                                <div className="skeleton h-3 w-1/2" />
+                                <div className="skeleton h-3 w-3/5" />
+                                <div className="flex gap-2 pt-2">
+                                    <div className="skeleton h-8 flex-1 rounded-xl" />
+                                    <div className="skeleton h-8 flex-1 rounded-xl" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <div className="min-h-screen p-6" dir="rtl" style={{ background: 'var(--bg-page)' }}>
             {dialog}
@@ -185,14 +250,19 @@ export default function OffersPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                        { label: 'إجمالي العروض', value: stats.total,    color: 'text-slate-700',   bg: 'bg-slate-50 border-slate-200',     icon: <Tag size={18} className="text-slate-500"/> },
-                        { label: 'نشطة',          value: stats.active,   color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: <Zap size={18} className="text-emerald-500"/> },
-                        { label: 'متوقفة',        value: stats.inactive, color: 'text-slate-500',   bg: 'bg-slate-50 border-slate-200',     icon: <ToggleLeft size={18} className="text-slate-400"/> },
-                        { label: 'منتهية',        value: stats.expired,  color: 'text-red-600',     bg: 'bg-red-50 border-red-200',         icon: <Calendar size={18} className="text-red-400"/> },
+                        { label: 'إجمالي العروض', value: stats.total,    iconBg: '#f8fafc', iconColor: '#64748b', icon: Tag },
+                        { label: 'نشطة',          value: stats.active,   iconBg: '#ecfdf5', iconColor: '#10b981', icon: Zap },
+                        { label: 'متوقفة',        value: stats.inactive, iconBg: '#f8fafc', iconColor: '#94a3b8', icon: ToggleLeft },
+                        { label: 'منتهية',        value: stats.expired,  iconBg: '#fef2f2', iconColor: '#ef4444', icon: Calendar },
                     ].map(s => (
-                        <div key={s.label} className={`rounded-2xl border p-4 ${s.bg}`}>
-                            <div className="flex items-center justify-between mb-2">{s.icon}<span className="text-xs font-semibold text-[var(--text-muted)]">{s.label}</span></div>
-                            <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+                        <div key={s.label} className="kpi-card">
+                            <div className="kpi-icon" style={{ background: s.iconBg }}>
+                                <s.icon size={18} style={{ color: s.iconColor }} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="kpi-label">{s.label}</p>
+                                <p className="kpi-value">{s.value}</p>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -220,18 +290,7 @@ export default function OffersPage() {
 
                 {/* Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {loading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border-color)] overflow-hidden animate-pulse">
-                                <div className="h-24 bg-gray-100" />
-                                <div className="p-5 space-y-3">
-                                    <div className="h-4 bg-gray-100 rounded w-3/4" />
-                                    <div className="h-3 bg-gray-100 rounded w-1/2" />
-                                    <div className="h-3 bg-gray-100 rounded w-2/3" />
-                                </div>
-                            </div>
-                        ))
-                    ) : filtered.length === 0 ? (
+                    {filtered.length === 0 ? (
                         <div className="col-span-full py-20 flex flex-col items-center gap-3 text-[var(--text-muted)]">
                             <div className="w-16 h-16 rounded-2xl bg-pink-50 flex items-center justify-center">
                                 <Tag size={28} className="text-pink-300" />

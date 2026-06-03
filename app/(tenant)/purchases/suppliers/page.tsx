@@ -1,7 +1,7 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Users, Phone, MapPin, Plus, Search, FileText, Printer, FileSpreadsheet, Edit, Trash2, DollarSign, RefreshCw, Package, Loader2, Wallet, AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
@@ -145,18 +145,24 @@ export default function SuppliersPage() {
         );
     }, [searchTerm, suppliers, debtFilter]);
 
+    // Latest-request guard: a slow fetch for a previous branch must never overwrite
+    // the result of a newer fetch (race condition on branch switch).
+    const fetchSeqRef = useRef(0);
     const fetchSuppliers = async () => {
+        const seq = ++fetchSeqRef.current;
         try {
             setLoading(true);
             const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
             const res = await fetch(`/api/suppliers${branchQuery}`, { cache: 'no-store' });
             if (res.ok) {
                 const data = await res.json();
-                setSuppliers(data);
-                setFilteredSuppliers(data);
+                if (seq === fetchSeqRef.current) {
+                    setSuppliers(data);
+                    setFilteredSuppliers(data);
+                }
             }
         } catch (err) { console.error(err); }
-        finally { setLoading(false); }
+        finally { if (seq === fetchSeqRef.current) setLoading(false); }
     };
 
     const handleSaveSupplier = async (e: React.FormEvent) => {
@@ -500,10 +506,10 @@ export default function SuppliersPage() {
                         <button onClick={handlePrint} className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 border border-gray-200 rounded-lg flex items-center gap-2 font-bold shadow-sm transition-colors text-sm">
                             <Printer size={16} /> طباعة
                         </button>
-                        <button onClick={handleExport} className="bg-white hover:bg-green-50 text-green-700 px-3 py-2 border border-green-200 rounded-lg flex items-center gap-2 font-bold shadow-sm transition-colors text-sm">
+                        <button onClick={handleExport} className="btn-success">
                             <FileSpreadsheet size={16} /> تصدير
                         </button>
-                        <button onClick={() => { resetForm(); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all" style={{ background: 'linear-gradient(135deg,#094B9F 0%,#063A8A 100%)', boxShadow: '0 6px 20px rgba(9,75,159,.35)' }}>
+                        <button onClick={() => { resetForm(); setShowModal(true); }} className="btn-primary">
                             <Plus size={20} /> إضافة مورد
                         </button>
                     </div>
@@ -515,18 +521,18 @@ export default function SuppliersPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 no-print">
                     {[
-                        { label: 'إجمالي الموردين',  value: supplierStats.total,                     icon: Users,         color: 'text-blue-700', bg: 'bg-blue-50',  border: 'border-blue-100' },
-                        { label: 'موردون لهم رصيد',   value: supplierStats.debtors,                   icon: TrendingDown,  color: 'text-rose-700',   bg: 'bg-rose-50',    border: 'border-rose-100' },
-                        { label: 'إجمالي المستحقات',  value: formatCurrency(supplierStats.totalDebt), icon: Wallet,        color: 'text-blue-700',  bg: 'bg-blue-50',   border: 'border-blue-100' },
-                        { label: 'تجاوزوا حد الائتمان', value: supplierStats.overLimit,               icon: AlertTriangle, color: 'text-red-700',    bg: 'bg-red-50',     border: 'border-red-100' },
-                    ].map(({ label, value, icon: Icon, color, bg, border }) => (
-                        <div key={label} className={`rounded-2xl border ${border} ${bg} p-4 flex items-center gap-3`}>
-                            <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0">
-                                <Icon size={18} className={color} />
+                        { label: 'إجمالي الموردين',     value: supplierStats.total,                     icon: Users,         iconBg: '#eef2ff', iconColor: '#094B9F' },
+                        { label: 'موردون لهم رصيد',      value: supplierStats.debtors,                   icon: TrendingDown,  iconBg: '#fef2f2', iconColor: '#ef4444' },
+                        { label: 'إجمالي المستحقات',     value: formatCurrency(supplierStats.totalDebt), icon: Wallet,        iconBg: '#ecfdf5', iconColor: '#10b981' },
+                        { label: 'تجاوزوا حد الائتمان', value: supplierStats.overLimit,                 icon: AlertTriangle, iconBg: '#fffbeb', iconColor: '#f59e0b' },
+                    ].map(({ label, value, icon: Icon, iconBg, iconColor }) => (
+                        <div key={label} className="kpi-card">
+                            <div className="kpi-icon" style={{ background: iconBg }}>
+                                <Icon size={18} style={{ color: iconColor }} />
                             </div>
                             <div className="min-w-0">
-                                <p className={`text-lg font-extrabold ${color} truncate`}>{value}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                                <p className="kpi-label">{label}</p>
+                                <p className="kpi-value">{value}</p>
                             </div>
                         </div>
                     ))}
@@ -562,7 +568,7 @@ export default function SuppliersPage() {
 
                 <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="w-full text-right data-table">
                             <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-1/4">المورد</th>
@@ -749,7 +755,7 @@ export default function SuppliersPage() {
                             </div>
                             <div className="flex gap-3 pt-4">
                                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition-colors text-sm">إلغاء</button>
-                                <button type="submit" disabled={isSaving} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">{isSaving ? <Loader2 size={15} className="animate-spin" /> : null}{isSaving ? 'جاري الحفظ...' : editingId ? 'تحديث البيانات' : 'حفظ البيانات'}</button>
+                                <button type="submit" disabled={isSaving} className="btn-primary flex-1 disabled:opacity-60 disabled:cursor-not-allowed">{isSaving ? <Loader2 size={15} className="animate-spin" /> : null}{isSaving ? 'جاري الحفظ...' : editingId ? 'تحديث البيانات' : 'حفظ البيانات'}</button>
                             </div>
                         </form>
                     </div>
@@ -786,7 +792,7 @@ export default function SuppliersPage() {
                             </div>
                             <div className="flex gap-3 pt-4">
                                 <button type="button" onClick={() => setShowPayModal(false)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">إلغاء</button>
-                                <button type="submit" disabled={isPaySaving} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-colors shadow-md shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">{isPaySaving ? <Loader2 size={16} className="animate-spin" /> : null}{isPaySaving ? 'جاري الحفظ...' : 'تأكيد التسديد'}</button>
+                                <button type="submit" disabled={isPaySaving} className="btn-success flex-1 disabled:opacity-60 disabled:cursor-not-allowed">{isPaySaving ? <Loader2 size={16} className="animate-spin" /> : null}{isPaySaving ? 'جاري الحفظ...' : 'تأكيد التسديد'}</button>
                             </div>
                         </form>
                     </div>
@@ -844,7 +850,7 @@ export default function SuppliersPage() {
                             </div>
                             <div className="flex gap-3 pt-2">
                                 <button type="button" onClick={() => setShowAdjustModal(false)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-colors text-sm">إلغاء</button>
-                                <button type="submit" disabled={isAdjusting} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                                <button type="submit" disabled={isAdjusting} className="btn-primary flex-1 disabled:opacity-60 disabled:cursor-not-allowed">
                                     {isAdjusting ? <Loader2 size={15} className="animate-spin" /> : null}
                                     {isAdjusting ? 'جاري الحفظ...' : 'تأكيد التسوية'}
                                 </button>
@@ -1021,7 +1027,7 @@ export default function SuppliersPage() {
                                 <button
                                     type="submit"
                                     disabled={isReturning || !selectedBatchId || !returnQty || supplierBatches.length === 0}
-                                    className="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="btn-primary flex-1 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                     {isReturning ? <Loader2 size={16} className="animate-spin" /> : null}
                                     {isReturning ? 'جاري المعالجة...' : 'تأكيد تسجيل المرتجع'}

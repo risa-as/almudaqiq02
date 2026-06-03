@@ -4,14 +4,33 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Check, X, Crown, Loader2, Users, GitBranch, AlertTriangle, Sparkles, Trash2 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
+import { FEATURES, TIER_META, parseFeatures, type FeatureMap } from '@/lib/features'
+
+// Small chip showing which plan tier a feature normally belongs to.
+function TierChip({ tier }: { tier: 'pro' | 'enterprise' }) {
+  const isEnterprise = tier === 'enterprise'
+  return (
+    <span
+      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+        isEnterprise
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : 'bg-violet-50 text-violet-700 border-violet-200'
+      }`}
+    >
+      {TIER_META[tier].label}
+    </span>
+  )
+}
 
 interface Plan {
   id: string
   name: string
   maxBranches: number
+  maxUsers: number
   monthlyPrice: number
   yearlyPrice: number
   isActive: boolean
+  features: FeatureMap
   _count: { subscriptions: number }
 }
 
@@ -43,18 +62,28 @@ export default function PlansPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating]     = useState(false)
   const [createError, setCreateError] = useState('')
-  const [newPlan, setNewPlan] = useState({
+  const [newPlan, setNewPlan] = useState<{
+    name: string
+    maxBranches: number
+    maxUsers: number
+    monthlyPrice: number
+    yearlyPrice: number
+    features: FeatureMap
+  }>({
     name: '',
     maxBranches: 5,
+    maxUsers: 5,
     monthlyPrice: 0,
     yearlyPrice: 0,
+    features: {},
   })
 
   const load = () => {
     setLoading(true)
     fetch('/api/super-admin/plans')
       .then(r => r.json())
-      .then(setPlans)
+      .then((rows: Array<Plan & { features: string }>) =>
+        setPlans(rows.map(r => ({ ...r, features: parseFeatures(r.features as unknown as string) }))))
       .finally(() => setLoading(false))
   }
 
@@ -107,7 +136,7 @@ export default function PlansPage() {
         setCreateError(data.error ? 'يرجى التحقق من صحة البيانات' : data.error)
       } else {
         setShowCreate(false)
-        setNewPlan({ name: '', maxBranches: 5, monthlyPrice: 0, yearlyPrice: 0 })
+        setNewPlan({ name: '', maxBranches: 5, maxUsers: 5, monthlyPrice: 0, yearlyPrice: 0, features: {} })
         load()
       }
     } catch {
@@ -206,7 +235,27 @@ export default function PlansPage() {
                       />
                     ) : (
                       <span className="font-extrabold text-slate-800 text-lg">
-                        {p.maxBranches === -1 ? <span className="text-emerald-600">∞ غير محدود</span> : p.maxBranches}
+                        {p.maxBranches <= 0 ? <span className="text-emerald-600">∞ غير محدود</span> : p.maxBranches}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Users */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm font-semibold">
+                      <Users className="w-4 h-4" />
+                      حد المستخدمين
+                    </div>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        value={form.maxUsers ?? p.maxUsers}
+                        onChange={e => setForm(f => ({ ...f, maxUsers: +e.target.value }))}
+                        className="w-24 text-left border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none"
+                      />
+                    ) : (
+                      <span className="font-extrabold text-slate-800 text-lg">
+                        {p.maxUsers <= 0 ? <span className="text-emerald-600">∞ غير محدود</span> : p.maxUsers}
                       </span>
                     )}
                   </div>
@@ -250,6 +299,55 @@ export default function PlansPage() {
                       <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-xs font-bold text-emerald-700 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5" />
                         توفير {fmt(p.monthlyPrice * 12 - p.yearlyPrice)} د.ع سنوياً عند الدفع السنوي
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-px bg-slate-100" />
+
+                  {/* Features */}
+                  <div className="space-y-2">
+                    <div className="text-slate-500 text-sm font-semibold">المميزات المتاحة</div>
+                    {isEditing ? (
+                      <div className="space-y-0.5">
+                        {FEATURES.map(f => {
+                          const eff = (form.features ?? p.features) || {}
+                          const on = eff[f.key] === true
+                          return (
+                            <label key={f.key} className="flex items-center justify-between gap-3 py-1.5 cursor-pointer">
+                              <span className="flex items-center gap-2 text-sm text-slate-700">
+                                {f.label}
+                                <TierChip tier={f.tier} />
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setForm(prev => ({
+                                  ...prev,
+                                  features: { ...(prev.features ?? p.features), [f.key]: !on },
+                                }))}
+                                className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                aria-pressed={on}
+                              >
+                                <span
+                                  className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+                                  style={{ left: '2px', transform: on ? 'translateX(20px)' : 'translateX(0)' }}
+                                />
+                              </button>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {FEATURES.filter(f => p.features?.[f.key]).length === 0 ? (
+                          <span className="text-xs text-slate-400">لا مميزات إضافية</span>
+                        ) : (
+                          FEATURES.filter(f => p.features?.[f.key]).map(f => (
+                            <span key={f.key} className="text-xs font-bold px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
+                              {f.label}
+                            </span>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
@@ -403,6 +501,19 @@ export default function PlansPage() {
                 <p className="text-xs text-slate-400 mt-1.5">ضع -1 لمنح فروع غير محدودة</p>
               </div>
 
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1.5">الحد الأقصى للمستخدمين</label>
+                <input
+                  type="number"
+                  min="-1"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-left"
+                  placeholder="-1 = غير محدود"
+                  value={newPlan.maxUsers}
+                  onChange={e => setNewPlan(p => ({ ...p, maxUsers: +e.target.value }))}
+                />
+                <p className="text-xs text-slate-400 mt-1.5">ضع -1 لمنح مستخدمين غير محدودين</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">السعر الشهري (د.ع)</label>
@@ -423,6 +534,37 @@ export default function PlansPage() {
                     value={newPlan.yearlyPrice}
                     onChange={e => setNewPlan(p => ({ ...p, yearlyPrice: +e.target.value }))}
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">المميزات المتاحة</label>
+                <div className="space-y-0.5 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  {FEATURES.map(f => {
+                    const on = newPlan.features[f.key] === true
+                    return (
+                      <label key={f.key} className="flex items-center justify-between gap-3 py-1.5 cursor-pointer">
+                        <span className="flex items-center gap-2 text-sm text-slate-700">
+                          {f.label}
+                          <TierChip tier={f.tier} />
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setNewPlan(prev => ({
+                            ...prev,
+                            features: { ...prev.features, [f.key]: !on },
+                          }))}
+                          className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                          aria-pressed={on}
+                        >
+                          <span
+                            className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+                            style={{ left: '2px', transform: on ? 'translateX(20px)' : 'translateX(0)' }}
+                          />
+                        </button>
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
 

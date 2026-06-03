@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   })
   if (!branch) return NextResponse.json({ error: 'رمز التفعيل غير صحيح' }, { status: 401 })
 
-  const branchToken = await generateBranchToken(branch.id, branch.tenantId)
+  const branchToken = await generateBranchToken(branch.id, branch.tenantId, branch.tokenVersion)
 
   return NextResponse.json({
     branchToken,

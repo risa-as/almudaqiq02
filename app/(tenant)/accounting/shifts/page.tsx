@@ -226,15 +226,15 @@ export default function ShiftsReport() {
 
                 {/* Table */}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right">
-                        <thead className="bg-gray-50/60 border-b border-[var(--border-color)]">
+                    <table className="w-full text-right data-table">
+                        <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                             <tr>
                                 {['#','الكاشير','الفرع','الفتح / الإغلاق','المدة','مبيعات الوردية','العهدة','المتوقع','الفعلي','الفرق'].map(h => (
                                     <th key={h} className="px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50">
+                        <tbody className="divide-y divide-gray-50">
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i}>
@@ -263,7 +263,7 @@ export default function ShiftsReport() {
                                 return (
                                     <React.Fragment key={shift.id}>
                                         <tr
-                                            className={`transition-colors cursor-pointer group ${isExpanded ? 'bg-blue-50/60' : 'hover:bg-slate-50/80'}`}
+                                            className={`transition-colors cursor-pointer group ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-blue-50/50'}`}
                                             onClick={() => setExpandedId(isExpanded ? null : shift.id)}
                                         >
                                             {/* # */}

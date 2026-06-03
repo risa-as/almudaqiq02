@@ -140,7 +140,7 @@ export default async function CustomerStatementPage({ params }: { params: Promis
                     {/* Ledger Table */}
                     <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                         <div className="overflow-x-auto">
-                        <table className="w-full text-right text-sm">
+                        <table className="w-full text-right text-sm data-table">
                             <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التاريخ</th>

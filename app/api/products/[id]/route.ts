@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/audit';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { canManageStock } from '@/lib/auth';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
 
@@ -9,8 +10,10 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح لك بإدارة المنتجات' }, { status: 403 });
+    const tenantId = auth.tenantId;
 
     try {
         const { id } = await params;
@@ -39,8 +42,10 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح لك بإدارة المنتجات' }, { status: 403 });
+    const tenantId = auth.tenantId;
 
     try {
         const { id } = await params;
@@ -149,8 +154,10 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح لك بإدارة المنتجات' }, { status: 403 });
+    const tenantId = auth.tenantId;
 
     try {
         const { id } = await params;
@@ -178,8 +185,10 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح لك بإدارة المنتجات' }, { status: 403 });
+    const tenantId = auth.tenantId;
 
     try {
         const { id } = await params;

@@ -306,7 +306,7 @@ export default function ExpensesPage() {
             {/* List */}
             <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full text-right">
+                <table className="w-full text-right data-table">
                     <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                         <tr>
                             <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">العنوان</th>
@@ -404,7 +404,7 @@ export default function ExpensesPage() {
                                 <label className="block text-sm font-bold text-gray-700 mb-1">ملاحظات (اختياري)</label>
                                 <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-red-500 outline-none h-24" placeholder="تفاصيل إضافية..." />
                             </div>
-                            <button type="submit" disabled={isSaving} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                            <button type="submit" disabled={isSaving} className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed">
                                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : null}
                                 {isSaving ? 'جاري الحفظ...' : editId ? 'حفظ التغييرات' : 'حفظ المصروف'}
                             </button>

@@ -33,7 +33,8 @@ function copyDir(src, dest, label) {
 module.exports = async function afterPack(context) {
     const appOutDir = context.appOutDir;
     const serverDest = path.join(appOutDir, 'resources', 'server');
-    const standaloneSrc = path.join(__dirname, '..', '.next', 'standalone');
+    const distDir = process.env.NEXT_DIST_DIR || '.next';
+    const standaloneSrc = path.join(__dirname, '..', distDir, 'standalone');
 
     const targets = [
         {

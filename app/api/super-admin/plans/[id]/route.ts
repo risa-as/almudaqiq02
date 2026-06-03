@@ -8,9 +8,11 @@ export const dynamic = 'force-dynamic'
 const UpdateSchema = z.object({
   name:         z.string().min(2).optional(),
   maxBranches:  z.number().int().min(-1).optional(),
+  maxUsers:     z.number().int().min(-1).optional(),
   monthlyPrice: z.number().min(0).optional(),
   yearlyPrice:  z.number().min(0).optional(),
   isActive:     z.boolean().optional(),
+  features:     z.record(z.boolean()).optional(),
 })
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -20,7 +22,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const parsed = UpdateSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-    const plan = await prisma.subscriptionPlan.update({ where: { id }, data: parsed.data })
+    // `features` is stored as a JSON string column — serialize it when present.
+    const { features, ...rest } = parsed.data
+    const data = { ...rest, ...(features ? { features: JSON.stringify(features) } : {}) }
+
+    const plan = await prisma.subscriptionPlan.update({ where: { id }, data })
     return NextResponse.json(plan)
   })
 }

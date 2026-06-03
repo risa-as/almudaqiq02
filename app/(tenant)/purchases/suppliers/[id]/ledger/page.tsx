@@ -177,7 +177,7 @@ export default function SupplierLedgerPage({ params }: { params: Promise<{ id: s
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right">
+                    <table className="w-full text-right data-table">
                         <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                             <tr>
                                 {['التاريخ', 'نوع الحركة', 'البيان', 'المبلغ', 'الرصيد بعد الحركة'].map(h => (

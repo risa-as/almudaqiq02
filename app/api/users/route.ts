@@ -8,7 +8,7 @@ import { logCloudDelete } from '@/lib/sync-delete-log';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     const tenantId = auth.tenantId;
@@ -16,9 +16,30 @@ export async function GET(_request: NextRequest) {
     try {
         const callerRole = auth.role;
 
+        // Branch isolation: each branch sees its own users + managers (ADMIN /
+        // SUPER_ADMIN have branchId = null and appear in every branch).
+        // Branch-bound callers are locked to their own branch; owners may target a
+        // specific branch via the query param (or "all" / none → every user).
+        // Owners (ADMIN / SUPER_ADMIN) oversee all branches and use the branch
+        // selected in the UI even if their token carries a branchId; only branch-bound
+        // roles are locked to their own branch.
+        const param = request.nextUrl.searchParams.get('branchId');
+        const isOwner = callerRole === 'ADMIN' || callerRole === 'SUPER_ADMIN';
+        const specificBranch = !isOwner && auth.branchId
+            ? auth.branchId
+            : (param && param !== 'all' ? param : null);
+
+        const where: any = { tenantId };
+        if (specificBranch) {
+            where.OR = [
+                { branchId: specificBranch },
+                { role: { in: ['ADMIN', 'SUPER_ADMIN'] } },
+            ];
+        }
+
         const users = await prisma.user.findMany({
-            where: { tenantId },
-            select: { id: true, username: true, email: true, role: true, createdAt: true },
+            where,
+            select: { id: true, username: true, email: true, role: true, branchId: true, createdAt: true },
             orderBy: { createdAt: 'desc' }
         });
 
@@ -41,7 +62,7 @@ export async function POST(request: NextRequest) {
     try {
         const callerRole = auth.role;
         const body = await request.json();
-        const { email, password, role, username: rawUsername } = body;
+        const { email, password, role, username: rawUsername, branchId: bodyBranchId } = body;
 
         if (!email || !password) {
             return NextResponse.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, { status: 400 });
@@ -61,6 +82,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'غير مصرح لك بإنشاء مستخدم بهذا الدور' }, { status: 403 });
         }
 
+        // فرض حد المستخدمين حسب الخطة (maxUsers = -1 يعني غير محدود)
+        const sub = await prisma.tenantSubscription.findUnique({
+            where: { tenantId },
+            include: { plan: true },
+        });
+        if (sub && sub.plan.maxUsers > 0) {
+            const userCount = await prisma.user.count({ where: { tenantId } });
+            if (userCount >= sub.plan.maxUsers) {
+                return NextResponse.json(
+                    { error: `لقد وصلت للحد الأقصى من المستخدمين (${sub.plan.maxUsers}) في خطتك الحالية` },
+                    { status: 403 }
+                );
+            }
+        }
+
         const existing = await prisma.user.findFirst({ where: { email, tenantId } });
         if (existing) {
             return NextResponse.json({ error: 'البريد الإلكتروني مستخدم مسبقاً' }, { status: 400 });
@@ -71,13 +107,33 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'اسم المستخدم مستخدم مسبقاً' }, { status: 400 });
         }
 
+        // Branch assignment: managers (ADMIN / SUPER_ADMIN) belong to no branch
+        // (branchId = null → visible in all branches). All other roles are bound to
+        // a branch — a branch-bound creator forces their own branch; an owner uses
+        // the selected branch from the request, else the tenant's first branch.
+        const isManagerRole = ['ADMIN', 'SUPER_ADMIN'].includes(requestedRole);
+        const isOwnerCaller = ['ADMIN', 'SUPER_ADMIN'].includes(callerRole);
+        let assignedBranchId: string | null = null;
+        if (!isManagerRole) {
+            // Owner creators assign the new user to the branch selected in the UI;
+            // branch-bound creators assign to their own branch. Fall back to first branch.
+            const preferred = isOwnerCaller
+                ? (bodyBranchId && bodyBranchId !== 'all' ? bodyBranchId : null)
+                : (auth.branchId ?? (bodyBranchId && bodyBranchId !== 'all' ? bodyBranchId : null));
+            assignedBranchId =
+                preferred
+                ?? (await prisma.branch.findFirst({ where: { tenantId }, select: { id: true }, orderBy: { createdAt: 'asc' } }))?.id
+                ?? null;
+        }
+
         const newUser = await prisma.user.create({
             data: {
                 username,
                 email,
                 password: await hashPassword(password),
                 role: requestedRole,
-                tenant: { connect: { id: tenantId } }
+                tenant: { connect: { id: tenantId } },
+                ...(assignedBranchId ? { branch: { connect: { id: assignedBranchId } } } : {}),
             }
         });
 

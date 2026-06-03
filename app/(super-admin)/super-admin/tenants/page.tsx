@@ -6,22 +6,24 @@ import { useRouter } from 'next/navigation'
 import {
   Plus, Search, Building2, CheckCircle, XCircle, Clock,
   SearchX, AlertTriangle, DollarSign, Edit2, X, Save,
-  Loader2, TrendingUp, Users, Ban, Trash2, Bot
+  Loader2, TrendingUp, Users, Ban, Trash2, Bot, Sparkles
 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
+import { FEATURES, TIER_META, parseFeatures, parseFeatureOverrides, type FeatureMap } from '@/lib/features'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Plan { id: string; name: string }
+interface Plan { id: string; name: string; features: FeatureMap }
 
 interface Tenant {
   id: string; name: string; status: string; createdAt: string
   aiDailyLimit: number
   users: { email: string | null }[]
   subscription?: {
-    plan: { id: string; name: string }
+    plan: { id: string; name: string; features?: string }
     endDate?: string
     trialEndDate?: string
     gracePeriodEndsAt?: string
+    featureOverrides?: string
   }
   _count: { branches: number; users: number }
 }
@@ -77,7 +79,7 @@ export default function TenantsPage() {
   // Edit modal
   const [editOpen,   setEditOpen]   = useState(false)
   const [editTarget, setEditTarget] = useState<Tenant | null>(null)
-  const [editForm,   setEditForm]   = useState({ name: '', planId: '', endDate: '', status: '', aiDailyLimit: 50 })
+  const [editForm,   setEditForm]   = useState<{ name: string; planId: string; endDate: string; status: string; aiDailyLimit: number; featureOverrides: FeatureMap }>({ name: '', planId: '', endDate: '', status: '', aiDailyLimit: 50, featureOverrides: {} })
   const [editSaving, setEditSaving] = useState(false)
   const [editError,  setEditError]  = useState('')
 
@@ -111,7 +113,11 @@ export default function TenantsPage() {
 
   useEffect(() => {
     fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
-    fetch('/api/super-admin/plans').then(r => r.json()).then(setPlans).catch(() => {})
+    fetch('/api/super-admin/plans')
+      .then(r => r.json())
+      .then((rows: Array<{ id: string; name: string; features: string }>) =>
+        setPlans(rows.map(p => ({ id: p.id, name: p.name, features: parseFeatures(p.features) }))))
+      .catch(() => {})
   }, [])
 
   // ── Delete Modal ────────────────────────────────────────────────────────────
@@ -155,11 +161,12 @@ export default function TenantsPage() {
   function openEdit(t: Tenant) {
     setEditTarget(t)
     setEditForm({
-      name:         t.name,
-      planId:       t.subscription?.plan?.id ?? '',
-      endDate:      t.subscription?.endDate ? t.subscription.endDate.slice(0, 10) : '',
-      status:       t.status,
-      aiDailyLimit: t.aiDailyLimit ?? 50,
+      name:             t.name,
+      planId:           t.subscription?.plan?.id ?? '',
+      endDate:          t.subscription?.endDate ? t.subscription.endDate.slice(0, 10) : '',
+      status:           t.status,
+      aiDailyLimit:     t.aiDailyLimit ?? 50,
+      featureOverrides: parseFeatureOverrides(t.subscription?.featureOverrides),
     })
     setEditError('')
     setEditOpen(true)
@@ -173,11 +180,12 @@ export default function TenantsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name:         editForm.name,
-          status:       editForm.status,
-          planId:       editForm.planId || undefined,
-          endDate:      editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
-          aiDailyLimit: Number(editForm.aiDailyLimit),
+          name:             editForm.name,
+          status:           editForm.status,
+          planId:           editForm.planId || undefined,
+          endDate:          editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
+          aiDailyLimit:     Number(editForm.aiDailyLimit),
+          featureOverrides: editForm.featureOverrides,
         }),
       })
       if (!res.ok) {
@@ -591,11 +599,12 @@ export default function TenantsPage() {
       {editOpen && editTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() => setEditOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          <div className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden"
+            style={{ maxWidth: '552px', maxHeight: '90vh' }}
             onClick={e => e.stopPropagation()}>
 
             {/* Modal Header */}
-            <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3"
+            <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3 shrink-0"
               style={{ borderBottom: '1px solid #f1f5f9' }}>
               <div className="flex items-center gap-3">
                 <div className="relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
@@ -613,7 +622,7 @@ export default function TenantsPage() {
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto">
               {/* Name */}
               <div>
                 <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">الاسم التجاري</label>
@@ -634,6 +643,28 @@ export default function TenantsPage() {
                   <option value="">— بدون تغيير —</option>
                   {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+
+                {/* Features granted by the selected (or current) plan */}
+                {(() => {
+                  const pid = editForm.planId || editTarget?.subscription?.plan?.id
+                  const plan = plans.find(p => p.id === pid)
+                  if (!plan) return null
+                  const enabled = FEATURES.filter(f => plan.features?.[f.key])
+                  return (
+                    <div className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-3">
+                      <p className="text-[11px] font-bold text-slate-400 mb-1.5">مميزات هذه الخطة</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {enabled.length === 0
+                          ? <span className="text-xs text-slate-400">لا مميزات إضافية (حدود الفروع والمستخدمين فقط)</span>
+                          : enabled.map(f => (
+                              <span key={f.key} className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                {f.label}
+                              </span>
+                            ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* End Date */}
@@ -690,6 +721,63 @@ export default function TenantsPage() {
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">0 = بدون حد | القيمة الافتراضية: 50 استفسار/يوم</p>
               </div>
+
+              {/* Per-tenant feature overrides */}
+              <div>
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                  مميزات خاصة بهذه المؤسسة
+                </label>
+                <p className="text-[10px] text-slate-400 mb-2">
+                  فعّل/عطّل ميزة لهذه المؤسسة فقط بغضّ النظر عن خطتها. وسم «مخصّص» يعني أن الإعداد مختلف عن الخطة.
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {(() => {
+                    const planFeatures = parseFeatures(editTarget?.subscription?.plan?.features)
+                    return FEATURES.map(f => {
+                      const planVal    = planFeatures[f.key] === true
+                      const overridden = editForm.featureOverrides[f.key] !== undefined
+                      const on         = overridden ? editForm.featureOverrides[f.key] === true : planVal
+                      return (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={() => setEditForm(prev => {
+                            const next = { ...prev.featureOverrides }
+                            const newVal = !on
+                            if (newVal === planVal) delete next[f.key]
+                            else next[f.key] = newVal
+                            return { ...prev, featureOverrides: next }
+                          })}
+                          className={`text-right flex flex-col gap-2 p-3 rounded-xl border transition-all ${
+                            on
+                              ? 'border-emerald-300 bg-emerald-50/60'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${f.tier === 'enterprise' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+                              {TIER_META[f.tier].label}
+                            </span>
+                            <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                              <span
+                                className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"
+                                style={{ left: '2px', transform: on ? 'translateX(16px)' : 'translateX(0)' }}
+                              />
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-700 leading-snug">{f.label}</span>
+                          {overridden && (
+                            <span className="text-[9px] font-bold text-blue-600 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> مخصّص لهذه المؤسسة
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
             </div>
 
             {editError && (
@@ -698,7 +786,7 @@ export default function TenantsPage() {
               </div>
             )}
 
-            <div className="flex gap-3 px-6 pb-5 pt-1">
+            <div className="flex gap-3 px-6 py-4 shrink-0 border-t border-slate-100 bg-white">
               <button onClick={() => setEditOpen(false)} disabled={editSaving}
                 className="flex-1 py-2.5 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed">
                 إلغاء

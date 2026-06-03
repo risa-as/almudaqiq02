@@ -206,9 +206,7 @@ export default function SalesReportPage() {
             </p>
           </div>
         </div>
-        <button onClick={handleExportExcel}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:-translate-y-0.5 no-print"
-          style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid rgba(16,185,129,0.2)" }}>
+        <button onClick={handleExportExcel} className="btn-success no-print">
           <Download size={16} /> تصدير CSV
         </button>
       </div>
@@ -255,55 +253,37 @@ export default function SalesReportPage() {
         <>
           {/* ── KPI Cards ── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Total sales */}
-            <div className="rounded-2xl p-6 text-white relative overflow-hidden"
-              style={{ background: "linear-gradient(135deg, #094B9F 0%, #063A8A 100%)", boxShadow: "0 8px 32px rgba(9,75,159,0.3)" }}>
-              <div className="absolute inset-0 opacity-10"
-                style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%)" }} />
-              <div className="flex items-center justify-between mb-3 relative z-10">
-                <p className="text-white/70 font-medium text-sm">صافي الإيرادات</p>
-                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                  <Banknote size={16} className="text-white" />
-                </div>
+            <div className="kpi-card">
+              <div className="kpi-icon" style={{ background: '#eef2ff' }}>
+                <Banknote size={18} style={{ color: '#094B9F' }} />
               </div>
-              <h3 className="text-3xl font-black relative z-10">{formatCurrency(Number(data.netRevenue ?? (data.totalSales - refundTotal)))}</h3>
-              <p className="text-white/60 text-xs mt-1 relative z-10">
-                إجمالي المبيعات {formatCurrency(data.totalSales)} − مرتجعات {formatCurrency(refundTotal)} • {data.transactionCount} فاتورة
-              </p>
+              <div className="min-w-0">
+                <p className="kpi-label">صافي الإيرادات</p>
+                <p className="kpi-value">{formatCurrency(Number(data.netRevenue ?? (data.totalSales - refundTotal)))}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{data.transactionCount} فاتورة</p>
+              </div>
             </div>
 
-            {/* Transaction count */}
-            <div className="rounded-2xl p-6 relative overflow-hidden"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-card)" }}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="font-bold text-sm" style={{ color: "var(--text-secondary)" }}>عدد الفواتير</p>
-                <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <ShoppingBag size={16} className="text-blue-600" />
-                </div>
+            <div className="kpi-card">
+              <div className="kpi-icon" style={{ background: '#ecfdf5' }}>
+                <ShoppingBag size={18} style={{ color: '#10b981' }} />
               </div>
-              <h3 className="text-3xl font-black" style={{ color: "var(--text-primary)" }}>
-                {filteredTxs.length}
-              </h3>
-              {paymentFilter !== 'ALL' && (
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                  مفلترة — {paymentLabel[paymentFilter]}
-                </p>
-              )}
+              <div className="min-w-0">
+                <p className="kpi-label">عدد الفواتير</p>
+                <p className="kpi-value">{filteredTxs.length}</p>
+                {paymentFilter !== 'ALL' && <p className="text-[11px] text-gray-400 mt-0.5">مفلترة — {paymentLabel[paymentFilter]}</p>}
+              </div>
             </div>
 
-            {/* Refunds */}
-            <div className="rounded-2xl p-6 relative overflow-hidden"
-              style={{ background: "var(--bg-card)", border: "1px solid rgba(239,68,68,0.15)", boxShadow: "var(--shadow-card)" }}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="font-bold text-sm text-red-600">إجمالي الإرجاعات</p>
-                <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
-                  <RotateCcw size={16} className="text-red-500" />
-                </div>
+            <div className="kpi-card">
+              <div className="kpi-icon" style={{ background: '#fef2f2' }}>
+                <RotateCcw size={18} style={{ color: '#ef4444' }} />
               </div>
-              <h3 className="text-3xl font-black text-red-600">{formatCurrency(refundTotal)}</h3>
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                {refundCount} عملية استرداد
-              </p>
+              <div className="min-w-0">
+                <p className="kpi-label">إجمالي الإرجاعات</p>
+                <p className="kpi-value">{formatCurrency(refundTotal)}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{refundCount} عملية استرداد</p>
+              </div>
             </div>
           </div>
 
@@ -383,7 +363,7 @@ export default function SalesReportPage() {
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="w-full text-right data-table">
                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                   <tr>
                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">رقم الفاتورة</th>

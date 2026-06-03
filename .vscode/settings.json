@@ -1,4 +1,13 @@
 {
     "css.lint.unknownAtRules": "ignore",
-    "prisma.schemaPath": "./prisma/schema.prisma"
+    "prisma.schemaPath": "./prisma/schema.prisma",
+    "files.watcherExclude": {
+        "**/.next/**": true,
+        "**/dist/**": true,
+        "**/node_modules/**": true
+    },
+    "files.exclude": {
+        "**/.next": true,
+        "**/dist": true
+    }
 }

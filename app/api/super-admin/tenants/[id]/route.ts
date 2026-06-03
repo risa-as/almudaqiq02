@@ -25,11 +25,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 const UpdateSchema = z.object({
-  name:         z.string().min(2).optional(),
-  status:       z.enum(['ACTIVE', 'TRIAL', 'GRACE', 'SUSPENDED', 'CANCELLED']).optional(),
-  planId:       z.string().optional(),
-  endDate:      z.string().datetime().optional().nullable(),
-  aiDailyLimit: z.number().int().min(0).max(10000).optional(),
+  name:             z.string().min(2).optional(),
+  status:           z.enum(['ACTIVE', 'TRIAL', 'GRACE', 'SUSPENDED', 'CANCELLED']).optional(),
+  planId:           z.string().optional(),
+  endDate:          z.string().datetime().optional().nullable(),
+  aiDailyLimit:     z.number().int().min(0).max(10000).optional(),
+  featureOverrides: z.record(z.boolean()).optional(),
 })
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +40,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const parsed = UpdateSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
-    const { name, status, planId, endDate, aiDailyLimit } = parsed.data
+    const { name, status, planId, endDate, aiDailyLimit, featureOverrides } = parsed.data
 
     await prisma.tenant.update({
       where: { id },
@@ -50,14 +51,37 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
-    if (planId || endDate !== undefined) {
+    if (planId || endDate !== undefined || featureOverrides !== undefined) {
       await prisma.tenantSubscription.update({
         where: { tenantId: id },
         data: {
           ...(planId                ? { planId }                                      : {}),
           ...(endDate !== undefined ? { endDate: endDate ? new Date(endDate) : null } : {}),
+          ...(featureOverrides !== undefined ? { featureOverrides: JSON.stringify(featureOverrides) } : {}),
         },
       })
+    }
+
+    // Enforce the new plan's branch cap on (down)grade: deactivate any active
+    // branches beyond the limit, keeping the OLDEST ones. (-1 = unlimited.)
+    if (planId) {
+      const plan = await prisma.subscriptionPlan.findUnique({
+        where: { id: planId }, select: { maxBranches: true },
+      })
+      if (plan && plan.maxBranches > 0) {
+        const active = await prisma.branch.findMany({
+          where:   { tenantId: id, isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select:  { id: true },
+        })
+        const excess = active.slice(plan.maxBranches)
+        if (excess.length) {
+          await prisma.branch.updateMany({
+            where: { id: { in: excess.map(b => b.id) } },
+            data:  { isActive: false },
+          })
+        }
+      }
     }
 
     const updated = await prisma.tenant.findUnique({

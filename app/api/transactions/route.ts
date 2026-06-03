@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         const [products, units, batches, shiftRecord, saleCount] = await Promise.all([
             prisma.product.findMany({
                 where: { id: { in: productIds }, tenantId },
-                select: { id: true, costPrice: true, name: true }
+                select: { id: true, costPrice: true, name: true, baseStock: true }
             }),
             prisma.productUnit.findMany({
                 where: { id: { in: unitIds } },
@@ -86,6 +86,27 @@ export async function POST(request: NextRequest) {
             // round-trip inside the write transaction) to keep the sale fast.
             prisma.transaction.count({ where: { tenantId, type: 'SALE' } }),
         ]);
+
+        // ── Credit limit guard ─────────────────────────────────────────────────
+        // For credit sales (unpaid portion > 0), block when the customer's new
+        // outstanding balance would exceed their creditLimit (0 = no limit).
+        const totalNum    = Number(totalAmount);
+        const paidNum     = body.paidAmount != null ? Number(body.paidAmount) : (body.isCredit ? 0 : totalNum);
+        const creditPortion = Math.max(0, totalNum - paidNum);
+        if (creditPortion > 0 && body.customerId) {
+            const customer = await prisma.customer.findFirst({
+                where: { id: body.customerId, tenantId },
+                select: { name: true, balance: true, creditLimit: true },
+            });
+            const limit = Number(customer?.creditLimit ?? 0);
+            const newBalance = Number(customer?.balance ?? 0) + creditPortion;
+            if (limit > 0 && newBalance > limit) {
+                return NextResponse.json(
+                    { error: `العميل "${customer?.name ?? ''}" سيتجاوز حدّ الدين المسموح (${limit}). الرصيد بعد البيع: ${newBalance}` },
+                    { status: 400 }
+                );
+            }
+        }
 
         // Shift guard
         if (shiftId && !shiftRecord) {
@@ -164,6 +185,23 @@ export async function POST(request: NextRequest) {
 
             itemFifoCost.set(idx, totalCost);
         });
+
+        // ── Stock guard — never allow a sale to drive stock negative ───────────
+        // Returns (negative quantity) are exempt. We compare the total base qty
+        // requested per product against its current baseStock.
+        const isReturn = items.some((i: any) => Number(i.quantity) < 0);
+        if (!isReturn) {
+            for (const [pid, needed] of productDeductions.entries()) {
+                const product = productMap.get(pid);
+                const available = Number(product?.baseStock ?? 0);
+                if (needed > available) {
+                    return NextResponse.json(
+                        { error: `الكمية غير كافية للمنتج "${product?.name ?? ''}" — المتوفر ${available}، المطلوب ${needed}` },
+                        { status: 400 }
+                    );
+                }
+            }
+        }
 
         const itemsPayload = items.map((item: any, idx: number) => ({
             productId: item.productId,

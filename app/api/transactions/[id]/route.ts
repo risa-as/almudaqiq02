@@ -18,6 +18,11 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
         }
 
+        // Branch isolation: when a specific branch is selected, only transactions of
+        // that branch are visible — a cashier cannot fetch/refund another branch's invoice.
+        const branchId = request.nextUrl.searchParams.get('branchId');
+        const branchFilter = branchId && branchId !== 'all' ? { branchId } : {};
+
         const include = {
             items: {
                 include: {
@@ -30,19 +35,29 @@ export async function GET(
         };
 
         // Try direct cuid lookup first
-        let transaction = await prisma.transaction.findFirst({ where: { id, tenantId }, include });
+        let transaction = await prisma.transaction.findFirst({ where: { id, tenantId, ...branchFilter }, include });
 
-        // If not found and looks like a receipt number (numeric / padded), find by ordinal
+        // If not found and looks like a receipt number (numeric / padded), match the
+        // stored receiptNumber (sequential, padded). Try the raw and zero-padded forms.
         if (!transaction && /^\d+$/.test(id)) {
-            const ordinal = parseInt(id, 10);
-            const allIds = await prisma.transaction.findMany({
-                where: { tenantId },
-                orderBy: { date: 'asc' },
-                select: { id: true }
+            const padded = id.padStart(8, '0');
+            transaction = await prisma.transaction.findFirst({
+                where: { tenantId, ...branchFilter, receiptNumber: { in: [id, padded] } },
+                include,
             });
-            const targetId = allIds[ordinal - 1]?.id;
-            if (targetId) {
-                transaction = await prisma.transaction.findFirst({ where: { id: targetId, tenantId }, include });
+
+            // Legacy fallback: older rows without a stored receiptNumber → ordinal position
+            if (!transaction) {
+                const ordinal = parseInt(id, 10);
+                const allIds = await prisma.transaction.findMany({
+                    where: { tenantId, ...branchFilter },
+                    orderBy: { date: 'asc' },
+                    select: { id: true }
+                });
+                const targetId = allIds[ordinal - 1]?.id;
+                if (targetId) {
+                    transaction = await prisma.transaction.findFirst({ where: { id: targetId, tenantId, ...branchFilter }, include });
+                }
             }
         }
 

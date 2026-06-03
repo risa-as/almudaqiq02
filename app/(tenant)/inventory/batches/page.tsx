@@ -403,10 +403,7 @@ export default function BatchesManagementPage() {
                 gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
                 actions={
                     <>
-                        <button
-                            onClick={handleExport}
-                            className="bg-white hover:bg-green-50 text-green-700 px-4 py-2 border border-green-200 rounded-lg flex items-center gap-2 font-bold shadow-sm transition-colors text-sm"
-                        >
+                        <button onClick={handleExport} className="btn-success">
                             <FileSpreadsheet size={18} />
                             تصدير التقرير
                         </button>
@@ -414,34 +411,42 @@ export default function BatchesManagementPage() {
                 }
             />
 
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="flex gap-4 overflow-x-auto pb-2 md:pb-0">
-                    <div className="bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4 min-w-[200px]">
-                        <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Database size={24} /></div>
-                        <div>
-                            <div className="text-[10px] text-gray-500 font-bold uppercase">إجمالي الوجبات المتاحة</div>
-                            <div className="text-xl font-extrabold text-blue-900">{totalBatches}</div>
-                        </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="kpi-card">
+                    <div className="kpi-icon" style={{ background: '#eef2ff' }}>
+                        <Database size={18} style={{ color: '#094B9F' }} />
                     </div>
-                    <div className="bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4 min-w-[200px]">
-                        <div className="p-3 bg-green-50 text-green-600 rounded-lg"><Package size={24} /></div>
-                        <div>
-                            <div className="text-[10px] text-gray-500 font-bold uppercase">القيمة الشرائية للمخزون</div>
-                            <div className="text-xl font-extrabold text-green-700">{formatCurrency(totalValue)}</div>
-                        </div>
+                    <div className="min-w-0">
+                        <p className="kpi-label">إجمالي الدفعات المتاحة</p>
+                        <p className="kpi-value">{totalBatches}</p>
                     </div>
-                    {expiringCount > 0 && (
-                        <div className="bg-orange-50 px-4 py-3 rounded-xl border border-orange-200 shadow-sm flex flex-col justify-center min-w-[150px]">
-                            <div className="text-[10px] text-orange-600 font-bold uppercase">اقتربت من الانتهاء</div>
-                            <div className="text-xl font-extrabold text-orange-700">{expiringCount} دفعات</div>
-                        </div>
-                    )}
-                    {expiredCount > 0 && (
-                        <div className="bg-red-50 px-4 py-3 rounded-xl border border-red-200 shadow-sm flex flex-col justify-center min-w-[150px] animate-pulse">
-                            <div className="text-[10px] text-red-600 font-bold uppercase">مواد منتهية الصلاحية</div>
-                            <div className="text-xl font-extrabold text-red-700">{expiredCount} دفعات</div>
-                        </div>
-                    )}
+                </div>
+                <div className="kpi-card">
+                    <div className="kpi-icon" style={{ background: '#ecfdf5' }}>
+                        <Package size={18} style={{ color: '#10b981' }} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="kpi-label">القيمة الشرائية للمخزون</p>
+                        <p className="kpi-value">{formatCurrency(totalValue)}</p>
+                    </div>
+                </div>
+                <div className="kpi-card">
+                    <div className="kpi-icon" style={{ background: '#fff7ed' }}>
+                        <Clock size={18} style={{ color: '#f97316' }} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="kpi-label">اقتربت من الانتهاء</p>
+                        <p className="kpi-value">{expiringCount} دفعات</p>
+                    </div>
+                </div>
+                <div className="kpi-card">
+                    <div className="kpi-icon" style={{ background: '#fef2f2' }}>
+                        <AlertTriangle size={18} style={{ color: '#ef4444' }} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="kpi-label">منتهية الصلاحية</p>
+                        <p className="kpi-value">{expiredCount} دفعات</p>
+                    </div>
                 </div>
             </div>
 
@@ -482,7 +487,7 @@ export default function BatchesManagementPage() {
             <main className="max-w-[1600px] mx-auto w-full">
                 <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="w-full text-right data-table">
                             <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider"># / رقم الدفعة</th>

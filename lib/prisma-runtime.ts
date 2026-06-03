@@ -30,7 +30,12 @@ export function getDbUrl(): string {
     }
     return raw
   }
-  return process.env.DATABASE_URL ?? ''
+  // Cloud (Neon pooler): give Prisma a longer pool_timeout so a transient Neon
+  // slowdown / idle-connection reset doesn't immediately surface as P2024
+  // ("Timed out fetching a new connection") under bursts of parallel requests.
+  const url = process.env.DATABASE_URL ?? ''
+  if (!url || url.includes('pool_timeout=')) return url
+  return `${url}${url.includes('?') ? '&' : '?'}pool_timeout=20`
 }
 
 function resolveCtor(): PrismaClientConstructor {

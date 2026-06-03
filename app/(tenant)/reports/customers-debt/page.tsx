@@ -87,15 +87,15 @@ function CustomerRow({ row }: { row: DebtRow }) {
                 <tr>
                     <td colSpan={8} className="px-8 pb-4 pt-0 bg-gray-50/50">
                         <div className="border border-gray-100 rounded-xl overflow-hidden">
-                            <table className="w-full text-right text-xs">
-                                <thead className="bg-gray-100">
+                            <table className="w-full text-right text-xs data-table">
+                                <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                     <tr>
                                         {['رقم الفاتورة','التاريخ','المبلغ الكلي','المدفوع','المتبقي'].map(h => (
                                             <th key={h} className="px-4 py-2 font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100 bg-white">
+                                <tbody className="divide-y divide-gray-50">
                                     {row.recentTxs.map(tx => (
                                         <tr key={tx.id} className="hover:bg-blue-50/30">
                                             <td className="px-4 py-2 font-mono text-gray-600">
@@ -232,28 +232,29 @@ export default function CustomersDebtPage() {
 
             {/* KPI cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 col-span-2 md:col-span-1">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-semibold text-gray-500">إجمالي الذمم</span>
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-                            style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}>
-                            <DollarSign size={14} className="text-white" />
-                        </div>
+                <div className="kpi-card col-span-2 md:col-span-1">
+                    <div className="kpi-icon" style={{ background: '#fef2f2' }}>
+                        <DollarSign size={16} style={{ color: '#ef4444' }} />
                     </div>
-                    <p className="text-xl font-extrabold text-red-600">{formatCurrency(summary.totalDebt)}</p>
-                    <p className="text-[11px] text-gray-400 mt-1">{summary.customerCount} عميل لديه رصيد مستحق</p>
+                    <div className="min-w-0">
+                        <p className="kpi-label">إجمالي الذمم</p>
+                        <p className="kpi-value text-red-600">{formatCurrency(summary.totalDebt)}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{summary.customerCount} عميل</p>
+                    </div>
                 </div>
 
                 {Object.entries(BUCKET_CONFIG).map(([key, cfg]) => (
-                    <div key={key} className={`rounded-2xl border ${cfg.border} ${cfg.bg} shadow-sm p-4`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-gray-500">{cfg.label}</span>
-                            <span className={`text-xs font-bold ${cfg.text}`}>{summary.cntBucket[key] ?? 0} عميل</span>
+                    <div key={key} className="kpi-card">
+                        <div className="kpi-icon" style={{ background: cfg.dotColor + '18' }}>
+                            <Clock size={14} style={{ color: cfg.dotColor }} />
                         </div>
-                        <p className={`text-lg font-extrabold ${cfg.text}`}>{formatCurrency(summary.byBucket[key] ?? 0)}</p>
-                        <div className="mt-2 h-1.5 bg-white/60 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-500"
-                                style={{ width: `${((summary.byBucket[key] ?? 0) / maxBucket) * 100}%`, background: cfg.dotColor }} />
+                        <div className="min-w-0">
+                            <p className="kpi-label">{cfg.label}</p>
+                            <p className="kpi-value">{formatCurrency(summary.byBucket[key] ?? 0)}</p>
+                            <div className="mt-1 h-1 rounded-full overflow-hidden bg-gray-100">
+                                <div className="h-full rounded-full"
+                                    style={{ width: `${((summary.byBucket[key] ?? 0) / maxBucket) * 100}%`, background: cfg.dotColor }} />
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -304,7 +305,7 @@ export default function CustomersDebtPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right">
+                    <table className="w-full text-right data-table">
                         <thead className="bg-gray-50/50 border-b border-gray-100 sticky top-0 z-10">
                             <tr>
                                 {['العميل','الهاتف','الفرع','الرصيد المستحق','العمر','أقدم فاتورة','الفواتير',''].map(h => (

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   })
 
   // Generate branch token for desktop app
-  const branchToken = await generateBranchToken(branch.id, tenantId)
+  const branchToken = await generateBranchToken(branch.id, tenantId, branch.tokenVersion)
 
   return NextResponse.json({ ...branch, branchToken }, { status: 201 })
 }

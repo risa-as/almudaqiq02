@@ -404,19 +404,18 @@ export default function OrdersPage() {
                 {/* ── Stats Row ──────────────────────────────────────── */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                        { label: 'صافي إيرادات الصفحة', value: formatCurrency(netRevenue), icon: TrendingUp, color: '#10b981', bg: '#ecfdf5' },
-                        { label: 'المرتجعات (هذه الصفحة)', value: formatCurrency(returnsTotal), icon: RotateCcw, color: '#ef4444', bg: '#fef2f2' },
-                        { label: 'أصناف مباعة', value: totalItems, icon: Package, color: '#f59e0b', bg: '#fffbeb' },
-                        { label: 'إجمالي السجلات', value: pagination.total, icon: FileText, color: '#094B9F', bg: '#eef2ff' },
-                    ].map(({ label, value, icon: Icon, color, bg }) => (
-                        <div key={label} className="rounded-2xl p-4 flex items-center gap-3"
-                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
-                                <Icon size={18} style={{ color }} />
+                        { label: 'صافي إيرادات الصفحة',    value: formatCurrency(netRevenue),  icon: TrendingUp, iconColor: '#10b981', iconBg: '#ecfdf5' },
+                        { label: 'المرتجعات (هذه الصفحة)', value: formatCurrency(returnsTotal), icon: RotateCcw,  iconColor: '#ef4444', iconBg: '#fef2f2' },
+                        { label: 'أصناف مباعة',             value: totalItems,                  icon: Package,    iconColor: '#f59e0b', iconBg: '#fffbeb' },
+                        { label: 'إجمالي السجلات',          value: pagination.total,            icon: FileText,   iconColor: '#094B9F', iconBg: '#eef2ff' },
+                    ].map(({ label, value, icon: Icon, iconColor, iconBg }) => (
+                        <div key={label} className="kpi-card">
+                            <div className="kpi-icon" style={{ background: iconBg }}>
+                                <Icon size={18} style={{ color: iconColor }} />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-xs text-slate-500 font-medium truncate">{label}</p>
-                                <p className="text-lg font-black text-slate-800 leading-tight">{value}</p>
+                                <p className="kpi-label">{label}</p>
+                                <p className="kpi-value">{value}</p>
                             </div>
                         </div>
                     ))}
@@ -426,7 +425,7 @@ export default function OrdersPage() {
                 <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="w-full text-right data-table">
                             <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                 <tr>
                                     <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">رقم الفاتورة</th>
@@ -671,7 +670,7 @@ export default function OrdersPage() {
                         <div className="flex-1 overflow-y-auto px-6 py-4">
                             <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                                 <div className="overflow-x-auto">
-                                <table className="w-full text-right text-sm">
+                                <table className="w-full text-right text-sm data-table">
                                     <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                         <tr>
                                             <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المنتج</th>

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { guardFeature } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const blocked = await guardFeature('branch_comparison'); if (blocked) return blocked
   const tenantId = auth.tenantId
   const { searchParams } = request.nextUrl
   const startDate = searchParams.get('startDate')

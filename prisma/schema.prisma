@@ -72,6 +72,7 @@ model TenantSubscription {
   endDate           DateTime?
   trialEndDate      DateTime?
   gracePeriodEndsAt DateTime? // set when status transitions ACTIVE→GRACE (endDate + 5 days)
+  featureOverrides  String?   // JSON object of per-tenant feature flag overrides (wins over plan.features)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -100,6 +101,7 @@ model Branch {
   phone          String?
   activationCode String   @unique @default(cuid())
   isActive       Boolean  @default(true)
+  tokenVersion   Int      @default(0) // bump to revoke all existing branch tokens (forces re-activation)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -302,10 +304,11 @@ model Customer {
   name      String
   phone     String?
   email     String?
-  address   String?
-  balance   Decimal  @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  address     String?
+  balance     Decimal  @default(0)
+  creditLimit Decimal  @default(0) // 0 = no limit; otherwise max allowed outstanding debt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   branch       Branch?       @relation(fields: [branchId], references: [id])

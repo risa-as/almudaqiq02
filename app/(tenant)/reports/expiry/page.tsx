@@ -336,11 +336,8 @@ export default function ExpiryManagementPage() {
             >
               <RefreshCw size={13} /> تحديث
             </button>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-orange-600 rounded-xl hover:bg-orange-700 transition-colors"
-            >
-              <Download size={13} /> تصدير CSV
+            <button onClick={handleExport} className="btn-success">
+              <Download size={16} /> تصدير CSV
             </button>
           </div>
         }
@@ -550,8 +547,8 @@ export default function ExpiryManagementPage() {
       {/* Main table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-          <table className="w-full text-right">
-            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+          <table className="w-full text-right data-table">
+            <thead className="bg-gray-50/50 border-b border-[var(--border-color)] sticky top-0 z-10">
               <tr>
                 {[
                   { key: "productName", label: "المنتج" },

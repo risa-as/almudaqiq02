@@ -42,6 +42,43 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json({ success: true })
 }
 
+const StatusSchema = z.object({ isActive: z.boolean() })
+
+// PATCH — toggle a branch's active status. Activating enforces the plan's branch cap.
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const tenantId = await getTenantId()
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json().catch(() => null)
+  const parsed = StatusSchema.safeParse(body)
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  const { isActive } = parsed.data
+
+  const branch = await prisma.branch.findFirst({ where: { id, tenantId }, select: { id: true, isActive: true } })
+  if (!branch) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
+
+  // Re-activating must respect the plan's branch limit (-1 = unlimited)
+  if (isActive && !branch.isActive) {
+    const sub = await prisma.tenantSubscription.findUnique({
+      where: { tenantId }, include: { plan: { select: { maxBranches: true } } },
+    })
+    const cap = sub?.plan?.maxBranches ?? -1
+    if (cap > 0) {
+      const activeCount = await prisma.branch.count({ where: { tenantId, isActive: true } })
+      if (activeCount >= cap) {
+        return NextResponse.json(
+          { error: `لا يمكن تفعيل الفرع — وصلت للحد الأقصى من الفروع (${cap}) في خطتك الحالية` },
+          { status: 403 },
+        )
+      }
+    }
+  }
+
+  await prisma.branch.updateMany({ where: { id, tenantId }, data: { isActive } })
+  return NextResponse.json({ success: true })
+}
+
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const tenantId = await getTenantId()

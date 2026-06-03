@@ -45,9 +45,14 @@ import {
   LucideBarChart3,
   CalendarX2,
   Radio,
+  Lock,
+  Crown,
+  Sparkles,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
+import { FeatureProvider, useFeatures } from "@/contexts/FeatureContext";
+import { requiredFeatureMeta, TIER_META, type PlanTier } from "@/lib/features";
 
 const NAV = [
   {
@@ -222,6 +227,24 @@ function isGroupActive(
   );
 }
 
+// Small badge marking a nav link as belonging to a higher plan tier.
+function TierBadge({ tier }: { tier: PlanTier }) {
+  const isEnterprise = tier === "enterprise";
+  const Icon = isEnterprise ? Crown : Sparkles;
+  return (
+    <span
+      title={`متاحة في خطة ${TIER_META[tier].label}`}
+      className="flex items-center justify-center w-5 h-5 rounded-md shrink-0"
+      style={{
+        background: isEnterprise ? "rgba(245,158,11,0.16)" : "rgba(139,92,246,0.16)",
+        border: `1px solid ${isEnterprise ? "rgba(245,158,11,0.45)" : "rgba(139,92,246,0.45)"}`,
+      }}
+    >
+      <Icon className="w-3 h-3" style={{ color: isEnterprise ? "#fbbf24" : "#a78bfa" }} />
+    </span>
+  );
+}
+
 function NavItem({
   item,
   pathname,
@@ -233,6 +256,7 @@ function NavItem({
   onNavigate?: () => void;
   isElectron?: boolean;
 }) {
+  const { hasFeature } = useFeatures();
   const active = item.href
     ? pathname === item.href || pathname.startsWith(item.href + "/")
     : false;
@@ -274,7 +298,11 @@ function NavItem({
           className="w-4 h-4 shrink-0"
           style={{ color: active ? "#93C5FD" : undefined }}
         />
-        <span>{item.label}</span>
+        <span className="flex-1">{item.label}</span>
+        {(() => {
+          const lock = requiredFeatureMeta(item.href!);
+          return lock && !hasFeature(lock.key) ? <TierBadge tier={lock.tier} /> : null;
+        })()}
       </Link>
     );
   }
@@ -330,7 +358,11 @@ function NavItem({
                   className="w-3.5 h-3.5 shrink-0"
                   style={{ color: childActive ? "#93C5FD" : undefined }}
                 />
-                <span>{child.label}</span>
+                <span className="flex-1">{child.label}</span>
+                {(() => {
+                  const lock = requiredFeatureMeta(child.href);
+                  return lock && !hasFeature(lock.key) ? <TierBadge tier={lock.tier} /> : null;
+                })()}
               </Link>
             );
           })}
@@ -344,6 +376,88 @@ function ChatWidgetGuard() {
   const { isElectron } = useUser();
   if (isElectron) return null;
   return <ChatWidget />;
+}
+
+// Blocks rendering of a page whose required plan feature is disabled. Ungated
+// pages (featureForPath === null) always render. While features load we render
+// children to avoid a flash; the cached feature map makes this near-instant.
+function PageGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { hasFeature, ready } = useFeatures();
+  const meta = requiredFeatureMeta(pathname);
+
+  // Ungated pages always render. For gated pages we must NOT render children
+  // until we know the feature is granted — otherwise the page mounts and calls
+  // its (now 403-guarded) API, crashing on the non-array response. We gate on
+  // `ready` (true as soon as the cached feature map is read) so a locked page
+  // shows the upgrade screen instantly instead of waiting for the network.
+  if (!meta) return <>{children}</>;
+  if (hasFeature(meta.key)) return <>{children}</>;
+  if (!ready)
+    return (
+      <div className="flex items-center justify-center w-full h-full min-h-[78vh]">
+        <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-slate-500 animate-spin" />
+      </div>
+    );
+
+  const isEnterprise = meta.tier === "enterprise";
+  const accent = isEnterprise ? "#f59e0b" : "#8b5cf6";
+  const accent2 = isEnterprise ? "#d97706" : "#7c3aed";
+  const TierIcon = isEnterprise ? Crown : Sparkles;
+
+  return (
+    <div className="flex items-center justify-center w-full h-full min-h-[78vh] px-4" dir="rtl">
+      <div className="max-w-lg w-full rounded-3xl overflow-hidden bg-white shadow-xl border border-slate-100">
+        {/* Hero */}
+        <div
+          className="relative px-8 pt-10 pb-8 text-center overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent2} 100%)` }}
+        >
+          <div className="absolute -top-8 -right-10 w-40 h-40 rounded-full bg-white/10" />
+          <div className="absolute -bottom-12 -left-8 w-48 h-48 rounded-full bg-white/10" />
+          <div className="relative z-10">
+            <div className="w-20 h-20 mx-auto rounded-3xl bg-white/20 backdrop-blur flex items-center justify-center mb-4 border border-white/30">
+              <TierIcon className="w-10 h-10 text-white" />
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-white/20 border border-white/30 px-3 py-1 rounded-full">
+              <Lock className="w-3 h-3" />
+              ميزة خطة {meta.tierLabel}
+            </span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-8 py-8 text-center">
+          <h2 className="text-2xl font-extrabold text-slate-800 mb-3">{meta.label}</h2>
+          <p className="text-sm text-slate-500 leading-relaxed mb-7">
+            هذه الصفحة غير متاحة في خطتك الحالية. للوصول إلى
+            <span className="font-bold text-slate-700"> {meta.label} </span>
+            يرجى ترقية اشتراكك إلى خطة
+            <span className="font-extrabold" style={{ color: accent2 }}> «{meta.tierLabel}» </span>
+            أو أعلى.
+          </p>
+
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm px-6 py-3 rounded-xl transition-all"
+            >
+              العودة للرئيسية
+            </Link>
+            <Link
+              href="/settings"
+              className="inline-flex items-center justify-center gap-2 text-white font-bold text-sm px-6 py-3 rounded-xl transition-all shadow-md"
+              style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent2} 100%)` }}
+            >
+              <Sparkles className="w-4 h-4" />
+              ترقية الخطة
+            </Link>
+          </div>
+          <p className="text-xs text-slate-400 mt-5">للترقية يرجى التواصل مع مزوّد الخدمة</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SyncMonitorLink({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
@@ -520,6 +634,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     if (role === "CASHIER") router.replace("/pos");
   }, [role, router]);
 
+  // Locked (out-of-plan) links are shown too, with a tier badge — gating
+  // happens on click via PageGate, not by hiding them from the sidebar.
   const visibleNav = getNavForRole(role, isElectron);
 
   async function logout() {
@@ -798,7 +914,7 @@ function MainContent({ children }: { children: React.ReactNode }) {
           className="flex-1 overflow-auto p-4 md:p-6 transition-opacity duration-200"
           style={{ opacity: isSwitching ? 0.6 : 1 }}
         >
-          {children}
+          <PageGate>{children}</PageGate>
         </main>
       </div>
 
@@ -815,12 +931,14 @@ export default function TenantLayout({
 }) {
   return (
     <ThemeProvider>
-      <BranchProvider>
-        <TourProvider>
-          <MainContent>{children}</MainContent>
-          <AppTour />
-        </TourProvider>
-      </BranchProvider>
+      <FeatureProvider>
+        <BranchProvider>
+          <TourProvider>
+            <MainContent>{children}</MainContent>
+            <AppTour />
+          </TourProvider>
+        </BranchProvider>
+      </FeatureProvider>
     </ThemeProvider>
   );
 }

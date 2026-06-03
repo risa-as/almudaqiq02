@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { guardFeature } from '@/lib/plan-features';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     const tenantId = await getTenantId();
     if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const blocked = await guardFeature('ai_smart_buy'); if (blocked) return blocked;
 
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
-    const batchBranchFilter = branchId && branchId !== 'all' ? { branchId } : {};
+    const specificBranch = branchId && branchId !== 'all' ? branchId : null;
+    const batchBranchFilter = specificBranch ? { branchId: specificBranch } : {};
 
     // ── Coverage window (days of stock to hold) ──
     // The suggested purchase quantity targets this many days of sales. Default 15
@@ -73,10 +76,11 @@ export async function GET(request: Request) {
             }
         }
 
-        // ── 3. Expiry alerts (all branches, next 90 days) ──
+        // ── 3. Expiry alerts (selected branch — or all branches in global view, next 90 days) ──
         const expiryBatches = await prisma.productBatch.findMany({
             where: {
                 tenantId,
+                ...batchBranchFilter,
                 expiryDate: { lte: ninetyDaysFromNow, gte: new Date() },
                 quantity: { gt: 0 },
             },
@@ -134,11 +138,19 @@ export async function GET(request: Request) {
             const supplierName = p.supplier?.name || 'غير محدد';
             const supplierId   = p.supplierId || null;
 
+            // Branch-scoped on-hand stock: when a specific branch is selected, use the
+            // sum of THIS branch's batches (already branch-filtered above) instead of
+            // the product's global baseStock, so restock / dead-stock / coverage maths
+            // reflect only the selected branch. Global view falls back to baseStock.
+            const branchStock = specificBranch
+                ? p.batches.reduce((sum, b) => sum + Number(b.quantity), 0)
+                : Number(p.baseStock);
+
             // Sales velocity
             const vel     = velocityMap.get(p.id);
             const sold30  = vel?.totalQty ?? 0;
             const daily   = sold30 / 30;                       // units/day
-            const daysRem = daily > 0 ? Math.floor(p.baseStock / daily) : (p.baseStock > 0 ? 999 : 0);
+            const daysRem = daily > 0 ? Math.floor(branchStock / daily) : (branchStock > 0 ? 999 : 0);
 
             // Suggested qty: enough to cover `coverageDays` of sales, with a floor
             // of "refill back up to the minimum". The coverage need is the PRIMARY
@@ -146,18 +158,18 @@ export async function GET(request: Request) {
             // min-refill floor only kicks in for slow/non-moving products.
             const restockMin   = p.minimumStock > 0 ? p.minimumStock : 10;
             const target       = Math.ceil(daily * coverageDays);   // demand for the window
-            const coverageNeed = Math.max(0, target - p.baseStock); // units to reach the target
-            const minRefill    = Math.max(0, restockMin - p.baseStock); // units to reach the minimum
+            const coverageNeed = Math.max(0, target - branchStock); // units to reach the target
+            const minRefill    = Math.max(0, restockMin - branchStock); // units to reach the minimum
             const suggestedQty = Math.max(coverageNeed, minRefill);
             const estimatedCost = suggestedQty * lowestPrice;
 
             // ── 1. Restock (below minimumStock or 10) ──
-            if (p.baseStock <= restockMin) {
+            if (branchStock <= restockMin) {
                 restockList.push({
                     productId:    p.id,
                     name:         p.name,
                     categoryName: p.category?.name || 'غير مصنف',
-                    currentStock: p.baseStock,
+                    currentStock: branchStock,
                     minimumStock: restockMin,
                     lastPrice,
                     lowestPrice,
@@ -194,14 +206,14 @@ export async function GET(request: Request) {
             }
 
             // ── 4. Dead stock (has stock, 0 sales in 30 days) ──
-            if (p.baseStock > 0 && sold30 === 0) {
+            if (branchStock > 0 && sold30 === 0) {
                 deadStockList.push({
                     productId:       p.id,
                     name:            p.name,
                     categoryName:    p.category?.name || 'غير مصنف',
-                    currentStock:    p.baseStock,
+                    currentStock:    branchStock,
                     lastSaleDate:    vel?.lastSaleDate?.toISOString() ?? null,
-                    stockValue:      +(p.baseStock * Number(p.costPrice)).toFixed(2),
+                    stockValue:      +(branchStock * Number(p.costPrice)).toFixed(2),
                     supplierName,
                     supplierId,
                 });

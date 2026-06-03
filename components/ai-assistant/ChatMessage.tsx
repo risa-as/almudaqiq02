@@ -1,5 +1,5 @@
 'use client'
-import { Bot, User, RotateCcw } from 'lucide-react'
+import { Bot, User, RotateCcw, Database } from 'lucide-react'
 
 interface ChatMessageProps {
   role: 'user' | 'assistant'
@@ -9,6 +9,34 @@ interface ChatMessageProps {
   isError?: boolean
   onRetry?: () => void
 }
+
+// Friendly Arabic labels for the data sources the assistant consulted — shown so the
+// user knows the answer is grounded in real data, without exposing technical names.
+const TOOL_LABELS: Record<string, string> = {
+  get_sales_report:           'تقرير المبيعات',
+  get_inventory_levels:       'مستويات المخزون',
+  get_financial_summary:      'الملخص المالي',
+  get_top_products:           'أعلى المنتجات مبيعاً',
+  get_branch_stats:           'إحصائيات الفروع',
+  get_recent_transactions:    'أحدث المعاملات',
+  get_shift_summary:          'ملخص الورديات',
+  get_discount_report:        'تقرير الخصومات',
+  get_staff_performance:      'أداء الموظفين',
+  get_customer_insights:      'تحليل العملاء',
+  get_purchase_orders_summary:'ملخص المشتريات',
+  get_menu_performance:       'أداء المنتجات',
+  get_hourly_heatmap:         'أوقات الذروة',
+  get_offers_effectiveness:   'فعالية العروض',
+  get_orders_analysis:        'تحليل الطلبات',
+  get_expense_breakdown:      'تفصيل المصاريف',
+  get_product_margins:        'هوامش الأرباح',
+  get_branch_profit_detail:   'أرباح الفروع',
+  get_stock_movements:        'حركة المخزون',
+  get_supplier_prices:        'أسعار الموردين',
+}
+
+const toolLabel = (tool: string) =>
+  TOOL_LABELS[tool] ?? tool.replace('get_', '').replace(/_/g, ' ')
 
 export function ChatMessage({ role, content, toolsInvoked, isLoading, isError, onRetry }: ChatMessageProps) {
   if (role === 'user') {
@@ -77,19 +105,26 @@ export function ChatMessage({ role, content, toolsInvoked, isLoading, isError, o
                   حاول مرة أخرى
                 </button>
               )}
-              {toolsInvoked && toolsInvoked.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
+              {!isError && toolsInvoked && toolsInvoked.length > 0 && (
+                <div
+                  className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5"
+                  style={{ borderTop: '1px dashed var(--border-color)' }}
+                >
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                    <Database className="w-3 h-3" />
+                    المصادر:
+                  </span>
                   {[...new Set(toolsInvoked)].map(tool => (
                     <span
                       key={tool}
                       className="text-[10px] px-2 py-0.5 rounded-full font-medium"
                       style={{
-                        background: 'rgba(9,75,159,0.15)',
+                        background: 'rgba(9,75,159,0.1)',
                         color: '#818cf8',
-                        border: '1px solid rgba(9,75,159,0.2)',
+                        border: '1px solid rgba(9,75,159,0.18)',
                       }}
                     >
-                      {tool.replace('get_', '').replace(/_/g, ' ')}
+                      {toolLabel(tool)}
                     </span>
                   ))}
                 </div>

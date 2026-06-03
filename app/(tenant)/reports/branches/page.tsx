@@ -336,7 +336,7 @@ export default function BranchComparisonPage() {
               <h3 className="text-sm font-bold text-gray-800">جدول المقارنة التفصيلية</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right">
+              <table className="w-full text-right data-table">
                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                   <tr>
                     {['الفرع','صافي الإيرادات','المرتجعات','المصاريف','صافي الربح','الفواتير','متوسط الفاتورة','نقد','بطاقة','آجل'].map(h => (

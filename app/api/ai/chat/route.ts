@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthContext } from '@/lib/api-helpers'
+import { guardFeature } from '@/lib/plan-features'
 import { getAIProvider } from '@/lib/ai/factory'
 import { TOOL_DEFINITIONS, executeToolCall } from '@/lib/ai/tools'
 import { buildSystemPrompt } from '@/lib/ai/prompts'
@@ -22,6 +23,7 @@ function todayStr() {
 export async function POST(request: NextRequest) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const blocked = await guardFeature('ai_assistant'); if (blocked) return blocked
 
   let body: unknown
   try {
@@ -64,9 +66,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // ── Validate branchId ────────────────────────────────────────────────────────
-  let resolvedBranchId: string | undefined = auth.branchId ?? undefined
-  if (branchId) {
+  // ── Resolve branch scope (strict isolation) ─────────────────────────────────
+  // Branch-bound users (cashier, branch manager, stock keeper) are ALWAYS locked
+  // to their own branch — a request-supplied branchId can never widen their scope.
+  // Only owners/admins (no branchId in their token) may target a specific branch
+  // or view all branches ("all" / none → undefined = no branch filter).
+  let resolvedBranchId: string | undefined
+  if (auth.branchId) {
+    resolvedBranchId = auth.branchId
+  } else if (branchId && branchId !== 'all') {
     const branch = await prisma.branch.findFirst({
       where: { id: branchId, tenantId: auth.tenantId },
       select: { id: true },
@@ -75,6 +83,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid branch' }, { status: 400 })
     }
     resolvedBranchId = branch.id
+  } else {
+    resolvedBranchId = undefined
   }
 
   const enrichedAuth = { ...auth, branchId: resolvedBranchId }

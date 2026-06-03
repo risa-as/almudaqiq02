@@ -287,8 +287,8 @@ export default function ExpiryManagementPage() {
             {/* Main table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="w-full text-right">
-                        <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                    <table className="w-full text-right data-table">
+                        <thead className="bg-gray-50/50 border-b border-[var(--border-color)] sticky top-0 z-10">
                             <tr>
                                 {[
                                     { key: 'productName', label: 'المنتج' },

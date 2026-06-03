@@ -315,11 +315,8 @@ export default function FinancialReportPage() {
             </div>
           )}
 
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-all shadow-sm"
-          >
-            <Download size={14} /> تصدير
+          <button onClick={handleExport} className="btn-success">
+            <Download size={16} /> تصدير
           </button>
         </div>
       </div>
@@ -762,7 +759,7 @@ export default function FinancialReportPage() {
               </span>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full text-right">
+              <table className="w-full text-right data-table">
                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)] sticky top-0">
                   <tr>
                     {["المنتج", "الكمية", "الإيراد", "التكلفة"].map((h) => (
@@ -848,7 +845,7 @@ export default function FinancialReportPage() {
               </span>
             </div>
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
-              <table className="w-full text-right">
+              <table className="w-full text-right data-table">
                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)] sticky top-0">
                   <tr>
                     {["المدقق", "القسم", "المبلغ"].map((h) => (

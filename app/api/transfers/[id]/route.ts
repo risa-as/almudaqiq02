@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const blocked = await guardFeature('stock_transfers'); if (blocked) return blocked
   const { id } = await params
   const tenantId = auth.tenantId
   const transfer = await prisma.stockTransfer.findFirst({
@@ -24,6 +26,7 @@ const UpdateSchema = z.object({ status: z.enum(['APPROVED', 'COMPLETED', 'CANCEL
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+  const blocked = await guardFeature('stock_transfers'); if (blocked) return blocked
   const { id } = await params
   const tenantId = auth.tenantId
   const userId   = auth.userId

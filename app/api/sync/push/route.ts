@@ -77,6 +77,14 @@ export async function POST(request: NextRequest) {
 
   const { branchId, tenantId } = branchPayload
 
+  // Revocation check: token must match the branch's current tokenVersion.
+  {
+    const branchRow = await prisma.branch.findFirst({ where: { id: branchId, tenantId }, select: { tokenVersion: true } })
+    if (!branchRow || (branchPayload.tv ?? 0) !== (branchRow.tokenVersion ?? 0)) {
+      return NextResponse.json({ error: 'Branch token revoked', code: 'TOKEN_REVOKED' }, { status: 401 })
+    }
+  }
+
   // Rate limit: 60 push requests per minute per branch
   const rl = checkRateLimit(`sync:push:${branchId}`, { limit: 60, windowMs: 60_000 })
   if (!rl.allowed) {
@@ -177,39 +185,75 @@ export async function POST(request: NextRequest) {
           // Guard FK links: only attach user/customer if they exist on the cloud,
           // so a missing reference never rejects an offline sale.
           const txUserId = data.userId
-            ? (await prisma.user.findUnique({ where: { id: data.userId as string } }))?.id
+            ? (await prisma.user.findFirst({ where: { id: data.userId as string, tenantId } }))?.id
             : undefined
           const txCustomerId = data.customerId
-            ? (await prisma.customer.findUnique({ where: { id: data.customerId as string } }))?.id
+            ? (await prisma.customer.findFirst({ where: { id: data.customerId as string, tenantId } }))?.id
             : undefined
 
-          const tx = await prisma.transaction.create({
-            data: {
-              id:            syncId,
-              tenantId,
-              branchId,
-              type:          (data.type as string)          || 'SALE',
-              totalAmount:   data.totalAmount as number,
-              date:          data.date ? new Date(data.date as string) : new Date(),
-              receiptNumber: (data.receiptNumber as string | undefined) ?? null,
-              userId:        txUserId,
-              customerId:    txCustomerId,
-              notes:         data.notes as string | undefined,
-              discount:      (data.discount as number)       || 0,
-              priceEdited:   (data.priceEdited as boolean)   ?? false,
-              paymentMethod: (data.paymentMethod as string)  || 'CASH',
-              paidAmount:    data.paidAmount as number | undefined,
-              items:         data.items ? {
-                create: (data.items as any[]).map((item: any) => ({
-                  productId: item.productId,
-                  unitId:    item.unitId,
-                  quantity:  item.quantity,
-                  price:     item.price,
-                  cost:      item.cost || 0,
-                })),
-              } : undefined,
-            },
-          })
+          const txType = (data.type as string) || 'SALE'
+          // Create the transaction AND mirror its stock-out atomically. Offline
+          // sales only push the transaction record; without decrementing here the
+          // cloud batch/baseStock would never decrease (reports would overstate
+          // stock). Atomic + the idempotency check above = no double decrement.
+          const tx = await prisma.$transaction(async (txdb) => {
+            const created = await txdb.transaction.create({
+              data: {
+                id:            syncId,
+                tenantId,
+                branchId,
+                type:          txType,
+                totalAmount:   data.totalAmount as number,
+                date:          data.date ? new Date(data.date as string) : new Date(),
+                receiptNumber: (data.receiptNumber as string | undefined) ?? null,
+                userId:        txUserId,
+                customerId:    txCustomerId,
+                notes:         data.notes as string | undefined,
+                discount:      (data.discount as number)       || 0,
+                priceEdited:   (data.priceEdited as boolean)   ?? false,
+                paymentMethod: (data.paymentMethod as string)  || 'CASH',
+                paidAmount:    data.paidAmount as number | undefined,
+                items:         data.items ? {
+                  create: (data.items as any[]).map((item: any) => ({
+                    productId: item.productId,
+                    unitId:    item.unitId,
+                    quantity:  item.quantity,
+                    price:     item.price,
+                    cost:      item.cost || 0,
+                  })),
+                } : undefined,
+              },
+            })
+
+            // Decrement cloud stock (FEFO across this branch's batches) for sales.
+            if (txType === 'SALE' && Array.isArray(data.items)) {
+              for (const item of data.items as any[]) {
+                const unit = await txdb.productUnit.findFirst({
+                  where: { id: item.unitId, product: { tenantId } },
+                  select: { conversionFactor: true },
+                })
+                const baseQty = Number(item.quantity) * Number(unit?.conversionFactor ?? 1)
+                if (!(baseQty > 0)) continue
+                let remaining = baseQty
+                const itemBatches = await txdb.productBatch.findMany({
+                  where: { productId: item.productId as string, tenantId, branchId, quantity: { gt: 0 } },
+                  orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }],
+                  select: { id: true, quantity: true },
+                })
+                for (const b of itemBatches) {
+                  if (remaining <= 0) break
+                  const deduct = Math.min(Number(b.quantity), remaining)
+                  await txdb.productBatch.update({ where: { id: b.id }, data: { quantity: { decrement: deduct } } })
+                  remaining -= deduct
+                }
+                await txdb.product.updateMany({
+                  where: { id: item.productId as string, tenantId },
+                  data: { baseStock: { decrement: baseQty } },
+                })
+              }
+            }
+            return created
+          }, { timeout: 30000 })
           results.push({ localId: op.localId, cloudId: tx.id, status: 'applied' })
           applied++
           break
@@ -270,7 +314,7 @@ export async function POST(request: NextRequest) {
               break
             }
             const cloudUserId = data.userId
-              ? (await prisma.user.findUnique({ where: { id: data.userId as string } }))?.id
+              ? (await prisma.user.findFirst({ where: { id: data.userId as string, tenantId } }))?.id
               : undefined
             const shift = await prisma.cashierShift.create({
               data: {
@@ -291,8 +335,8 @@ export async function POST(request: NextRequest) {
             applied++
           } else if (op.type === 'UPDATE') {
             const data = op.payload as Record<string, unknown>
-            await prisma.cashierShift.update({
-              where: { id: syncId },
+            await prisma.cashierShift.updateMany({
+              where: { id: syncId, tenantId },
               data: {
                 closingAmount:  data.closingAmount as number ?? null,
                 expectedAmount: data.expectedAmount as number ?? null,
@@ -333,8 +377,8 @@ export async function POST(request: NextRequest) {
             results.push({ localId: op.localId, cloudId: transfer.id, status: 'applied' })
             applied++
           } else if (op.type === 'UPDATE') {
-            await prisma.stockTransfer.update({
-              where: { id: syncId },
+            await prisma.stockTransfer.updateMany({
+              where: { id: syncId, tenantId },
               data: {
                 status:     data.status as string | undefined,
                 approvedBy: data.approvedBy as string | undefined,
@@ -461,7 +505,7 @@ export async function POST(request: NextRequest) {
             // stock is entering the system at a different cost.
             const isTransfer   = data.isTransfer === true
 
-            const cloudProduct = await prisma.product.findUnique({ where: { id: productId } })
+            const cloudProduct = await prisma.product.findFirst({ where: { id: productId, tenantId } })
             if (!cloudProduct) {
               results.push({ localId: op.localId, status: 'error', reason: 'Product not found on cloud' })
               break
@@ -756,6 +800,7 @@ export async function POST(request: NextRequest) {
                 phone:   (data.phone   as string | undefined) ?? null,
                 address: (data.address as string | undefined) ?? null,
                 balance: (data.balance as number) || 0,
+                creditLimit: (data.creditLimit as number) || 0,
                 ...(data.branchId ? { branchId: data.branchId as string } : {}),
               },
             })
@@ -769,6 +814,7 @@ export async function POST(request: NextRequest) {
                 ...(data.phone   !== undefined ? { phone:   (data.phone   as string | undefined) ?? null } : {}),
                 ...(data.address !== undefined ? { address: (data.address as string | undefined) ?? null } : {}),
                 ...(data.balance !== undefined ? { balance: data.balance as number } : {}),
+                ...(data.creditLimit !== undefined ? { creditLimit: data.creditLimit as number } : {}),
               },
             })
             results.push({ localId: op.localId, cloudId: syncId, status: 'applied' })

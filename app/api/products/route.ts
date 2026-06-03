@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getTenantId, getAuthContext } from '@/lib/api-helpers';
+import { canManageStock } from '@/lib/auth';
 import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic'; // Prevent static generation
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح لك بإدارة المنتجات' }, { status: 403 });
     const { tenantId, branchId } = auth;
 
     try {

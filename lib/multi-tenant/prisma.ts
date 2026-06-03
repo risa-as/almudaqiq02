@@ -1,18 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
-import { PrismaClientCtor, getDbUrl } from "../prisma-runtime";
+// Single source of truth for the Prisma client — re-use the one created in
+// lib/prisma.ts so the whole process shares ONE connection pool. Creating a
+// second client here risked doubling the pool (and exhausting Neon) depending
+// on module load order, especially in production.
+import { prisma } from "../prisma";
 
-// Global singleton — local SQLite client in Electron, PostgreSQL client in cloud
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClientCtor({
-    // log: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
-    log: ["error"],
-    datasources: { db: { url: getDbUrl() } },
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export { prisma };
 
 /**
  * Models that have a tenantId field and should be auto-scoped.

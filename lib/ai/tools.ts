@@ -411,18 +411,20 @@ async function getInventoryLevels(args: any, auth: AuthContext) {
 async function getFinancialSummary(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
   const dateRange = parseDateRange(args.start_date, args.end_date)
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
+  const bf = branchId ? { branchId } : {}
 
   const [salesAgg, expensesAgg, returns, settings] = await Promise.all([
     db.transaction.findMany({
-      where: { type: 'SALE', date: dateRange },
+      where: { type: 'SALE', date: dateRange, ...bf },
       select: { totalAmount: true, discount: true, taxAmount: true },
     }),
-    db.expense.findMany({ where: { date: dateRange }, select: { amount: true } }),
+    db.expense.findMany({ where: { date: dateRange, ...bf }, select: { amount: true } }),
     db.transaction.findMany({
-      where: { type: { in: ['RETURN', 'REFUND'] }, date: dateRange },
+      where: { type: { in: ['RETURN', 'REFUND'] }, date: dateRange, ...bf },
       select: { totalAmount: true },
     }),
-    db.storeSettings.findFirst({ select: { taxRate: true } }),
+    db.storeSettings.findFirst({ where: branchId ? { branchId } : undefined, select: { taxRate: true } }),
   ])
 
   const grossRevenue  = salesAgg.reduce((s: number, t: any) => s + Number(t.totalAmount), 0)
@@ -504,9 +506,11 @@ async function getTopProducts(args: any, auth: AuthContext) {
 async function getBranchStats(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
   const dateRange = parseDateRange(args.start_date, args.end_date)
+  // Branch-bound sessions only ever see their own branch here; owners see all.
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
 
   const transactions = await db.transaction.findMany({
-    where: { type: 'SALE', date: dateRange },
+    where: { type: 'SALE', date: dateRange, ...(branchId ? { branchId } : {}) },
     include: { branch: { select: { name: true } } },
   })
 
@@ -681,11 +685,14 @@ async function getStaffPerformance(args: any, auth: AuthContext) {
 
 async function getCustomerInsights(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
 
   const customers = await db.customer.findMany({
+    // Branch scope: this branch's customers + shared org-level (branchId = null)
+    where: branchId ? { OR: [{ branchId }, { branchId: null }] } : {},
     include: {
       transactions: {
-        where: { type: 'SALE' },
+        where: { type: 'SALE', ...(branchId ? { branchId } : {}) },
         select: { totalAmount: true, date: true },
         orderBy: { date: 'desc' },
       },
@@ -743,9 +750,10 @@ async function getCustomerInsights(args: any, auth: AuthContext) {
 async function getPurchaseOrdersSummary(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
   const dateRange = parseDateRange(args.start_date, args.end_date)
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
 
   const batches = await db.productBatch.findMany({
-    where: { createdAt: dateRange },
+    where: { createdAt: dateRange, ...(branchId ? { branchId } : {}) },
     include: {
       product: {
         include: {
@@ -894,11 +902,16 @@ async function getOffersEffectiveness(args: any, auth: AuthContext) {
   const startDate = args.start_date ? parseISO(args.start_date) : subDays(new Date(), 30)
   const endDate   = args.end_date   ? parseISO(args.end_date)   : new Date()
   const dateRange = { gte: startOfDay(startDate), lte: endOfDay(endDate) }
+  const branchId  = args.branch_id ?? auth.branchId ?? undefined
 
   const [offers, txWithOffers] = await Promise.all([
-    db.offer.findMany({ orderBy: { createdAt: 'desc' } }),
+    // Branch scope: this branch's offers + shared org-level (branchId = null)
+    db.offer.findMany({
+      where: branchId ? { OR: [{ branchId }, { branchId: null }] } : {},
+      orderBy: { createdAt: 'desc' },
+    }),
     db.transaction.findMany({
-      where: { type: 'SALE', date: dateRange, offerId: { not: null } },
+      where: { type: 'SALE', date: dateRange, offerId: { not: null }, ...(branchId ? { branchId } : {}) },
       select: { offerId: true, totalAmount: true, discount: true },
     }),
   ])
@@ -1082,20 +1095,23 @@ async function getProductMargins(args: any, auth: AuthContext) {
 async function getBranchProfitDetail(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
   const dateRange = parseDateRange(args.start_date, args.end_date)
+  // Branch-bound sessions are confined to their own branch; owners see every branch.
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
+  const bf = branchId ? { branchId } : {}
 
   const [transactions, expenses, branches] = await Promise.all([
     db.transaction.findMany({
-      where:   { type: 'SALE', date: dateRange },
+      where:   { type: 'SALE', date: dateRange, ...bf },
       include: {
         branch: { select: { name: true } },
         items:  { select: { price: true, cost: true, quantity: true } },
       },
     }),
     db.expense.findMany({
-      where:   { date: dateRange },
+      where:   { date: dateRange, ...bf },
       select:  { branchId: true, amount: true },
     }),
-    db.branch.findMany({ select: { id: true, name: true } }),
+    db.branch.findMany({ where: branchId ? { id: branchId } : {}, select: { id: true, name: true } }),
   ])
 
   const branchMap: Record<string, {
@@ -1239,6 +1255,7 @@ async function getStockMovements(args: any, auth: AuthContext) {
 
 async function getSupplierPrices(args: any, auth: AuthContext) {
   const db = getTenantPrisma(auth.tenantId)
+  const branchId = args.branch_id ?? auth.branchId ?? undefined
 
   const supplierWhere: any = {}
   if (args.supplier_name) {
@@ -1251,6 +1268,8 @@ async function getSupplierPrices(args: any, auth: AuthContext) {
       products: {
         include: {
           batches: {
+            // Cost prices reflect only the selected branch's purchase batches.
+            where:   branchId ? { branchId } : undefined,
             orderBy: { createdAt: 'desc' },
             take:    5,
             select:  { costPrice: true, quantity: true, createdAt: true },
@@ -1306,7 +1325,14 @@ async function getSupplierPrices(args: any, auth: AuthContext) {
 // ─── Main Dispatcher ──────────────────────────────────────────────────────────
 
 export async function executeToolCall(name: string, args: unknown, auth: AuthContext): Promise<unknown> {
-  const a = (args ?? {}) as any
+  const a = { ...((args ?? {}) as any) }
+
+  // Branch isolation: when the session is locked to a specific branch, force every
+  // tool to that branch — the model cannot widen the scope or query another branch.
+  // (auth.branchId is undefined only for owners/admins viewing all branches.)
+  if (auth.branchId) {
+    a.branch_id = auth.branchId
+  }
 
   const financialTools = ['get_financial_summary', 'get_expense_breakdown', 'get_discount_report',
     'get_purchase_orders_summary', 'get_product_margins', 'get_branch_profit_detail']

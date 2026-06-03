@@ -18,6 +18,7 @@ export async function GET() {
 const PlanSchema = z.object({
   name:         z.string().min(2),
   maxBranches:  z.number().int().min(-1),
+  maxUsers:     z.number().int().min(-1),
   monthlyPrice: z.number().min(0),
   yearlyPrice:  z.number().min(0),
   features:     z.record(z.boolean()).optional(),

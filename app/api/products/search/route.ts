@@ -41,7 +41,11 @@ export async function GET(request: NextRequest) {
 
         if (unitMatch) {
             const stockMap = await getBatchStock([unitMatch.product.id]);
-            const stock    = stockMap.get(unitMatch.product.id) ?? unitMatch.product.baseStock;
+            // Branch selected → use this branch's batch stock (0 if none); never leak
+            // the global/other-branch baseStock. Global view → fall back to baseStock.
+            const stock = specificBranch
+                ? (stockMap.get(unitMatch.product.id) ?? 0)
+                : (stockMap.has(unitMatch.product.id) ? (stockMap.get(unitMatch.product.id) ?? 0) : unitMatch.product.baseStock);
 
             return NextResponse.json([{
                 id:        unitMatch.product.id,
@@ -73,8 +77,11 @@ export async function GET(request: NextRequest) {
         const results = products.map(p => ({
             id:        p.id,
             name:      p.name,
-            // Use real batch stock; fall back to legacy baseStock only if no batches exist yet
-            baseStock: stockMap.has(p.id) ? (stockMap.get(p.id) ?? 0) : p.baseStock,
+            // Branch selected → this branch's batch stock only (0 if none); never leak
+            // global/other-branch stock. Global view → fall back to legacy baseStock.
+            baseStock: specificBranch
+                ? (stockMap.get(p.id) ?? 0)
+                : (stockMap.has(p.id) ? (stockMap.get(p.id) ?? 0) : p.baseStock),
             units: p.units.map((u: any) => ({
                 unitId:           u.id,
                 unitName:         u.name,

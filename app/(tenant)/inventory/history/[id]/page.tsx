@@ -191,7 +191,7 @@ export default function ProductHistoryPage({ params }: { params: Promise<{ id: s
 
                 {/* Table */}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right">
+                    <table className="w-full text-right data-table">
                         <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                             <tr>
                                 {['التاريخ', 'نوع الحركة', 'الكمية', 'الوحدة', 'القيمة', 'المرجع', 'بواسطة'].map(h => (

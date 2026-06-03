@@ -156,9 +156,8 @@ export default function StockMovementReport() {
                 icon={Activity}
                 gradient="linear-gradient(135deg, #10b981, #059669)"
                 actions={
-                    <button onClick={handleExport}
-                        className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 text-sm font-bold rounded-xl hover:bg-emerald-700 transition">
-                        <Download size={15} /> تصدير Excel
+                    <button onClick={handleExport} className="btn-success">
+                        <Download size={16} /> تصدير Excel
                     </button>
                 }
             />
@@ -167,20 +166,18 @@ export default function StockMovementReport() {
             {stats && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                        { label: 'إجمالي الوارد',  value: stats.totalIn,  color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: ArrowDownToLine },
-                        { label: 'إجمالي الصادر', value: stats.totalOut, color: 'text-orange-700',  bg: 'bg-orange-50',  border: 'border-orange-100',  icon: ArrowUpFromLine },
-                        { label: 'صافي الحركة',   value: stats.net,      color: stats.net >= 0 ? 'text-blue-700' : 'text-red-600', bg: 'bg-blue-50', border: 'border-blue-100', icon: RefreshCw },
-                        { label: 'عدد الحركات',   value: stats.count,    color: 'text-gray-700',   bg: 'bg-gray-50',    border: 'border-gray-100',    icon: Package },
-                    ].map(({ label, value, color, bg, border, icon: Icon }) => (
-                        <div key={label} className={`rounded-2xl border ${border} ${bg} p-4 flex items-center gap-3`}>
-                            <div className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0">
-                                <Icon size={15} className={color} />
+                        { label: 'إجمالي الوارد',  value: stats.totalIn,  iconBg: '#ecfdf5', iconColor: '#10b981', icon: ArrowDownToLine },
+                        { label: 'إجمالي الصادر', value: stats.totalOut, iconBg: '#fff7ed', iconColor: '#f97316', icon: ArrowUpFromLine },
+                        { label: 'صافي الحركة',   value: (stats.net >= 0 ? '+' : '') + stats.net, iconBg: '#eef2ff', iconColor: '#094B9F', icon: RefreshCw },
+                        { label: 'عدد الحركات',   value: stats.count,    iconBg: '#f8fafc', iconColor: '#64748b', icon: Package },
+                    ].map(({ label, value, iconBg, iconColor, icon: Icon }) => (
+                        <div key={label} className="kpi-card">
+                            <div className="kpi-icon" style={{ background: iconBg }}>
+                                <Icon size={16} style={{ color: iconColor }} />
                             </div>
-                            <div>
-                                <p className={`text-xl font-extrabold ${color}`}>
-                                    {label === 'صافي الحركة' && value > 0 ? '+' : ''}{value}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                            <div className="min-w-0">
+                                <p className="kpi-label">{label}</p>
+                                <p className="kpi-value">{value}</p>
                             </div>
                         </div>
                     ))}
@@ -253,7 +250,7 @@ export default function StockMovementReport() {
 
                 {/* Table */}
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right">
+                    <table className="w-full text-right data-table">
                         <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                             <tr>
                                 <th className="px-5 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التاريخ</th>
@@ -328,11 +325,12 @@ export default function StockMovementReport() {
 
                 {/* Pagination */}
                 {pages > 1 && (
-                    <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-color)] bg-gray-50/30">
-                        <span className="text-xs text-gray-400">صفحة {page} من {pages}</span>
+                    <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-color)] bg-gray-50/50">
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>صفحة {page} من {pages}</span>
                         <div className="flex gap-1">
                             <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition">
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--border-color)] disabled:opacity-40 transition"
+                                style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>
                                 السابق
                             </button>
                             {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
@@ -340,13 +338,18 @@ export default function StockMovementReport() {
                                 if (p < 1 || p > pages) return null;
                                 return (
                                     <button key={p} onClick={() => setPage(p)}
-                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${p === page ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-200 hover:bg-gray-100'}`}>
+                                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border transition"
+                                        style={p === page
+                                            ? { background: 'var(--gradient-success)', color: '#fff', borderColor: 'transparent' }
+                                            : { background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }
+                                        }>
                                         {p}
                                     </button>
                                 );
                             })}
                             <button disabled={page === pages} onClick={() => setPage(p => p + 1)}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition">
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--border-color)] disabled:opacity-40 transition"
+                                style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>
                                 التالي
                             </button>
                         </div>

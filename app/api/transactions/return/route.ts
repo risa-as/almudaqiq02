@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
                 // For simplicity, assuming the passed unitId is correct and we just add to stock?
                 // Actually, we should check the unit's conversion factor.
 
-                const unit = await tx.productUnit.findUnique({ where: { id: item.unitId } });
+                const unit = await tx.productUnit.findFirst({ where: { id: item.unitId, product: { tenantId } } });
                 const conversionFactor = unit?.conversionFactor || 1;
                 const stockToAdd = quantity * conversionFactor;
 

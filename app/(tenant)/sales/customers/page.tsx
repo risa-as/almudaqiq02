@@ -20,6 +20,8 @@ import {
   AlertCircle,
   UserCheck,
   Loader2,
+  Store,
+  Building2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { useUser } from "@/hooks/useUser";
@@ -33,6 +35,7 @@ interface Customer {
   phone?: string;
   address?: string;
   balance: number;
+  branchId?: string | null;
   _count?: { transactions: number };
 }
 
@@ -104,6 +107,9 @@ export default function CustomersPage() {
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [debtFilter, setDebtFilter] = useState<"ALL" | "DEBT" | "CLEAR">("ALL");
+  const [scopeFilter, setScopeFilter] = useState<"ALL" | "BRANCH" | "ORG">(
+    "ALL",
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -112,11 +118,13 @@ export default function CustomersPage() {
     phone: string;
     address: string;
     initialBalance: string;
+    creditLimit: string;
   }>({
     name: "",
     phone: "",
     address: "",
     initialBalance: "0",
+    creditLimit: "0",
   });
 
   useEffect(() => {
@@ -165,7 +173,7 @@ export default function CustomersPage() {
         fetchCustomers();
         setIsModalOpen(false);
         setEditId(null);
-        setFormData({ name: "", phone: "", address: "", initialBalance: "0" });
+        setFormData({ name: "", phone: "", address: "", initialBalance: "0", creditLimit: "0" });
       }
     } catch (error) {
       toast.error("حدث خطأ أثناء الحفظ");
@@ -214,7 +222,14 @@ export default function CustomersPage() {
     const bal = Number(c.balance);
     const matchesDebt =
       debtFilter === "ALL" ? true : debtFilter === "DEBT" ? bal > 0 : bal <= 0;
-    return matchesSearch && matchesDebt;
+    const isOrg = c.branchId == null;
+    const matchesScope =
+      scopeFilter === "ALL"
+        ? true
+        : scopeFilter === "ORG"
+          ? isOrg
+          : !isOrg;
+    return matchesSearch && matchesDebt && matchesScope;
   });
 
   /* Summary stats (computed from the full customer list, not the filtered view) */
@@ -442,6 +457,7 @@ export default function CustomersPage() {
                     phone: "",
                     address: "",
                     initialBalance: "0",
+                    creditLimit: "0",
                   });
                   setIsModalOpen(true);
                 }}
@@ -457,51 +473,18 @@ export default function CustomersPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            {
-              label: "إجمالي العملاء",
-              value: stats.total,
-              icon: Users,
-              color: "text-blue-700",
-              bg: "bg-blue-50",
-              border: "border-blue-100",
-            },
-            {
-              label: "عملاء مدينون",
-              value: stats.debtors,
-              icon: AlertCircle,
-              color: "text-rose-700",
-              bg: "bg-rose-50",
-              border: "border-rose-100",
-            },
-            {
-              label: "إجمالي الديون",
-              value: formatCurrency(stats.totalDebt),
-              icon: Wallet,
-              color: "text-blue-700",
-              bg: "bg-blue-50",
-              border: "border-blue-100",
-            },
-            {
-              label: "عدد المعاملات",
-              value: stats.transactions,
-              icon: ShoppingCart,
-              color: "text-emerald-700",
-              bg: "bg-emerald-50",
-              border: "border-emerald-100",
-            },
-          ].map(({ label, value, icon: Icon, color, bg, border }) => (
-            <div
-              key={label}
-              className={`rounded-2xl border ${border} ${bg} p-4 flex items-center gap-3`}
-            >
-              <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center flex-shrink-0">
-                <Icon size={18} className={color} />
+            { label: "إجمالي العملاء",  value: stats.total,                      icon: Users,        iconBg: '#eef2ff', iconColor: '#094B9F' },
+            { label: "عملاء مدينون",    value: stats.debtors,                    icon: AlertCircle,  iconBg: '#fef2f2', iconColor: '#ef4444' },
+            { label: "إجمالي الديون",   value: formatCurrency(stats.totalDebt),  icon: Wallet,       iconBg: '#ecfdf5', iconColor: '#10b981' },
+            { label: "عدد المعاملات",   value: stats.transactions,               icon: ShoppingCart, iconBg: '#fffbeb', iconColor: '#f59e0b' },
+          ].map(({ label, value, icon: Icon, iconBg, iconColor }) => (
+            <div key={label} className="kpi-card">
+              <div className="kpi-icon" style={{ background: iconBg }}>
+                <Icon size={18} style={{ color: iconColor }} />
               </div>
               <div className="min-w-0">
-                <p className={`text-lg font-extrabold ${color} truncate`}>
-                  {value}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                <p className="kpi-label">{label}</p>
+                <p className="kpi-value">{value}</p>
               </div>
             </div>
           ))}
@@ -520,6 +503,30 @@ export default function CustomersPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+          {/* Scope filter — isolate branch vs organization customers */}
+          <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl p-1">
+            {(
+              [
+                { key: "ALL", label: "الكل", icon: null },
+                { key: "BRANCH", label: "الفرع", icon: Store },
+                { key: "ORG", label: "المؤسسة", icon: Building2 },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setScopeFilter(t.key)}
+                style={
+                  scopeFilter === t.key
+                    ? { background: "#094B9F", color: "#fff", fontWeight: 700 }
+                    : undefined
+                }
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${scopeFilter === t.key ? "shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+              >
+                {t.icon && <t.icon size={12} />}
+                {t.label}
+              </button>
+            ))}
           </div>
           <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl p-1">
             {(
@@ -578,7 +585,7 @@ export default function CustomersPage() {
               return (
                 <div
                   key={customer.id}
-                  className={`bg-white rounded-2xl shadow-sm border border-gray-100 transition-all group flex flex-col overflow-hidden ${isCardRemoving ? "card-removing" : isCardDeleting ? "card-deleting" : "hover:shadow-md hover:border-blue-100"}`}
+                  className={`bg-[var(--bg-card)] rounded-2xl shadow-card border border-[var(--border-color)] transition-all group flex flex-col overflow-hidden ${isCardRemoving ? "card-removing" : isCardDeleting ? "card-deleting" : "hover:shadow-md"}`}
                 >
                   {/* Top: identity + balance */}
                   <div className="p-5 flex items-start justify-between gap-3">
@@ -626,8 +633,20 @@ export default function CustomersPage() {
                   </div>
 
                   {/* Meta row */}
-                  <div className="px-5 pb-3 flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-100 px-2 py-1 rounded-lg">
+                  <div className="px-5 pb-3 flex items-center gap-2 flex-wrap">
+                    {/* Scope badge — branch vs organization */}
+                    {customer.branchId == null ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-violet-600 bg-violet-50/70 border border-violet-200 px-2 py-1 rounded-lg">
+                        <Building2 size={12} />
+                        عميل مؤسسة
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50/70 border border-blue-200 px-2 py-1 rounded-lg">
+                        <Store size={12} />
+                        عميل فرع
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50/50 border border-[var(--border-color)] px-2 py-1 rounded-lg">
                       <ShoppingCart size={12} className="text-gray-400" />
                       {customer._count?.transactions || 0} معاملة
                     </span>
@@ -640,7 +659,7 @@ export default function CustomersPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="mt-auto flex items-center justify-end gap-1.5 px-4 py-3 border-t border-gray-50 bg-gray-50/40">
+                  <div className="mt-auto flex items-center justify-end gap-1.5 px-4 py-3 border-t border-[var(--border-color)] bg-gray-50/50">
                     <CardAction
                       label="تسديد دفعة"
                       icon={DollarSign}
@@ -673,6 +692,7 @@ export default function CustomersPage() {
                             phone: customer.phone || "",
                             address: customer.address || "",
                             initialBalance: String(customer.balance),
+                            creditLimit: String((customer as { creditLimit?: number }).creditLimit ?? 0),
                           });
                           setIsModalOpen(true);
                         }}
@@ -779,6 +799,24 @@ export default function CustomersPage() {
                     />
                   </div>
                 )}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    حدّ الدين المسموح
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold"
+                    placeholder="0 = بلا حد"
+                    value={formData.creditLimit}
+                    onChange={(e) =>
+                      setFormData({ ...formData, creditLimit: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    يُمنع البيع الآجل إذا تجاوز رصيد العميل هذا الحد (0 = بلا حد)
+                  </p>
+                </div>
               </div>
               <div className="flex gap-4 mt-8">
                 <button
@@ -914,7 +952,7 @@ export default function CustomersPage() {
                 ) : (
                   <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-right">
+                      <table className="w-full text-right data-table">
                         <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                           <tr>
                             <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -1120,7 +1158,7 @@ export default function CustomersPage() {
                                             </div>
 
                                             {/* Items table */}
-                                            <table className="w-full text-right text-xs">
+                                            <table className="w-full text-right text-xs data-table">
                                               <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                                 <tr>
                                                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-8">

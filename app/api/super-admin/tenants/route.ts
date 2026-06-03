@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       prisma.tenant.findMany({
         where,
         include: {
-          subscription: { include: { plan: { select: { name: true } } } },
+          subscription: { include: { plan: { select: { id: true, name: true, features: true } } } },
           _count: { select: { branches: true, users: true } },
           users: { where: { role: 'ADMIN' }, select: { email: true }, take: 1 },
         },

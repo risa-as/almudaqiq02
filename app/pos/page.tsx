@@ -635,7 +635,10 @@ export default function POSPage() {
   const handleFetchRefundTx = async () => {
     if (!refundSearchId) return;
     try {
-      const res = await fetch(`/api/transactions/${refundSearchId}`);
+      // Scope the lookup to the selected branch — cannot fetch another branch's invoice
+      const res = await fetch(
+        `/api/transactions/${refundSearchId}${branchQuery}`,
+      );
       if (!res.ok) throw new Error("Not found");
       const data = await res.json();
       if (data.type !== "SALE") {
@@ -779,9 +782,9 @@ export default function POSPage() {
     );
   };
 
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
-    [],
-  );
+  const [customers, setCustomers] = useState<
+    { id: string; name: string; branchId: string | null }[]
+  >([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     null,
   );
@@ -789,18 +792,42 @@ export default function POSPage() {
     "CASH" | "CARD" | "CREDIT"
   >("CASH");
 
-  // Fetch Customers — scoped to selected branch
+  // Fetch Customers — strictly scoped to the selected branch.
+  // Guards:
+  //  • Wait until the branch context finished loading (avoids a null-branch fetch
+  //    that returns ALL tenant customers).
+  //  • Only fetch for a specific branch; "all"/none → empty list (POS is per-branch).
+  //  • `ignore` flag discards stale responses so an earlier unfiltered request can
+  //    never overwrite the correct branch-scoped result (race condition fix).
   useEffect(() => {
-    const bq =
+    if (branchLoading) return;
+
+    const branchId =
       selectedBranch?.id && selectedBranch.id !== "all"
-        ? `?branchId=${selectedBranch.id}`
-        : "";
-    fetch(`/api/customers${bq}`)
-      .then((res) => res.json())
-      .then((data) => setCustomers(data))
-      .catch(console.error);
+        ? selectedBranch.id
+        : null;
+
     setSelectedCustomerId(null);
-  }, [selectedBranch?.id]);
+
+    if (!branchId) {
+      setCustomers([]);
+      return;
+    }
+
+    let ignore = false;
+    fetch(`/api/customers?branchId=${branchId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!ignore) setCustomers(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (!ignore) console.error(err);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedBranch?.id, branchLoading]);
 
   // Reset to CASH when customer is deselected
   useEffect(() => {
@@ -2024,8 +2051,8 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Customer Selector */}
-            <div className="px-3 py-2 border-b border-slate-100 shrink-0">
+            {/* Customer Selector — isolated by branch vs org */}
+            <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 shrink-0">
               <select
                 id="customer-select"
                 value={selectedCustomerId ?? ""}
@@ -2033,11 +2060,32 @@ export default function POSPage() {
                 className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold r-badge px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
               >
                 <option value="">— بدون عميل (زبون عام) —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+
+                {/* Branch customers — only this branch's customers */}
+                {customers.filter((c) => c.branchId !== null).length > 0 && (
+                  <optgroup label="── عملاء الفرع ──">
+                    {customers
+                      .filter((c) => c.branchId !== null)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+
+                {/* Org-level customers — shared across all branches */}
+                {customers.filter((c) => c.branchId === null).length > 0 && (
+                  <optgroup label="── عملاء المؤسسة ──">
+                    {customers
+                      .filter((c) => c.branchId === null)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 

@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
 
   const { branchId } = branchPayload
 
+  // Revocation check: token must match the branch's current tokenVersion.
+  const branchRow = await prisma.branch.findFirst({ where: { id: branchId, tenantId: branchPayload.tenantId }, select: { tokenVersion: true } })
+  if (!branchRow || (branchPayload.tv ?? 0) !== (branchRow.tokenVersion ?? 0)) {
+    return NextResponse.json({ error: 'Branch token revoked', code: 'TOKEN_REVOKED' }, { status: 401 })
+  }
+
   // Pull and push are recorded as separate sync logs, so read the most recent
   // value of each independently.
   const [lastSync, pendingConflicts] = await Promise.all([

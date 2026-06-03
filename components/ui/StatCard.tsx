@@ -36,13 +36,13 @@ export default function StatCard({
 
     return (
         <div
-            className={`stat-card flex items-start gap-4 ${onClick ? 'cursor-pointer' : ''}`}
+            className={`stat-card flex items-center gap-4 ${onClick ? 'cursor-pointer' : ''}`}
             style={highlight ? { borderRight: '3px solid var(--color-primary)' } : {}}
             onClick={onClick}
         >
             {/* Icon */}
             <div
-                className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden"
+                className="kpi-icon w-12 h-12 relative overflow-hidden"
                 style={{ background: gradient, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
             >
                 <div className="absolute inset-0 opacity-25"
@@ -51,8 +51,8 @@ export default function StatCard({
             </div>
 
             <div className="flex-1 min-w-0">
-                <p className="stat-card-label">{label}</p>
-                <p className="stat-card-value" style={valueColor ? { color: valueColor } : {}}>{value}</p>
+                <p className="stat-card-label kpi-label">{label}</p>
+                <p className="stat-card-value kpi-value" style={valueColor ? { color: valueColor } : {}}>{value}</p>
                 {trend && (
                     <div className="flex items-center gap-1 mt-1.5">
                         <TrendIcon size={12} style={{ color: trendColor }} />

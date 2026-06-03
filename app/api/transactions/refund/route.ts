@@ -99,13 +99,15 @@ export async function POST(request: NextRequest) {
                 });
 
                 // B. Restore Stock
-                const unit = await tx.productUnit.findUnique({ where: { id: unitId } });
+                const unit = await tx.productUnit.findFirst({ where: { id: unitId, product: { tenantId } } });
                 if (!unit) throw new Error(`Unit not found for item ${productId}`);
 
                 const totalBaseQuantity = qtyToRefund * unit.conversionFactor;
 
+                // Restore into a batch of THIS branch only — never touch another
+                // branch's stock when refunding.
                 const recentBatch = await tx.productBatch.findFirst({
-                    where: { productId, tenantId },
+                    where: { productId, tenantId, branchId },
                     orderBy: { createdAt: 'desc' },
                 });
 

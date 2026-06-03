@@ -4,10 +4,11 @@ const { cpSync } = require('fs');
 
 // Paths
 const projectRoot = path.join(__dirname, '..');
+const distDir = process.env.NEXT_DIST_DIR || '.next';
 const sourcePublic = path.join(projectRoot, 'public');
-const destPublic = path.join(projectRoot, '.next/standalone/public');
-const sourceStatic = path.join(projectRoot, '.next/static');
-const destStatic = path.join(projectRoot, '.next/standalone/.next/static');
+const destPublic = path.join(projectRoot, `${distDir}/standalone/public`);
+const sourceStatic = path.join(projectRoot, `${distDir}/static`);
+const destStatic = path.join(projectRoot, `${distDir}/standalone/${distDir}/static`);
 
 console.log('Preparing standalone build...');
 
@@ -34,7 +35,7 @@ try {
     // Copy the Electron sync worker + offline queue so the packaged app can
     // find them at resources/server/electron/ (main.js looks there in prod).
     const sourceElectron = path.join(projectRoot, 'electron');
-    const destElectron = path.join(projectRoot, '.next/standalone/electron');
+    const destElectron = path.join(projectRoot, `${distDir}/standalone/electron`);
     if (fs.existsSync(sourceElectron)) {
         console.log('Copying electron/ (sync worker + offline queue)...');
         cpSync(sourceElectron, destElectron, { recursive: true });
@@ -46,7 +47,7 @@ try {
     // both the server routes and the sync worker can require @prisma/client-local
     // at runtime. (afterPack copies standalone/node_modules into the package.)
     const sourceLocalClient = path.join(projectRoot, 'node_modules/@prisma/client-local');
-    const destLocalClient = path.join(projectRoot, '.next/standalone/node_modules/@prisma/client-local');
+    const destLocalClient = path.join(projectRoot, `${distDir}/standalone/node_modules/@prisma/client-local`);
     if (fs.existsSync(sourceLocalClient)) {
         console.log('Copying @prisma/client-local...');
         fs.mkdirSync(path.dirname(destLocalClient), { recursive: true });
@@ -59,7 +60,7 @@ try {
     // is pushed) then fall back to a root-level dev.db.
     let sourceDb = path.join(projectRoot, 'prisma', 'dev.db');
     if (!fs.existsSync(sourceDb)) sourceDb = path.join(projectRoot, 'dev.db');
-    const destDb = path.join(projectRoot, '.next/standalone/dev.db');
+    const destDb = path.join(projectRoot, `${distDir}/standalone/dev.db`);
     if (fs.existsSync(sourceDb)) {
         console.log(`Copying database from ${sourceDb} ...`);
         // We copy it to the root of standalone so it sits next to server.js
@@ -87,7 +88,7 @@ try {
         console.warn('WARNING: CLOUD_URL is not set or points to localhost. Desktop login will fail unless a real cloud URL is set in .env before building.');
     }
 
-    const destEnv = path.join(projectRoot, '.next/standalone/.env');
+    const destEnv = path.join(projectRoot, `${distDir}/standalone/.env`);
     const desktopEnv = [
         '# Desktop (Electron) environment — generated at build time.',
         '# Cloud credentials and JWT secrets are intentionally NOT shipped here;',

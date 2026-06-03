@@ -35,6 +35,20 @@ async function main() {
   }
 
   // ── 2. Seed Default Subscription Plans ──────────────────────────────────
+  // Feature flags map to lib/features.ts FEATURE_KEYS. Stored as a JSON object
+  // of booleans; pages/APIs are gated by these flags.
+  const FEATURE_KEYS = [
+    "stock_transfers",
+    "branch_comparison",
+    "advanced_analytics",
+    "stock_movement",
+    "ai_assistant",
+    "ai_smart_buy",
+    "audit_log",
+  ];
+  const featuresFor = (enabled: string[]) =>
+    JSON.stringify(Object.fromEntries(FEATURE_KEYS.map((k) => [k, enabled.includes(k)])));
+
   const plans = [
     {
       name: "Basic",
@@ -42,22 +56,21 @@ async function main() {
       yearlyPrice: 200000,
       maxBranches: 1,
       maxUsers: 5,
-      features: JSON.stringify(["POS", "Inventory", "Reports", "Offline Sync"]),
+      features: featuresFor([]),
     },
     {
       name: "Pro",
       monthlyPrice: 30000,
       yearlyPrice: 300000,
-      maxBranches: 5,
-      maxUsers: 25,
-      features: JSON.stringify([
-        "POS",
-        "Inventory",
-        "Reports",
-        "Offline Sync",
-        "Multi-Branch",
-        "Branch Comparison Reports",
-        "Stock Transfers",
+      maxBranches: 3,
+      maxUsers: 15,
+      features: featuresFor([
+        "stock_transfers",
+        "branch_comparison",
+        "advanced_analytics",
+        "stock_movement",
+        "ai_assistant",
+        "ai_smart_buy",
       ]),
     },
     {
@@ -66,18 +79,7 @@ async function main() {
       yearlyPrice: 750000,
       maxBranches: -1, // -1 = unlimited
       maxUsers: -1, // -1 = unlimited
-      features: JSON.stringify([
-        "POS",
-        "Inventory",
-        "Reports",
-        "Offline Sync",
-        "Multi-Branch",
-        "Branch Comparison Reports",
-        "Stock Transfers",
-        "API Access",
-        "Priority Support",
-        "Custom Integrations",
-      ]),
+      features: featuresFor(FEATURE_KEYS),
     },
   ];
 

@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const branchId  = searchParams.get('branchId');
     const branchFilter = branchId && branchId !== 'all' ? { branchId } : {};
+    // Customers carry their own branchId (org-level customers have branchId = null).
+    // A branch view counts its own customers + the shared org-level ones — never
+    // another branch's customers. Mirrors the customers list / POS scoping.
+    const customerWhere: any = branchId && branchId !== 'all'
+        ? { tenantId, OR: [{ branchId }, { branchId: null }] }
+        : { tenantId };
 
     const now       = new Date();
     const todayStart = startOfDay(now);
@@ -78,13 +84,13 @@ export async function GET(request: NextRequest) {
                 where: { tenantId, ...branchFilter, type: { in: ['REFUND', 'RETURN'] }, date: { gte: monthStart } },
                 select: { type: true, totalAmount: true }
             }),
-            // Outstanding customer debt
+            // Outstanding customer debt — scoped to this branch's customers + org-level
             prisma.customer.aggregate({
-                where: { tenantId, balance: { gt: 0 } },
+                where: { ...customerWhere, balance: { gt: 0 } },
                 _sum: { balance: true }, _count: { id: true }
             }),
-            // Total customers
-            prisma.customer.count({ where: { tenantId } }),
+            // Total customers — same branch scope
+            prisma.customer.count({ where: customerWhere }),
             // Last 30 days txs for avg + day-of-week
             prisma.transaction.findMany({
                 where: { ...baseWhere, date: { gte: monthStart } },

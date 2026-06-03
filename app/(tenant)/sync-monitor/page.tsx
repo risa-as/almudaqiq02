@@ -509,15 +509,15 @@ export default function SyncMonitorPage() {
                   </p>
                 </div>
               ) : (
-                <table className="w-full text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--table-header-bg)' }}>
-                      <th className="px-4 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>الحالة</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>النوع</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>السجل</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>المحاولات</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>التاريخ</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider" style={{ color: 'var(--table-header-text)' }}>الخطأ</th>
+                <table className="w-full text-[12px] data-table" style={{ color: 'var(--text-secondary)' }}>
+                  <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
+                    <tr>
+                      <th className="px-4 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">الحالة</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">النوع</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">السجل</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">المحاولات</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">التاريخ</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider">الخطأ</th>
                     </tr>
                   </thead>
                   <tbody>

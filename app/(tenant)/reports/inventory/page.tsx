@@ -228,8 +228,8 @@ function SortableTable({
 
       {expanded && (
         <div className="overflow-x-auto max-h-72 overflow-y-auto">
-          <table className="w-full text-right">
-            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+          <table className="w-full text-right data-table">
+            <thead className="bg-gray-50/50 border-b border-[var(--border-color)] sticky top-0 z-10">
               <tr>
                 {columns.map((col) => (
                   <th
@@ -497,119 +497,56 @@ export default function InventoryReportPage() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-500">
-              قيمة المخزون
-            </span>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#094B9F,#063A8A)" }}
-            >
-              <DollarSign size={14} className="text-white" />
-            </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{ background: '#eef2ff' }}>
+            <DollarSign size={16} style={{ color: '#094B9F' }} />
           </div>
-          <p className="text-xl font-extrabold text-gray-900">
-            {formatCurrency(data.stats.totalValuation)}
-          </p>
-          <p className="text-[11px] text-gray-400 mt-1">
-            {data.stats.totalProducts} منتج · {data.stats.totalItems} وحدة
-          </p>
+          <div className="min-w-0">
+            <p className="kpi-label">قيمة المخزون</p>
+            <p className="kpi-value">{formatCurrency(data.stats.totalValuation)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{data.stats.totalProducts} منتج · {data.stats.totalItems} وحدة</p>
+          </div>
         </div>
 
-        <div
-          className={`rounded-2xl border shadow-sm p-4 transition-colors ${
-            data.stats.outOfStockCount > 0
-              ? "bg-red-50 border-red-200"
-              : "bg-white border-gray-100"
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-500">
-              نفد من المخزون
-            </span>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#ef4444,#dc2626)" }}
-            >
-              <XCircle size={14} className="text-white" />
-            </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{ background: '#fef2f2' }}>
+            <XCircle size={16} style={{ color: '#ef4444' }} />
           </div>
-          <p
-            className={`text-xl font-extrabold ${data.stats.outOfStockCount > 0 ? "text-red-700" : "text-gray-900"}`}
-          >
-            {data.stats.outOfStockCount} منتج
-          </p>
-          <p className="text-[11px] text-gray-400 mt-1">يحتاج إعادة طلب فوري</p>
+          <div className="min-w-0">
+            <p className="kpi-label">نفد من المخزون</p>
+            <p className={`kpi-value ${data.stats.outOfStockCount > 0 ? 'text-red-600' : ''}`}>
+              {data.stats.outOfStockCount} منتج
+            </p>
+            <p className="text-[11px] text-gray-400 mt-0.5">يحتاج إعادة طلب فوري</p>
+          </div>
         </div>
 
-        <div
-          className={`rounded-2xl border shadow-sm p-4 transition-colors ${
-            data.stats.lowStockCount > 0
-              ? "bg-orange-50 border-orange-200"
-              : "bg-white border-gray-100"
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-500">
-              مخزون حرج
-            </span>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#f97316,#ea580c)" }}
-            >
-              <AlertTriangle size={14} className="text-white" />
-            </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{ background: '#fff7ed' }}>
+            <AlertTriangle size={16} style={{ color: '#f97316' }} />
           </div>
-          <p
-            className={`text-xl font-extrabold ${data.stats.lowStockCount > 0 ? "text-orange-700" : "text-gray-900"}`}
-          >
-            {data.stats.lowStockCount} منتج
-          </p>
-          <p className="text-[11px] text-gray-400 mt-1">
-            أقل من الحد الأدنى المحدد
-          </p>
+          <div className="min-w-0">
+            <p className="kpi-label">مخزون حرج</p>
+            <p className={`kpi-value ${data.stats.lowStockCount > 0 ? 'text-orange-600' : ''}`}>
+              {data.stats.lowStockCount} منتج
+            </p>
+            <p className="text-[11px] text-gray-400 mt-0.5">أقل من الحد الأدنى المحدد</p>
+          </div>
         </div>
 
-        <div
-          className={`rounded-2xl border shadow-sm p-4 transition-colors ${
-            data.stats.expiredCount > 0
-              ? "bg-red-50 border-red-200"
-              : data.stats.criticalCount > 0
-                ? "bg-blue-50 border-blue-200"
-                : "bg-white border-gray-100"
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-500">
-              انتهاء الصلاحية
-            </span>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)" }}
-            >
-              <Clock size={14} className="text-white" />
-            </div>
+        <div className="kpi-card">
+          <div className="kpi-icon" style={{ background: '#fffbeb' }}>
+            <Clock size={16} style={{ color: '#f59e0b' }} />
           </div>
-          <p className="text-xl font-extrabold text-gray-900">
-            {data.stats.expiringCount} دفعة
-          </p>
-          <p className="text-[11px] mt-1 flex flex-wrap gap-1">
-            {data.stats.expiredCount > 0 && (
-              <span className="text-red-600 font-bold">
-                {data.stats.expiredCount} منتهية
-              </span>
-            )}
-            {data.stats.criticalCount > 0 && (
-              <span className="text-orange-600 font-bold">
-                {data.stats.criticalCount} حرجة
-              </span>
-            )}
-            {data.stats.expiredCount === 0 &&
-              data.stats.criticalCount === 0 && (
-                <span className="text-gray-400">أقل من 30 يوم</span>
-              )}
-          </p>
+          <div className="min-w-0">
+            <p className="kpi-label">انتهاء الصلاحية</p>
+            <p className="kpi-value">{data.stats.expiringCount} دفعة</p>
+            <p className="text-[11px] mt-0.5 flex flex-wrap gap-1">
+              {data.stats.expiredCount > 0 && <span className="text-red-600 font-bold">{data.stats.expiredCount} منتهية</span>}
+              {data.stats.criticalCount > 0 && <span className="text-orange-600 font-bold">{data.stats.criticalCount} حرجة</span>}
+              {data.stats.expiredCount === 0 && data.stats.criticalCount === 0 && <span className="text-gray-400">أقل من 30 يوم</span>}
+            </p>
+          </div>
         </div>
       </div>
 

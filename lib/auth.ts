@@ -118,8 +118,8 @@ function getBranchSecret() {
   return new TextEncoder().encode(s)
 }
 
-export async function generateBranchToken(branchId: string, tenantId: string): Promise<string> {
-  return new SignJWT({ branchId, tenantId, type: 'branch' })
+export async function generateBranchToken(branchId: string, tenantId: string, tokenVersion = 0): Promise<string> {
+  return new SignJWT({ branchId, tenantId, type: 'branch', tv: tokenVersion })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .sign(getBranchSecret())
@@ -129,6 +129,8 @@ export interface BranchTokenPayload {
   branchId: string
   tenantId: string
   type: 'branch'
+  /** Token version — must match Branch.tokenVersion or the token is revoked. */
+  tv?: number
 }
 
 export async function verifyBranchToken(token: string): Promise<BranchTokenPayload> {

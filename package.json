@@ -13,24 +13,31 @@
     "lint": "eslint",
     "prisma:local": "prisma generate --schema=prisma/schema.local.prisma",
     "db:setup": "node scripts/setup-local-db.js",
+    "backup:db": "node scripts/backup-db.js",
+    "restore:db": "node scripts/restore-db.js",
+    "verify:sync": "node scripts/verify-sync-stock.js",
     "db:push": "cross-env LOCAL_DATABASE_URL=file:./prisma/dev.db prisma db push --schema=prisma/schema.local.prisma --skip-generate",
     "electron": "cross-env IS_ELECTRON=1 LOCAL_DATABASE_URL=file:./prisma/dev.db SERVER_URL=http://localhost:3000/pos electron .",
     "dev:electron": "npx kill-port 3000 --silent & cross-env IS_ELECTRON=1 LOCAL_DATABASE_URL=file:./prisma/dev.db concurrently -k -n \"Next,Electron\" -c \"cyan,yellow\" \"next dev\" \"wait-on http://localhost:3000 && npm run electron\"",
     "electron:prod": "cross-env SERVER_URL=http://192.168.1.200:3000/pos electron .",
-    "dist": "npm run prisma:local && npm run db:push && npm run build && npm run postbuild && electron-builder",
+    "clean:dist": "node -e \"const fs=require('fs');['dist','.next-build'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true});console.log('Removed',d)}catch(e){console.warn('Could not remove',d,e.message)}})\"",
+    "build:electron": "cross-env IS_ELECTRON=1 NEXT_DIST_DIR=.next-build next build",
+    "dist": "npm run prisma:local && npm run db:push && npm run clean:dist && npm run build:electron && npm run postbuild && electron-builder",
     "postbuild": "node scripts/prepare-standalone.js"
   },
   "build": {
     "appId": "com.supermarket.erp",
-    "productName": "SupermarketPOS",
+    "productName": "المدقق",
     "directories": {
       "output": "dist"
     },
     "files": [
       "**/*",
-      "!.next/dev/**",
-      "!.next/cache/**",
-      "!.next-cloud/**"
+      "!.next/**",
+      "!.next-build/**",
+      "!.next-cloud/**",
+      "!dist/**",
+      "!prisma/dev.db"
     ],
     "win": {
       "target": "nsis",
@@ -43,7 +50,7 @@
     "afterPack": "scripts/after-pack.cjs",
     "extraResources": [
       {
-        "from": ".next/standalone",
+        "from": ".next-build/standalone",
         "to": "server",
         "filter": [
           "**/*"

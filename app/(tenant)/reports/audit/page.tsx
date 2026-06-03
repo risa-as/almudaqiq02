@@ -306,31 +306,35 @@ export default function AuditReportPage() {
             )}
 
             {/* Toolbar */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="flex flex-wrap items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-gray-50/40">
+            <div className="bg-[var(--bg-card)] rounded-2xl shadow-sm border border-[var(--border-color)] overflow-hidden">
+                <div className="flex flex-wrap items-center gap-3 px-5 py-3.5 border-b border-[var(--border-color)] bg-gray-50/50">
                     {/* Search */}
                     <div className="relative flex-1 min-w-[200px] max-w-xs">
                         <Search size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input type="text" placeholder="بحث في المستخدم، الأمر، العنصر، التفاصيل…"
                             value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-                            className="w-full pr-8 pl-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-200" />
+                            className="w-full pr-8 pl-3 py-2 text-xs border border-[var(--border-color)] rounded-xl bg-[var(--bg-page)] focus:outline-none focus:ring-2 focus:ring-orange-200"
+                            style={{ color: 'var(--text-primary)' }} />
                     </div>
 
                     {/* Period */}
-                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+                    <div className="flex items-center gap-1 bg-[var(--bg-page)] border border-[var(--border-color)] rounded-xl p-1">
                         {PERIOD_OPTS.map(o => (
                             <button key={o.v} onClick={() => { setPeriod(o.v); setPage(1); }}
-                                style={period === o.v ? { background: '#094B9F', color: '#fff', fontWeight: 700 } : undefined}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${period === o.v ? 'shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                                style={period === o.v
+                                    ? { background: '#094B9F', color: '#fff', fontWeight: 700 }
+                                    : { color: 'var(--text-secondary)' }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${period === o.v ? 'shadow-sm' : 'hover:bg-gray-50/50'}`}>
                                 {o.l}
                             </button>
                         ))}
                     </div>
 
-                    {/* Entity filter — بالعربي */}
+                    {/* Entity filter */}
                     {filters?.entities?.length > 0 && (
                         <select value={selEntity} onChange={e => { setSelEntity(e.target.value); setPage(1); }}
-                            className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-200 text-gray-700">
+                            className="px-3 py-2 text-xs border border-[var(--border-color)] rounded-xl bg-[var(--bg-page)] focus:outline-none focus:ring-2 focus:ring-orange-200"
+                            style={{ color: 'var(--text-primary)' }}>
                             <option value="">كل العناصر</option>
                             {filters.entities.map((e: any) => (
                                 <option key={e.value} value={e.value}>{entityMeta(e.value).label} ({e.count})</option>
@@ -341,7 +345,8 @@ export default function AuditReportPage() {
                     {/* User filter */}
                     {filters?.users?.length > 0 && (
                         <select value={selUser} onChange={e => { setSelUser(e.target.value); setPage(1); }}
-                            className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-200 text-gray-700">
+                            className="px-3 py-2 text-xs border border-[var(--border-color)] rounded-xl bg-[var(--bg-page)] focus:outline-none focus:ring-2 focus:ring-orange-200"
+                            style={{ color: 'var(--text-primary)' }}>
                             <option value="">كل المستخدمين</option>
                             {filters.users.map((u: any) => <option key={u.value} value={u.value}>{u.value} ({u.count})</option>)}
                         </select>
@@ -349,17 +354,18 @@ export default function AuditReportPage() {
 
                     {hasFilters && (
                         <button onClick={() => { setSelAction(''); setSelEntity(''); setSelUser(''); setSearch(''); setPage(1); }}
-                            className="flex items-center gap-1 text-xs text-orange-600 font-semibold hover:bg-orange-50 px-2 py-1.5 rounded-lg transition">
+                            className="flex items-center gap-1 text-xs text-orange-500 font-semibold hover:bg-orange-50/20 px-2 py-1.5 rounded-lg transition">
                             <X size={12} /> مسح الفلاتر
                         </button>
                     )}
 
-                    <span className="text-xs text-gray-400 mr-auto tabular-nums">{filtered.length} سجل</span>
+                    <span className="text-xs mr-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>{filtered.length} سجل</span>
                 </div>
 
                 {/* Active filter chips */}
                 {(selAction || selEntity || selUser) && (
-                    <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 bg-orange-50/40 border-b border-orange-100">
+                    <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 border-b border-[var(--border-color)]"
+                        style={{ background: 'rgba(249,115,22,0.06)' }}>
                         {selAction && <FilterChip label={actionMeta(selAction).label} onClear={() => setSelAction('')} />}
                         {selEntity && <FilterChip label={entityMeta(selEntity).label} onClear={() => setSelEntity('')} />}
                         {selUser   && <FilterChip label={selUser} onClear={() => setSelUser('')} />}
@@ -390,7 +396,10 @@ export default function AuditReportPage() {
 
                             return (
                                 <div key={log.id} className="group">
-                                    <div className={`flex items-center gap-3 px-4 md:px-5 py-3.5 transition-colors ${hasDetails ? 'cursor-pointer hover:bg-orange-50/30' : ''} ${isExpanded ? 'bg-orange-50/40' : ''}`}
+                                    <div className={`flex items-center gap-3 px-4 md:px-5 py-3.5 transition-colors ${hasDetails ? 'cursor-pointer' : ''}`}
+                                        style={isExpanded ? { background: 'rgba(249,115,22,0.08)' } : hasDetails ? {} : {}}
+                                        onMouseEnter={e => { if (hasDetails && !isExpanded) (e.currentTarget as HTMLDivElement).style.background = 'rgba(249,115,22,0.05)'; }}
+                                        onMouseLeave={e => { if (!isExpanded) (e.currentTarget as HTMLDivElement).style.background = ''; }}
                                         onClick={() => hasDetails && setExpanded(isExpanded ? null : log.id)}>
 
                                         {/* Accent bar + action icon */}
@@ -405,10 +414,10 @@ export default function AuditReportPage() {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{m.label}</span>
-                                                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                                                    <EIcon size={12} className="text-gray-400" />
-                                                    <span className="font-medium text-gray-700">{em.label}</span>
-                                                    {log.entityId && <span className="text-gray-300 font-mono text-[10px]">#{log.entityId.slice(-6)}</span>}
+                                                <span className="inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                                    <EIcon size={12} style={{ color: 'var(--text-muted)' }} />
+                                                    <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{em.label}</span>
+                                                    {log.entityId && <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>#{log.entityId.slice(-6)}</span>}
                                                 </span>
                                             </div>
                                             {/* Inline details preview */}
@@ -424,7 +433,7 @@ export default function AuditReportPage() {
                                             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-[10px] font-bold text-white">
                                                 {(log.username ?? 'S')[0].toUpperCase()}
                                             </div>
-                                            <span className="text-xs font-semibold text-gray-700 max-w-[110px] truncate">{log.username ?? 'النظام'}</span>
+                                            <span className="text-xs font-semibold max-w-[110px] truncate" style={{ color: 'var(--text-secondary)' }}>{log.username ?? 'النظام'}</span>
                                         </div>
 
                                         {/* Time */}
@@ -445,25 +454,25 @@ export default function AuditReportPage() {
 
                                     {/* Expanded details */}
                                     {isExpanded && hasDetails && (
-                                        <div className="px-5 pb-4 pt-1 bg-orange-50/20">
-                                            <div className="rounded-xl border border-orange-100 bg-white p-3">
-                                                <div className="flex items-center gap-2 mb-2.5 text-[11px] font-bold text-gray-500">
+                                        <div className="px-5 pb-4 pt-1" style={{ background: 'rgba(249,115,22,0.04)' }}>
+                                            <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] p-3">
+                                                <div className="flex items-center gap-2 mb-2.5 text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>
                                                     <Server size={12} className="text-orange-400" /> تفاصيل العملية
-                                                    <span className="text-gray-300 font-normal mr-auto">
+                                                    <span className="font-normal mr-auto" style={{ color: 'var(--text-muted)' }}>
                                                         {new Date(log.createdAt).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' })}
                                                     </span>
                                                 </div>
                                                 {parsedDetails ? (
                                                     <div className="flex flex-wrap gap-2">
                                                         {Object.entries(translateDetails(parsedDetails)).map(([k, v]) => (
-                                                            <div key={k} className="bg-gray-50 rounded-lg border border-gray-100 px-3 py-1.5">
-                                                                <span className="text-[10px] text-gray-400 block">{k}</span>
-                                                                <span className="text-xs font-semibold text-gray-800 break-all">{v}</span>
+                                                            <div key={k} className="bg-gray-50/50 rounded-lg border border-[var(--border-color)] px-3 py-1.5">
+                                                                <span className="text-[10px] block" style={{ color: 'var(--text-muted)' }}>{k}</span>
+                                                                <span className="text-xs font-semibold break-all" style={{ color: 'var(--text-primary)' }}>{v}</span>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <p className="text-xs text-gray-600 font-mono break-all">{log.details}</p>
+                                                    <p className="text-xs font-mono break-all" style={{ color: 'var(--text-secondary)' }}>{log.details}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -476,19 +485,25 @@ export default function AuditReportPage() {
 
                 {/* Pagination */}
                 {pages > 1 && (
-                    <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/30">
-                        <span className="text-xs text-gray-400">صفحة {page} من {pages}</span>
+                    <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-color)] bg-gray-50/50">
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>صفحة {page} من {pages}</span>
                         <div className="flex gap-1">
                             <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition">السابق</button>
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--border-color)] disabled:opacity-40 transition"
+                                style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>السابق</button>
                             {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
                                 const p = page <= 3 ? i + 1 : page - 2 + i;
                                 if (p < 1 || p > pages) return null;
                                 return <button key={p} onClick={() => setPage(p)}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${p === page ? 'bg-orange-600 text-white border-orange-600' : 'border-gray-200 hover:bg-gray-100'}`}>{p}</button>;
+                                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border transition"
+                                    style={p === page
+                                        ? { background: '#f97316', color: '#fff', borderColor: 'transparent' }
+                                        : { background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }
+                                    }>{p}</button>;
                             })}
                             <button disabled={page === pages} onClick={() => setPage(p => p + 1)}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition">التالي</button>
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--border-color)] disabled:opacity-40 transition"
+                                style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>التالي</button>
                         </div>
                     </div>
                 )}
@@ -498,19 +513,17 @@ export default function AuditReportPage() {
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, color, label, value, highlight }: {
+function StatCard({ icon: Icon, color, label, value }: {
     icon: React.ElementType; color: string; label: string; value: number; highlight?: boolean;
 }) {
     return (
-        <div className="bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3"
-            style={{ borderColor: highlight ? `${color}33` : '#f1f5f9' }}>
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: `${color}15`, color }}>
-                <Icon size={20} />
+        <div className="kpi-card">
+            <div className="kpi-icon" style={{ background: `${color}18` }}>
+                <Icon size={18} style={{ color }} />
             </div>
             <div className="min-w-0">
-                <p className="text-2xl font-extrabold text-gray-900 tabular-nums leading-tight">{value}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 truncate">{label}</p>
+                <p className="kpi-label">{label}</p>
+                <p className="kpi-value">{value}</p>
             </div>
         </div>
     );

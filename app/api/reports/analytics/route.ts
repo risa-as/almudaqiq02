@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { guardFeature } from '@/lib/plan-features';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,7 @@ export async function GET(request: NextRequest) {
     try {
         const auth = await getAuthContext()
         if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        const blocked = await guardFeature('advanced_analytics'); if (blocked) return blocked
         const tenantId = auth.tenantId
         const userBranchId = auth.branchId ?? ''
         const { searchParams } = new URL(request.url);
@@ -185,25 +187,63 @@ export async function GET(request: NextRequest) {
             .slice(0, 5);
 
         // --- 3. Dead Stock ---
-        // Products with stock > 0 but not in current transaction items
+        // Products with stock > 0 but not sold in this period (sold list is already
+        // branch-scoped via productDataMap). On-hand stock must be branch-scoped too.
         const soldProductIds = Object.keys(productDataMap);
+        const specificBranch = branchId && branchId !== 'all' ? branchId : null;
 
-        const deadStockRaw = await prisma.product.findMany({
-            where: {
-                tenantId,
-                baseStock: { gt: 0 },
-                id: { notIn: soldProductIds }
-            },
-            take: 10,
-            orderBy: { baseStock: 'desc' },
-            select: { name: true, baseStock: true, updatedAt: true }
-        });
+        let deadStock: { name: string; baseStock: number; lastUpdated: string }[];
 
-        const deadStock = deadStockRaw.map(p => ({
-            name: p.name,
-            baseStock: p.baseStock,
-            lastUpdated: p.updatedAt.toISOString().split('T')[0]
-        }));
+        if (specificBranch) {
+            // Branch view: on-hand stock comes from THIS branch's batches, never the
+            // product's global baseStock — so another branch's stock can't leak in.
+            const batchStock = await prisma.productBatch.groupBy({
+                by: ['productId'],
+                where: {
+                    tenantId,
+                    branchId: specificBranch,
+                    quantity: { gt: 0 },
+                    ...(soldProductIds.length ? { productId: { notIn: soldProductIds } } : {}),
+                },
+                _sum: { quantity: true },
+            });
+
+            const candidates = batchStock
+                .map(b => ({ productId: b.productId, stock: Number(b._sum.quantity ?? 0) }))
+                .filter(b => b.stock > 0)
+                .sort((a, b) => b.stock - a.stock)
+                .slice(0, 10);
+
+            const prods = await prisma.product.findMany({
+                where: { tenantId, id: { in: candidates.map(c => c.productId) } },
+                select: { id: true, name: true, updatedAt: true },
+            });
+            const pMap = new Map(prods.map(p => [p.id, p]));
+
+            deadStock = candidates.map(c => ({
+                name: pMap.get(c.productId)?.name ?? '—',
+                baseStock: c.stock,
+                lastUpdated: (pMap.get(c.productId)?.updatedAt ?? new Date()).toISOString().split('T')[0],
+            }));
+        } else {
+            // Global view: use the aggregate baseStock across all branches.
+            const deadStockRaw = await prisma.product.findMany({
+                where: {
+                    tenantId,
+                    baseStock: { gt: 0 },
+                    id: { notIn: soldProductIds }
+                },
+                take: 10,
+                orderBy: { baseStock: 'desc' },
+                select: { name: true, baseStock: true, updatedAt: true }
+            });
+
+            deadStock = deadStockRaw.map(p => ({
+                name: p.name,
+                baseStock: p.baseStock,
+                lastUpdated: p.updatedAt.toISOString().split('T')[0]
+            }));
+        }
 
         return NextResponse.json({
             kpis,

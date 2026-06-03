@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
+import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
+
+/** Constant-time string compare that never short-circuits on length. */
+function safeEqual(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+        // Compare against self to keep timing uniform, then fail.
+        timingSafeEqual(bufA, bufA);
+        return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+}
 
 // How many ms to add for each duration type
 const DURATION_MAP: Record<string, number | null> = {
@@ -29,11 +43,20 @@ function parseDurationMs(duration: string): number | null {
 
 export async function POST(request: NextRequest) {
     try {
-        // Developer password check via Authorization header
-        const authHeader = request.headers.get('x-developer-password');
+        // Rate-limit by IP to thwart brute-forcing the developer password.
+        const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+            || request.headers.get('x-real-ip')
+            || 'unknown';
+        const rl = checkRateLimit(`gen-license:${ip}`, { limit: 5, windowMs: 10 * 60_000 });
+        if (!rl.allowed) {
+            return NextResponse.json({ error: 'محاولات كثيرة جداً. حاول لاحقاً.' }, { status: 429 });
+        }
+
+        // Developer password check (constant-time) via header.
+        const authHeader = request.headers.get('x-developer-password') ?? '';
         const developerPassword = process.env.DEVELOPER_PASSWORD;
 
-        if (!developerPassword || authHeader !== developerPassword) {
+        if (!developerPassword || developerPassword.length < 16 || !safeEqual(authHeader, developerPassword)) {
             return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
         }
 

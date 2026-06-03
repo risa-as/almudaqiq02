@@ -26,13 +26,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 });
         }
 
+        // Branch isolation: when a specific branch is selected, the returned batch
+        // must belong to that branch — never decrement another branch's stock.
+        const specificBranch = branchId && branchId !== 'all' ? String(branchId) : null;
         const batch = await prisma.productBatch.findFirst({
-            where: { id: batchId, tenantId: auth.tenantId },
+            where: { id: batchId, tenantId: auth.tenantId, ...(specificBranch ? { branchId: specificBranch } : {}) },
             include: { product: true }
         });
 
         if (!batch) {
-            return NextResponse.json({ error: 'لم يتم العثور على الدفعة المحددة' }, { status: 404 });
+            return NextResponse.json({ error: 'لم يتم العثور على الدفعة المحددة في هذا الفرع' }, { status: 404 });
         }
 
         if (batch.quantity < returnQty) {

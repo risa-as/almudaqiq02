@@ -212,7 +212,11 @@ export default function SmartPurchasingPage() {
         return () => clearTimeout(t);
     }, [selectedBranch, branchLoading, coverageDays]);
 
+    // Latest-request guard: a slow fetch for a previous branch must never overwrite
+    // the result of a newer fetch (race condition on branch switch).
+    const fetchSeqRef = useRef(0);
     const fetchData = async (isRefresh = false) => {
+        const seq = ++fetchSeqRef.current;
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
         try {
@@ -221,6 +225,7 @@ export default function SmartPurchasingPage() {
             params.set('coverageDays', String(coverageDays));
             const res = await fetch(`/api/purchases/smart-buy?${params}`);
             const result = await res.json();
+            if (seq !== fetchSeqRef.current) return; // a newer request superseded this one
             if (result.success) {
                 setData(result.data);
                 if (result.data.supplierDeals.length > 0) {
@@ -233,8 +238,10 @@ export default function SmartPurchasingPage() {
         } catch (error) {
             console.error('Failed to fetch smart buy data:', error);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (seq === fetchSeqRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     };
 
@@ -428,23 +435,21 @@ export default function SmartPurchasingPage() {
 
             {/* ── KPI Row ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {kpis.map(({ label, value, icon: Icon, gradient, shadow }) => (
-                    <div key={label} className="glass-panel p-4 flex items-center gap-3 relative overflow-hidden">
-                        <div className="absolute inset-0 opacity-[0.03]" style={{ background: gradient }} />
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                            style={{ background: gradient, boxShadow: `0 6px 16px ${shadow}` }}>
+                {kpis.map(({ label, value, icon: Icon, gradient }) => (
+                    <div key={label} className="kpi-card">
+                        <div className="kpi-icon" style={{ background: gradient }}>
                             <Icon className="w-5 h-5 text-white" />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-xl font-black text-slate-900 leading-none truncate">{value}</p>
-                            <p className="text-[11px] font-semibold text-slate-500 mt-1 leading-tight">{label}</p>
+                            <p className="kpi-label">{label}</p>
+                            <p className="kpi-value">{value}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* ── Tabs ── */}
-            <div className="flex flex-wrap gap-2 p-1.5 bg-white/70 backdrop-blur-sm border border-white/60 rounded-2xl shadow-sm w-fit max-w-full">
+            <div className="flex flex-wrap gap-2 p-1.5 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-card w-fit max-w-full">
                 {tabs.map(tab => {
                     const Icon = tab.icon;
                     const isActive = activeTab === tab.key;
@@ -452,12 +457,12 @@ export default function SmartPurchasingPage() {
                         <button
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${isActive ? 'text-white' : `${tab.inactiveText} hover:bg-slate-100`}`}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${isActive ? 'text-white' : `${tab.inactiveText} hover:bg-gray-50/50`}`}
                             style={isActive ? { background: tab.gradient, boxShadow: `0 4px 16px ${tab.shadow}` } : {}}
                         >
                             <Icon size={14} />
                             <span className="hidden sm:inline">{tab.label}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${isActive ? 'bg-white/25' : 'bg-slate-100 text-slate-500'}`}>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${isActive ? 'bg-white/25 text-white' : 'bg-gray-100 text-[var(--text-secondary)]'}`}>
                                 {tab.count}
                             </span>
                         </button>
@@ -486,7 +491,7 @@ export default function SmartPurchasingPage() {
                             title="المخزون ممتاز!" desc="لا توجد نواقص في الوقت الحالي" />
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right data-table">
                                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                     <tr>
                                         {['المنتج', 'الفئة', 'المخزون', 'الحد الأدنى', 'أيام متبقية', 'مبيعات/يوم', 'كمية مقترحة', 'تكلفة تقديرية', 'أفضل سعر', 'المورد'].map(h => (
@@ -609,8 +614,8 @@ export default function SmartPurchasingPage() {
                                     </button>
                                     {isOpen && (
                                         <div className="border-t border-slate-100 overflow-x-auto">
-                                            <table className="w-full text-right">
-                                                <thead className="bg-blue-50/50">
+                                            <table className="w-full text-right data-table">
+                                                <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                                     <tr>
                                                         {['المنتج', 'الفئة', 'المخزون الحالي', 'كمية مقترحة', 'أفضل سعر', 'إجمالي'].map(h => (
                                                             <th key={h} className="px-4 py-3 text-[11px] font-bold text-blue-600 whitespace-nowrap overflow-visible">
@@ -619,7 +624,7 @@ export default function SmartPurchasingPage() {
                                                         ))}
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-50">
+                                                <tbody className="divide-y divide-gray-50">
                                                     {order.items.map(item => (
                                                         <tr key={item.productId} className="hover:bg-blue-50/20 transition-colors">
                                                             <td className="px-4 py-3 font-semibold text-slate-800 text-sm whitespace-nowrap">{item.name}</td>
@@ -671,7 +676,7 @@ export default function SmartPurchasingPage() {
                             title="الأسعار مستقرة!" desc="لم يُرصد أي ارتفاع غير مبرر في أسعار الموردين" />
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right data-table">
                                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                     <tr>
                                         {['المنتج', 'المورد', 'آخر سعر مدفوع', 'أفضل سعر تاريخي', 'فرق الزيادة', 'نسبة الزيادة'].map(h => (
@@ -806,7 +811,7 @@ export default function SmartPurchasingPage() {
                             title="لا يوجد مخزون راكد!" desc="جميع منتجاتك تُباع بانتظام خلال الفترة الأخيرة" />
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right data-table">
                                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                     <tr>
                                         {['المنتج', 'الفئة', 'الكمية المتوفرة', 'آخر بيعة', 'قيمة المخزون', 'المورد'].map(h => (
@@ -947,7 +952,7 @@ export default function SmartPurchasingPage() {
                             title="لا تنبيهات انتهاء قريبة!" desc="جميع المنتجات لديها صلاحية أكثر من 90 يوماً" />
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right data-table">
                                 <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                                     <tr>
                                         {['المنتج', 'الفرع', 'الكمية', 'تاريخ الانتهاء', 'أيام متبقية', 'قيمة المخزون', 'الحالة'].map(h => (

@@ -6,7 +6,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { useUser } from '@/hooks/useUser'
 import {
   Plus, Building2, Copy, Check, Phone, MapPin, Users, Receipt,
-  Edit2, PowerOff, X, Save, Loader2, Key, AlertTriangle, CheckCircle,
+  Edit2, PowerOff, Power, X, Save, Loader2, Key, AlertTriangle, CheckCircle,
   TrendingUp, ToggleLeft, ToggleRight, Globe, MonitorSmartphone
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -33,6 +33,8 @@ export default function BranchesPage() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading]   = useState(true)
   const [copied, setCopied]     = useState<string | null>(null)
+  // Plan branch cap (-1 / null = unlimited). Used to block creating over the limit.
+  const [maxBranches, setMaxBranches] = useState<number | null>(null)
 
   // Create modal
   const [createOpen,    setCreateOpen]    = useState(false)
@@ -45,14 +47,25 @@ export default function BranchesPage() {
   const [editForm,    setEditForm]    = useState({ name: '', address: '', phone: '' })
   const [editSaving,  setEditSaving]  = useState(false)
 
-  // Deactivate
+  // Deactivate / activate
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
+  const [activatingId,   setActivatingId]   = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
     fetch('/api/branches').then(r => r.json()).then(setBranches).finally(() => setLoading(false))
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Read the current plan's branch cap so we can disable creation at the limit.
+    fetch('/api/billing', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const mb = d?.subscription?.plan?.maxBranches
+        if (typeof mb === 'number') setMaxBranches(mb)
+      })
+      .catch(() => {})
+  }, [])
 
   // ── Create ──────────────────────────────────────────────────────────────────
   async function submitCreate(e: React.FormEvent) {
@@ -114,6 +127,21 @@ export default function BranchesPage() {
     finally { setDeactivatingId(null) }
   }
 
+  // ── Activate ────────────────────────────────────────────────────────────────
+  async function activateBranch(b: Branch) {
+    setActivatingId(b.id)
+    try {
+      const res = await fetch(`/api/branches/${b.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: true }),
+      })
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'تعذّر تفعيل الفرع'); return }
+      toast.success('تم تفعيل الفرع')
+      load()
+    } catch { toast.error('تعذر الاتصال بالخادم') }
+    finally { setActivatingId(null) }
+  }
+
   function copyText(text: string, key: string) {
     navigator.clipboard.writeText(text)
     setCopied(key)
@@ -124,6 +152,10 @@ export default function BranchesPage() {
   const totalActive  = branches.filter(b => b.isActive).length
   const totalUsers   = branches.reduce((s, b) => s + b._count.users, 0)
   const totalTx      = branches.reduce((s, b) => s + b._count.transactions, 0)
+
+  // Plan enforcement: -1 (or null) = unlimited. Block creating when active branches reach the cap.
+  const hasLimit = maxBranches !== null && maxBranches > 0
+  const atLimit  = hasLimit && totalActive >= (maxBranches as number)
 
   if (isElectron) return (
     <div className="flex items-center justify-center min-h-[70vh] animate-fade-in-up" dir="rtl">
@@ -197,6 +229,67 @@ export default function BranchesPage() {
     </div>
   )
 
+  if (loading) return (
+    <div className="space-y-6 animate-fade-in-up" dir="rtl">
+      {/* Hero loader */}
+      <div className="flex flex-col items-center justify-center pt-10 pb-4 gap-5">
+        <div className="relative">
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg,#094B9F,#063A8A)', boxShadow: '0 12px 40px rgba(9,75,159,0.4)' }}>
+            <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg,rgba(255,255,255,0.5) 0%,transparent 60%)' }} />
+            <Building2 size={36} className="text-white relative z-10 sk-spin" />
+          </div>
+          <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white sk-pulse"
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#094B9F)', boxShadow: '0 2px 8px rgba(9,75,159,0.5)' }} />
+        </div>
+        <div className="text-center space-y-1.5">
+          <p className="text-xl font-black text-slate-800">جاري تحميل الفروع</p>
+          <div className="flex items-center justify-center gap-1.5">
+            {[0, 0.2, 0.4].map((delay, i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400 sk-pulse" style={{ animationDelay: `${delay}s` }} />
+            ))}
+          </div>
+          <p className="text-sm text-slate-400 font-medium">يتم استرجاع بيانات الفروع ورموز التفعيل</p>
+        </div>
+      </div>
+
+      {/* KPI skeletons */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl p-5 space-y-3" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+            <div className="flex items-center justify-between">
+              <div className="skeleton h-3 w-20" />
+              <div className="skeleton w-9 h-9 rounded-xl" />
+            </div>
+            <div className="skeleton h-7 w-16" />
+          </div>
+        ))}
+      </div>
+
+      {/* Branch card skeletons */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.04)' }}>
+            <div className="skeleton h-24 w-full" />
+            <div className="p-5 space-y-3">
+              <div className="skeleton h-4 w-2/3" />
+              <div className="skeleton h-3 w-1/2" />
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <div className="skeleton h-14 rounded-xl" />
+                <div className="skeleton h-14 rounded-xl" />
+              </div>
+              <div className="skeleton h-11 rounded-xl" />
+              <div className="flex gap-2">
+                <div className="skeleton h-9 flex-1 rounded-xl" />
+                <div className="skeleton h-9 flex-1 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   return (
     <>{dialog}<div className="space-y-6 animate-fade-in-up" dir="rtl">
 
@@ -217,7 +310,9 @@ export default function BranchesPage() {
         </div>
         <button
           onClick={() => setCreateOpen(true)}
-          className="flex items-center justify-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-95 w-full sm:w-auto"
+          disabled={atLimit}
+          title={atLimit ? `وصلت للحد الأقصى من الفروع (${maxBranches}) في خطتك الحالية` : undefined}
+          className="flex items-center justify-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-95 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg"
           style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)', boxShadow: '0 4px 16px rgba(9,75,159,0.35)' }}
         >
           <Plus className="w-4 h-4" />
@@ -225,47 +320,33 @@ export default function BranchesPage() {
         </button>
       </div>
 
-      {/* ── Stat cards ── */}
-      {!loading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'إجمالي الفروع',    value: branches.length,  gradient: 'linear-gradient(135deg,#094B9F,#063A8A)', glow: 'rgba(9,75,159,0.2)' },
-            { label: 'الفروع النشطة',    value: totalActive,       gradient: 'linear-gradient(135deg,#10b981,#059669)', glow: 'rgba(16,185,129,0.2)' },
-            { label: 'الموظفون',         value: totalUsers,         gradient: 'linear-gradient(135deg,#f59e0b,#d97706)', glow: 'rgba(245,158,11,0.2)' },
-            { label: 'إجمالي المعاملات', value: totalTx.toLocaleString('ar-IQ'), gradient: 'linear-gradient(135deg,#06b6d4,#0891b2)', glow: 'rgba(6,182,212,0.2)' },
-          ].map(s => (
-            <div key={s.label} className="rounded-2xl p-4 flex items-center gap-3 relative overflow-hidden"
-              style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
-              <div className="absolute top-0 right-0 w-20 h-20 rounded-full pointer-events-none opacity-10 blur-2xl"
-                style={{ background: s.gradient, transform: 'translate(30%,-30%)' }} />
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 relative overflow-hidden"
-                style={{ background: s.gradient, boxShadow: `0 4px 12px ${s.glow}` }}>
-                <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%)' }} />
-                <TrendingUp size={16} className="text-white relative z-10" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-500 leading-tight">{s.label}</p>
-                <p className="text-2xl font-black text-slate-900 leading-tight">{s.value}</p>
-              </div>
-            </div>
-          ))}
+      {/* ── Plan limit notice ── */}
+      {atLimit && (
+        <div className="flex items-center gap-3 rounded-2xl px-5 py-3.5"
+          style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+          <AlertTriangle size={18} className="text-amber-500 flex-shrink-0" />
+          <p className="text-sm font-semibold text-amber-700">
+            وصلت للحد الأقصى من الفروع ({maxBranches}) في خطتك الحالية. للترقية وإضافة فروع أخرى، راجع صفحة الاشتراك.
+          </p>
         </div>
       )}
 
-      {/* ── Loading skeleton ── */}
-      {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-2xl overflow-hidden animate-pulse" style={{ background: 'white', border: '1px solid #e2e8f0' }}>
-              <div className="h-24 bg-slate-200" />
-              <div className="p-5 space-y-3">
-                <div className="h-4 bg-slate-100 rounded-lg w-2/3" />
-                <div className="h-3 bg-slate-100 rounded-lg w-1/2" />
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  <div className="h-14 bg-slate-100 rounded-xl" />
-                  <div className="h-14 bg-slate-100 rounded-xl" />
-                </div>
-                <div className="h-10 bg-slate-100 rounded-xl" />
+      {/* ── Stat cards ── */}
+      {(
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'إجمالي الفروع',    value: branches.length,                   iconBg: '#eef2ff', iconColor: '#094B9F', icon: Building2 },
+            { label: 'الفروع النشطة',    value: totalActive,                        iconBg: '#ecfdf5', iconColor: '#10b981', icon: CheckCircle },
+            { label: 'الموظفون',         value: totalUsers,                         iconBg: '#fffbeb', iconColor: '#f59e0b', icon: Users },
+            { label: 'إجمالي المعاملات', value: totalTx.toLocaleString('ar-IQ'),   iconBg: '#ecfeff', iconColor: '#06b6d4', icon: TrendingUp },
+          ].map(s => (
+            <div key={s.label} className="kpi-card">
+              <div className="kpi-icon" style={{ background: s.iconBg }}>
+                <s.icon size={18} style={{ color: s.iconColor }} />
+              </div>
+              <div className="min-w-0">
+                <p className="kpi-label">{s.label}</p>
+                <p className="kpi-value">{s.value}</p>
               </div>
             </div>
           ))}
@@ -301,9 +382,9 @@ export default function BranchesPage() {
             const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length]
             return (
               <div key={b.id} className="rounded-2xl overflow-hidden transition-all hover:shadow-lg"
-                style={{ background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}>
 
-                {/* Card header */}
+                {/* Card header — gradient stays the same in both modes */}
                 <div className={`relative bg-gradient-to-br ${gradient} p-5 flex items-start justify-between overflow-hidden`}>
                   <div className="absolute inset-0 opacity-20" style={{ background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.5), transparent 60%)' }} />
                   <div className="relative z-10 flex items-center gap-3">
@@ -333,14 +414,14 @@ export default function BranchesPage() {
                   {(b.address || b.phone) && (
                     <div className="space-y-1.5">
                       {b.address && (
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <MapPin size={13} className="flex-shrink-0 text-slate-400" />
+                        <div className="flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                          <MapPin size={13} className="flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
                           <span className="text-xs font-medium truncate">{b.address}</span>
                         </div>
                       )}
                       {b.phone && (
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Phone size={13} className="flex-shrink-0 text-slate-400" />
+                        <div className="flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                          <Phone size={13} className="flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
                           <span className="text-xs font-medium" dir="ltr">{b.phone}</span>
                         </div>
                       )}
@@ -349,37 +430,40 @@ export default function BranchesPage() {
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl p-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-color)' }}>
                       <div className="flex items-center justify-center gap-1.5 mb-1">
                         <Receipt size={12} className="text-blue-500" />
-                        <span className="text-[10px] font-bold text-slate-400">المعاملات</span>
+                        <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>المعاملات</span>
                       </div>
-                      <p className="text-xl font-black text-slate-800">{b._count.transactions.toLocaleString('ar-IQ')}</p>
+                      <p className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{b._count.transactions.toLocaleString('ar-IQ')}</p>
                     </div>
-                    <div className="rounded-xl p-3 text-center" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-color)' }}>
                       <div className="flex items-center justify-center gap-1.5 mb-1">
                         <Users size={12} className="text-violet-500" />
-                        <span className="text-[10px] font-bold text-slate-400">الموظفون</span>
+                        <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الموظفون</span>
                       </div>
-                      <p className="text-xl font-black text-slate-800">{b._count.users}</p>
+                      <p className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{b._count.users}</p>
                     </div>
                   </div>
 
                   {/* Activation code */}
                   <div className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-2"
-                    style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.06), rgba(14,99,212,0.04))', border: '1px solid rgba(9,75,159,0.15)' }}>
+                    style={{ background: 'rgba(9,75,159,0.06)', border: '1px solid rgba(9,75,159,0.15)' }}>
                     <div className="flex items-center gap-2 min-w-0">
                       <Key size={13} className="text-blue-500 flex-shrink-0" />
                       <div className="min-w-0">
                         <p className="text-[10px] font-bold text-blue-500">رمز التفعيل</p>
-                        <p className="font-mono text-[11px] font-bold text-blue-700 truncate">{b.activationCode}</p>
+                        <p className="font-mono text-[11px] font-bold truncate" style={{ color: 'var(--color-primary)' }}>{b.activationCode}</p>
                       </div>
                     </div>
                     <button onClick={() => copyText(b.activationCode, b.id)}
-                      className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors flex-shrink-0">
+                      className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+                      style={{ color: 'var(--color-primary)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(9,75,159,0.12)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = ''; }}>
                       {copied === b.id
-                        ? <Check size={14} className="text-emerald-600" />
-                        : <Copy size={14} className="text-blue-500" />}
+                        ? <Check size={14} className="text-emerald-500" />
+                        : <Copy size={14} />}
                     </button>
                   </div>
 
@@ -388,7 +472,7 @@ export default function BranchesPage() {
                     <button
                       onClick={() => openEdit(b)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105"
-                      style={{ background: 'linear-gradient(135deg, rgba(9,75,159,0.08), rgba(14,99,212,0.06))', border: '1px solid rgba(9,75,159,0.15)', color: '#094B9F' }}
+                      style={{ background: 'rgba(9,75,159,0.08)', border: '1px solid rgba(9,75,159,0.15)', color: 'var(--color-primary)' }}
                     >
                       <Edit2 size={13} /> تعديل
                     </button>
@@ -397,7 +481,7 @@ export default function BranchesPage() {
                         onClick={() => deactivateBranch(b)}
                         disabled={deactivatingId === b.id}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
-                        style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#dc2626' }}
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: 'var(--color-danger)' }}
                       >
                         {deactivatingId === b.id
                           ? <Loader2 size={13} className="animate-spin" />
@@ -406,10 +490,18 @@ export default function BranchesPage() {
                       </button>
                     )}
                     {!b.isActive && (
-                      <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold"
-                        style={{ background: 'rgba(100,116,139,0.06)', border: '1px solid rgba(100,116,139,0.15)', color: '#94a3b8' }}>
-                        <PowerOff size={13} /> موقوف
-                      </div>
+                      <button
+                        onClick={() => activateBranch(b)}
+                        disabled={activatingId === b.id || atLimit}
+                        title={atLimit ? `وصلت للحد الأقصى من الفروع (${maxBranches}) — لا يمكن تفعيل فرع آخر في خطتك الحالية` : undefined}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)', color: '#059669' }}
+                      >
+                        {activatingId === b.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Power size={13} />}
+                        تفعيل
+                      </button>
                     )}
                   </div>
                 </div>

@@ -14,18 +14,26 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const branchId = searchParams.get('branchId');
 
-    const where: any = { tenantId };
-    
+    // Build with AND so the branch scope and the search filter never overwrite
+    // each other — branch isolation must hold even while searching.
+    const and: any[] = [];
+
     if (branchId && branchId !== 'all') {
-        where.branchId = branchId;
+        // Branch customers of this branch + org-level customers (branchId = null).
+        // Never leak customers from other branches.
+        and.push({ OR: [{ branchId }, { branchId: null }] });
     }
 
     if (search) {
-        where.OR = [
-            { name: { contains: search } },
-            { phone: { contains: search } }
-        ];
+        and.push({
+            OR: [
+                { name: { contains: search } },
+                { phone: { contains: search } },
+            ],
+        });
     }
+
+    const where: any = { tenantId, ...(and.length > 0 ? { AND: and } : {}) };
 
     try {
         const customers = await prisma.customer.findMany({
@@ -48,10 +56,11 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { name, phone, address, initialBalance, branchId: bodyBranchId } = body;
+        const { name, phone, address, initialBalance, creditLimit, branchId: bodyBranchId } = body;
 
         const finalBranchId = bodyBranchId || authBranchId || null;
         const openingBalance = Number(initialBalance) || 0;
+        const creditLimitNum = Math.max(0, Number(creditLimit) || 0);
 
         // Transaction.branchId is required, so resolve a branch for the opening
         // entry (fall back to the tenant's first branch when none is selected).
@@ -68,6 +77,7 @@ export async function POST(req: NextRequest) {
                     phone,
                     address,
                     balance: openingBalance,
+                    creditLimit: creditLimitNum,
                     tenant: { connect: { id: tenantId } },
                     ...(finalBranchId ? { branch: { connect: { id: finalBranchId } } } : {})
                 }
@@ -96,7 +106,7 @@ export async function POST(req: NextRequest) {
 
         enqueueSync('customers', 'INSERT', customer.id, {
             cloudId: customer.id, name, phone, address,
-            balance: customer.balance, tenantId, branchId: finalBranchId,
+            balance: customer.balance, creditLimit: creditLimitNum, tenantId, branchId: finalBranchId,
         });
 
         if (openingTx) {
@@ -126,7 +136,7 @@ export async function PUT(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { id, name, phone, address } = body;
+        const { id, name, phone, address, creditLimit } = body;
 
         // Verify the customer belongs to this tenant before updating
         const existing = await prisma.customer.findFirst({
@@ -136,15 +146,19 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
         }
 
+        const hasCreditLimit = creditLimit !== undefined && creditLimit !== null;
+        const creditLimitNum = hasCreditLimit ? Math.max(0, Number(creditLimit) || 0) : undefined;
+
         const customer = await prisma.customer.update({
             where: { id: id },
-            data: { name, phone, address }
+            data: { name, phone, address, ...(creditLimitNum !== undefined ? { creditLimit: creditLimitNum } : {}) }
         });
 
         await logAction('UPDATE_CUSTOMER', 'Customer', String(customer.id), `Updated customer Details: ${customer.name}`);
 
         enqueueSync('customers', 'UPDATE', customer.id, {
             id: customer.id, name, phone, address,
+            ...(creditLimitNum !== undefined ? { creditLimit: creditLimitNum } : {}),
         });
 
         return NextResponse.json(customer);
