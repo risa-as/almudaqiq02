@@ -25,7 +25,7 @@ import { Screen } from '@/components/Screen'
 import { CollapsibleScanner } from '@/components/stock/CollapsibleScanner'
 import { chipFor, ORDER_STATUS, StatusChip } from '@/components/stock/StatusChip'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
 const S = {
@@ -339,8 +339,8 @@ const styles = StyleSheet.create({
   lineCard: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.xl,
     padding: spacing.lg,
     gap: spacing.sm,
     ...shadow.card,
@@ -373,9 +373,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
+    ...shadow.button,
   },
-  submitText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.md },
+  submitText: { color: colors.onPrimary, fontWeight: '800', fontSize: fontSize.md },
   disabled: { opacity: 0.6 },
 })

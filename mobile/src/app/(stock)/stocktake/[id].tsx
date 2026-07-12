@@ -30,7 +30,7 @@ import { Screen } from '@/components/Screen'
 import { QtyInputModal } from '@/components/stock/QtyInputModal'
 import { chipFor, StatusChip, STOCKTAKE_STATUS } from '@/components/stock/StatusChip'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime } from '@/utils/format'
 
 const S = {
@@ -499,17 +499,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
+    ...shadow.button,
   },
-  submitText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.md },
+  submitText: { color: colors.onPrimary, fontWeight: '800', fontSize: fontSize.md },
   disabled: { opacity: 0.6 },
   cancelText: { color: colors.danger, fontSize: fontSize.sm, textAlign: 'center', paddingVertical: spacing.xs },
   reviewBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
   reviewCard: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
     maxHeight: '80%',
     padding: spacing.lg,
     gap: spacing.md,

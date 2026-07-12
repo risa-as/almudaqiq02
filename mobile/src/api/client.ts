@@ -1,4 +1,5 @@
 import { ar } from '@/i18n/ar'
+import { useNetworkStore } from '@/stores/network'
 import { clearTokens, getTokens, setAccessToken } from './tokens'
 
 // يقبل الرابط بصيغة https://host أو https://host/api — المسارات هنا تبدأ بـ /api دائمًا
@@ -83,7 +84,7 @@ function buildUrl(path: string, query?: QueryParams): string {
 
 async function doFetch(url: string, opts: ApiOptions, accessToken: string | null): Promise<Response> {
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       method: opts.method ?? 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -92,8 +93,12 @@ async function doFetch(url: string, opts: ApiOptions, accessToken: string | null
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     })
+    // وصلت استجابة من الخادم (ولو كانت خطأ HTTP) → الاتصال قائم
+    useNetworkStore.getState().setOffline(false)
+    return res
   } catch {
-    // فشل شبكة (لا يوجد وصول للخادم إطلاقًا)
+    // فشل شبكة (لا يوجد وصول للخادم إطلاقًا) → إظهار لافتة عدم الاتصال
+    useNetworkStore.getState().setOffline(true)
     throw new ApiError(0, ar.common.networkError)
   }
 }

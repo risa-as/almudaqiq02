@@ -178,10 +178,10 @@ const styles = StyleSheet.create({
   grantButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.pill,
   },
-  grantButtonText: { color: colors.onPrimary, fontWeight: '600', fontSize: fontSize.sm },
+  grantButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.sm },
   manualOnly: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -206,12 +206,12 @@ const styles = StyleSheet.create({
   },
   manualButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  manualButtonText: { color: colors.onPrimary, fontWeight: '600', fontSize: fontSize.sm },
+  manualButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.sm },
   backToCamera: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, alignSelf: 'center' },
   backToCameraText: { color: colors.primary, fontSize: fontSize.sm },
 })

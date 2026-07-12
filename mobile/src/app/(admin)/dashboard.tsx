@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -18,12 +19,15 @@ import { Screen } from '@/components/Screen'
 import { StatCard } from '@/components/StatCard'
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
+import { useAuthStore } from '@/stores/auth'
 import { useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatMoney } from '@/utils/format'
 
 const t = {
   title: 'الرئيسية',
+  greetingMorning: 'صباح الخير',
+  greetingEvening: 'مساء الخير',
   todaySales: 'مبيعات اليوم',
   todayProfit: 'ربح اليوم',
   invoiceCount: 'عدد الفواتير',
@@ -44,6 +48,7 @@ const t = {
 export default function AdminDashboard() {
   const router = useRouter()
   const aiEnabled = useFeature('ai_assistant')
+  const user = useAuthStore(s => s.user)
   const { selectedBranchId, selectedBranchName } = useBranchSelection()
   const bid = selectedBranchId
 
@@ -97,8 +102,34 @@ export default function AdminDashboard() {
 
   const goInventory = () => router.push('/(admin)/inventory' as never)
 
+  const greeting = new Date().getHours() < 12 ? t.greetingMorning : t.greetingEvening
+
   return (
-    <Screen title={t.title} headerAction={branchBadge} refreshing={refreshing} onRefresh={onRefresh}>
+    <Screen refreshing={refreshing} onRefresh={onRefresh}>
+      {/* ── الهيدر البطولي (نيلي → بنفسجي) ── */}
+      <LinearGradient
+        colors={[colors.gradientFrom, colors.gradientTo]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
+      >
+        <View style={styles.heroTop}>
+          <View style={styles.heroTextWrap}>
+            <Text style={styles.heroGreeting}>{greeting} 👋</Text>
+            <Text style={styles.heroName} numberOfLines={1}>
+              {user?.tenantName || user?.username || ar.appName}
+            </Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Ionicons name="storefront-outline" size={14} color={colors.onPrimary} />
+            <Text style={styles.heroBadgeText} numberOfLines={1}>
+              {selectedBranchName}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.heroHint}>{t.title} · {ar.common.today}</Text>
+      </LinearGradient>
+
       {/* ── بطاقات اليوم ── */}
       <View style={styles.statsRow}>
         <StatCard
@@ -222,6 +253,32 @@ function QuickLink({
 
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
+  hero: {
+    borderRadius: radius.xxl,
+    padding: spacing.xl,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+    ...shadow.button,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  heroTextWrap: { flex: 1, gap: spacing.xs },
+  heroGreeting: { color: 'rgba(255,255,255,0.85)', fontSize: fontSize.md, fontWeight: '600', textAlign: 'right' },
+  heroName: { color: colors.onPrimary, fontSize: fontSize.title, fontWeight: '800', textAlign: 'right', letterSpacing: -0.3 },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    maxWidth: 150,
+  },
+  heroBadgeText: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: '600' },
+  heroHint: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.sm, textAlign: 'right' },
   branchBadge: {
     flexDirection: 'row',
     alignItems: 'center',

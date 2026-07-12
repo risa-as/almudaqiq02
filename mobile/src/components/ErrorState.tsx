@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { ApiError } from '@/api/client'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 interface ErrorStateProps {
   error?: unknown
@@ -34,9 +34,12 @@ const styles = StyleSheet.create({
   text: { color: colors.text, fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
   button: {
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.xxl,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    ...shadow.button,
   },
-  buttonText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '600' },
+  buttonText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '700' },
 })

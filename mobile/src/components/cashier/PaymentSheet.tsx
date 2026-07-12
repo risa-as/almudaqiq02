@@ -17,7 +17,7 @@ import { customersKey, fetchCustomers, type CustomerDto } from '@/api/endpoints/
 import { useCartStore, type CartPaymentMethod } from '@/stores/cart'
 import { formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 
 // نصوص خاصة بورقة الدفع
 const t = {
@@ -275,8 +275,8 @@ const styles = StyleSheet.create({
   flexEnd: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
     padding: spacing.lg,
     gap: spacing.md,
     maxHeight: '90%',
@@ -313,12 +313,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     paddingVertical: spacing.md,
   },
-  methodButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  methodButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary, ...shadow.button },
   methodText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textSecondary },
-  methodTextActive: { color: colors.onPrimary },
+  methodTextActive: { color: colors.onPrimary, fontWeight: '700' },
   cashBox: { gap: spacing.sm },
   creditBox: { gap: spacing.sm },
   input: {
@@ -393,11 +393,14 @@ const styles = StyleSheet.create({
   verifyingText: { flex: 1, color: colors.warning, fontSize: fontSize.sm, textAlign: 'right' },
   confirmButton: {
     backgroundColor: colors.success,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md + 2,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
     alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.button,
+    shadowColor: colors.success,
   },
   confirmDisabled: { opacity: 0.5 },
-  confirmText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  confirmText: { color: colors.onPrimary, fontSize: fontSize.lg, fontWeight: '800' },
   submittingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 })

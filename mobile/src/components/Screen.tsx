@@ -54,10 +54,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
-  title: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  title: { fontSize: fontSize.title, fontWeight: '800', color: colors.text, textAlign: 'right', letterSpacing: -0.3 },
   body: { flex: 1, paddingHorizontal: spacing.lg },
   scrollBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 })

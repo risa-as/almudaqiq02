@@ -20,9 +20,9 @@ export function SectionTitle({ children, action }: PropsWithChildren<{ action?: 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.lg,
     ...shadow.card,
   },

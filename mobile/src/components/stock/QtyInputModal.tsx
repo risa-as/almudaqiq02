@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 interface QtyInputModalProps {
   visible: boolean
@@ -91,9 +91,10 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xxl,
     padding: spacing.lg,
     gap: spacing.md,
+    ...shadow.elevated,
   },
   title: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text, textAlign: 'right' },
   subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
@@ -113,11 +114,12 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: radius.pill,
   },
   cancelButton: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
-  confirmButton: { backgroundColor: colors.primary },
+  confirmButton: { backgroundColor: colors.primary, ...shadow.button },
   disabled: { opacity: 0.5 },
   cancelText: { color: colors.textSecondary, fontWeight: '600', fontSize: fontSize.md },
   confirmText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.md },

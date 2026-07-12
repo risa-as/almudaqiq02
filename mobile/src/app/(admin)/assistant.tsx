@@ -18,7 +18,7 @@ import { UpgradeState } from '@/components/UpgradeState'
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 const t = {
   title: 'المساعد الذكي',
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   bubbleRowAssistant: { justifyContent: 'flex-end' },
   bubble: {
     maxWidth: '85%',
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
@@ -213,8 +213,9 @@ const styles = StyleSheet.create({
   bubbleAssistant: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     borderTopLeftRadius: radius.sm,
+    ...shadow.card,
   },
   bubbleError: { backgroundColor: colors.dangerSoft, borderColor: colors.danger },
   bubbleText: { fontSize: fontSize.md, color: colors.text, textAlign: 'right', lineHeight: 22 },
@@ -255,25 +256,26 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 48,
     maxHeight: 110,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md - 2,
     fontSize: fontSize.md,
     color: colors.text,
     textAlignVertical: 'center',
   },
   sendBtn: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: radius.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadow.button,
   },
   sendBtnDisabled: { opacity: 0.5 },
   sendIcon: { transform: [{ scaleX: -1 }] },

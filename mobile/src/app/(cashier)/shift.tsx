@@ -18,7 +18,7 @@ import { StatCard } from '@/components/StatCard'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 
 // نصوص خاصة بشاشة الوردية
 const t = {
@@ -365,9 +365,9 @@ export default function ShiftScreen() {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.xxl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.xl,
     gap: spacing.sm,
     marginTop: spacing.md,
@@ -405,12 +405,14 @@ const styles = StyleSheet.create({
   errorText: { color: colors.danger, fontSize: fontSize.sm, textAlign: 'right', marginTop: spacing.xs },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md + 2,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: spacing.md,
+    ...shadow.button,
   },
-  primaryButtonText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  primaryButtonText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '800' },
   buttonDisabled: { opacity: 0.6 },
   openBadge: {
     flexDirection: 'row',
@@ -441,15 +443,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.dangerSoft,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: 48,
   },
   closeStartText: { color: colors.danger, fontSize: fontSize.md, fontWeight: '700' },
   closePanel: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.xxl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.lg,
     gap: spacing.xs,
     ...shadow.card,
@@ -468,14 +470,18 @@ const styles = StyleSheet.create({
   closeActions: { gap: spacing.sm, marginTop: spacing.md },
   dangerButton: {
     backgroundColor: colors.danger,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md + 2,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
     alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.button,
+    shadowColor: colors.danger,
   },
   ghostButton: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: 48,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

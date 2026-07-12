@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { AppState, I18nManager } from 'react-native'
+import { AppState, I18nManager, StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from '@/api/queryClient'
+import { OfflineBanner } from '@/components/OfflineBanner'
 import { useAuthStore } from '@/stores/auth'
 
 // ── تفعيل RTL (يسري بالكامل بعد أول إعادة تشغيل للتطبيق) ─────────────────────
@@ -44,13 +45,20 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="(admin)" />
-        <Stack.Screen name="(cashier)" />
-        <Stack.Screen name="(stock)" />
-      </Stack>
+      <View style={styles.root}>
+        <OfflineBanner />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="(admin)" />
+          <Stack.Screen name="(cashier)" />
+          <Stack.Screen name="(stock)" />
+        </Stack>
+      </View>
     </QueryClientProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+})

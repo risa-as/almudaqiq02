@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { BarcodeScannerView } from '@/components/BarcodeScannerView'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 interface CollapsibleScannerProps {
   onScanned: (code: string) => void
@@ -45,8 +45,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: 48,
+    ...shadow.button,
   },
   openText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.md },
   wrap: { gap: spacing.xs },

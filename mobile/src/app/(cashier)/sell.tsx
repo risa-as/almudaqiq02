@@ -18,7 +18,7 @@ import { computeCartTotals, useCartStore, type CartLine } from '@/stores/cart'
 import { useAuthStore } from '@/stores/auth'
 import { formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 
 // نصوص خاصة بشاشة البيع
 const t = {
@@ -332,13 +332,7 @@ export default function SellScreen() {
           </View>
         ) : null}
 
-        <View style={styles.totalsRow}>
-          <Text style={styles.grandTotalLabel}>{t.total}</Text>
-          <Text style={styles.grandTotalValue}>
-            {formatMoney(totals.total)} {ar.common.currency}
-          </Text>
-        </View>
-
+        {/* زر الدفع الرئيسي — حبة كاملة العرض تعرض الإجمالي بداخلها */}
         <Pressable
           style={[styles.payButton, payDisabled && styles.payDisabled]}
           onPress={() => {
@@ -347,8 +341,13 @@ export default function SellScreen() {
           }}
           disabled={payDisabled}
         >
-          <Ionicons name="checkmark-circle-outline" size={20} color={colors.onPrimary} />
-          <Text style={styles.payText}>{t.pay}</Text>
+          <View style={styles.payLabelWrap}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.onPrimary} />
+            <Text style={styles.payText}>{t.pay}</Text>
+          </View>
+          <Text style={styles.payTotal}>
+            {formatMoney(totals.total)} {ar.common.currency}
+          </Text>
         </Pressable>
       </View>
 
@@ -429,7 +428,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.md,
     ...shadow.card,
   },
@@ -465,13 +464,13 @@ const styles = StyleSheet.create({
   lineTotal: { fontSize: fontSize.sm, fontWeight: '800', color: colors.primary },
   footer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.md,
     gap: spacing.xs,
     marginBottom: spacing.sm,
-    ...shadow.card,
+    ...shadow.elevated,
   },
   totalsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   totalsLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
@@ -489,18 +488,21 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   discountValue: { fontSize: fontSize.sm, fontWeight: '700', color: colors.danger },
-  grandTotalLabel: { fontSize: fontSize.md, fontWeight: '800', color: colors.text },
-  grandTotalValue: { fontSize: fontSize.lg, fontWeight: '800', color: colors.primary },
   payButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
     backgroundColor: colors.success,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    marginTop: spacing.xs,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    ...shadow.button,
+    shadowColor: colors.success,
   },
   payDisabled: { opacity: 0.5 },
-  payText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  payLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  payText: { color: colors.onPrimary, fontSize: fontSize.lg, fontWeight: '800' },
+  payTotal: { color: colors.onPrimary, fontSize: fontSize.lg, fontWeight: '800' },
 })

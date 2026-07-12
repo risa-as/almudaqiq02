@@ -41,9 +41,9 @@ export function AccountCard() {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     padding: spacing.lg,
     gap: spacing.lg,
     ...shadow.card,
@@ -67,8 +67,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     backgroundColor: colors.dangerSoft,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: 48,
   },
-  signOutText: { color: colors.danger, fontWeight: '600', fontSize: fontSize.md },
+  signOutText: { color: colors.danger, fontWeight: '700', fontSize: fontSize.md },
 })

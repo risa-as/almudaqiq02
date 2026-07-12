@@ -36,7 +36,7 @@ import { chipFor, StatusChip, TRANSFER_STATUS } from '@/components/stock/StatusC
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
-import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime } from '@/utils/format'
 
 const S = {
@@ -484,11 +484,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
     marginBottom: spacing.sm,
+    ...shadow.button,
   },
-  newButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.md },
+  newButtonText: { color: colors.onPrimary, fontWeight: '800', fontSize: fontSize.md },
   disabled: { opacity: 0.6 },
   errorBanner: {
     flexDirection: 'row',
@@ -512,8 +513,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.xl,
     padding: spacing.lg,
     gap: spacing.sm,
     marginBottom: spacing.sm,
@@ -531,16 +532,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.success,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
   },
   receiptText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.sm },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
   modalCard: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
     maxHeight: '90%',
   },
   modalHeader: {

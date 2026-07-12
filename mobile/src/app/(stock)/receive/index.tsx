@@ -107,8 +107,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.xl,
     padding: spacing.lg,
     gap: spacing.sm,
     ...shadow.card,

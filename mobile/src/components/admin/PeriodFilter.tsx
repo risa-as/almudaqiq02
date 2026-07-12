@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 /** شريط اختيارات (فترة/فلتر) على شكل شرائح — عام على نوع القيمة. */
 interface PeriodFilterProps<T extends string> {
@@ -31,14 +31,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   chip: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: 'center',
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary, ...shadow.button },
   chipText: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
-  chipTextActive: { color: colors.onPrimary },
+  chipTextActive: { color: colors.onPrimary, fontWeight: '700' },
 })

@@ -2,7 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 import { paymentLabel } from './constants'
 
 // نصوص خاصة بملخص الإيصال
@@ -134,9 +134,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxHeight: '85%',
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.xxl,
     padding: spacing.xl,
     gap: spacing.lg,
+    ...shadow.elevated,
   },
   successHeader: { alignItems: 'center', gap: spacing.sm },
   successIcon: {
@@ -171,9 +172,11 @@ const styles = StyleSheet.create({
   summaryBold: { fontSize: fontSize.md, fontWeight: '800', color: colors.text },
   doneButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md + 2,
+    borderRadius: radius.pill,
+    height: control.buttonHeight,
     alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.button,
   },
-  doneText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '700' },
+  doneText: { color: colors.onPrimary, fontSize: fontSize.lg, fontWeight: '800' },
 })

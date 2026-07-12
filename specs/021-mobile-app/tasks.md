@@ -118,8 +118,8 @@
 
 **Independent Test**: quickstart.md step 5.
 
-- [ ] T044 [US5] Gating hook `mobile/src/hooks/useFeature.ts` reading `authStore.features`; apply to: assistant tab (`ai_assistant`), transfers tab/screens (`stock_transfers`), audit section (`audit_log`) — hidden tabs, and a locked `UpgradeState` component `mobile/src/components/UpgradeState.tsx` for direct navigation attempts (FR-017)
-- [ ] T045 [US5] Refresh features on session restore and on foreground (`AppState` listener re-fires `/api/auth/me` when app returns to foreground after >5 min) so plan upgrades appear without reinstall (US5-AS2)
+- [X] T044 [US5] Gating hook `mobile/src/hooks/useFeature.ts` reading `authStore.features`; apply to: assistant tab (`ai_assistant`), transfers tab/screens (`stock_transfers`), audit section (`audit_log`) — hidden tabs, and a locked `UpgradeState` component `mobile/src/components/UpgradeState.tsx` for direct navigation attempts (FR-017)
+- [X] T045 [US5] Refresh features on session restore and on foreground (`AppState` listener re-fires `/api/auth/me` when app returns to foreground after >5 min) so plan upgrades appear without reinstall (US5-AS2)
 
 **Checkpoint**: US5 acceptance scenarios 1–2 pass.
 
@@ -127,12 +127,12 @@
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T046 [P] RTL + Arabic audit across every screen: row directions, chevrons, numerals, toasts — fix violations (SC-007, FR-018)
-- [ ] T047 [P] Global error handling polish: network-offline banner (FR-019 messaging), server Arabic errors surfaced verbatim, retry affordances on all queries
-- [ ] T048 Run gates: `npx tsc --noEmit` and `npx expo-doctor` in `mobile/` — fix all findings
+- [X] T046 [P] RTL + Arabic audit across every screen: row directions, chevrons, numerals, toasts — fix violations (SC-007, FR-018)
+- [X] T047 [P] Global error handling polish: network-offline banner (FR-019 messaging), server Arabic errors surfaced verbatim, retry affordances on all queries
+- [X] T048 Run gates: `npx tsc --noEmit` and `npx expo-doctor` in `mobile/` — fix all findings
 - [ ] T049 Execute full quickstart.md acceptance walkthrough (steps 1–5) against local backend and record results in `specs/021-mobile-app/checklists/acceptance.md`
-- [ ] T050 [P] Write `mobile/README.md` — setup, env, run, EAS APK build (condensed from quickstart.md)
-- [ ] T051 Modern design pass (user request 2026-07-11): SHEIN-like contemporary styling across all screens — pill CTA buttons, card grids with soft shadows, chip filters, gradient hero header on dashboard/login, bolder typography scale, consistent 16–20px radii; applied via `mobile/src/theme` token upgrades + targeted screen polish after US2–US5 land
+- [X] T050 [P] Write `mobile/README.md` — setup, env, run, EAS APK build (condensed from quickstart.md)
+- [X] T051 Modern design pass (user request 2026-07-11): SHEIN-like contemporary styling across all screens — pill CTA buttons, card grids with soft shadows, chip filters, gradient hero header on dashboard/login, bolder typography scale, consistent 16–20px radii; applied via `mobile/src/theme` token upgrades + targeted screen polish after US2–US5 land
 
 ---
 
