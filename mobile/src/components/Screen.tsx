@@ -27,13 +27,18 @@ export function Screen({
 }: PropsWithChildren<ScreenProps>) {
   const header = title ? (
     <View style={styles.header}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
-        {headerAction}
+      <View style={[styles.headerTextWrap, headerAction ? styles.headerTextPadded : null]}>
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+        <View style={styles.accentBar} />
       </View>
+      {headerAction ? <View style={styles.actionWrap}>{headerAction}</View> : null}
     </View>
   ) : null
 
@@ -67,20 +72,31 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+    justifyContent: 'center',
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+  headerTextWrap: { alignItems: 'center', gap: 3 },
+  // عند وجود زر جانبي: هامش يمنع العنوان الطويل من الدخول تحته
+  headerTextPadded: { paddingHorizontal: 52 },
+  title: { fontSize: 22, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.3 },
+  subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
+  accentBar: {
+    width: 34,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+    marginTop: spacing.xs + 2,
   },
-  headerTextWrap: { flex: 1, gap: 2 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text, textAlign: 'right', letterSpacing: -0.3 },
-  subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
+  actionWrap: {
+    position: 'absolute',
+    end: spacing.lg,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   scrollBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
 })

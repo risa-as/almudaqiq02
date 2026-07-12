@@ -15,6 +15,14 @@ export function formatDate(value: string | Date | null | undefined): string {
   return format(d, 'yyyy/MM/dd')
 }
 
+/** وقت فقط: 14:05 */
+export function formatTime(value: string | Date | null | undefined): string {
+  if (!value) return '—'
+  const d = typeof value === 'string' ? new Date(value) : value
+  if (Number.isNaN(d.getTime())) return '—'
+  return format(d, 'HH:mm')
+}
+
 /** تاريخ + وقت: 2026/07/11 14:05 */
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return '—'

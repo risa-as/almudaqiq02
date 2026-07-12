@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { fetchLiveTransactions, fetchShiftsReport, type LiveTransaction } from '@/api/endpoints/reports'
 import { Card, SectionTitle } from '@/components/admin/Card'
@@ -9,7 +10,7 @@ import { Screen } from '@/components/Screen'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
-import { formatDateTime, formatMoney } from '@/utils/format'
+import { formatDateTime, formatMoney, formatTime } from '@/utils/format'
 
 const LIVE_REFETCH_MS = 30_000
 
@@ -20,7 +21,9 @@ const t = {
   noInvoices: 'لا توجد فواتير بعد',
   openShifts: 'الورديات المفتوحة',
   noOpenShifts: 'لا توجد ورديات مفتوحة الآن',
-  openedAt: 'فُتحت',
+  openedAt: 'وقت الفتح',
+  branch: 'الفرع',
+  salesLabel: 'المبيعات',
   invoices: 'فاتورة',
   openChip: 'مفتوحة',
 }
@@ -124,23 +127,45 @@ export default function AdminSales() {
         <View style={styles.cardList}>
           {openShifts.map(s => (
             <View key={s.id} style={styles.shiftCard}>
-              <View style={styles.shiftInfo}>
-                <View style={styles.shiftNameRow}>
+              {/* رأس البطاقة: الكاشير + شارة الحالة */}
+              <View style={styles.shiftHeader}>
+                <View style={styles.shiftAvatarGroup}>
+                  <View style={styles.shiftAvatar}>
+                    <Ionicons name="person" size={18} color={colors.primary} />
+                  </View>
                   <Text style={styles.shiftName} numberOfLines={1}>
                     {s.user?.username ?? '—'}
                   </Text>
+                </View>
+                <View style={styles.openChip}>
                   <View style={styles.openDot} />
                   <Text style={styles.openLabel}>{t.openChip}</Text>
                 </View>
-                <Text style={styles.shiftMeta}>
-                  {s.branchName} • {t.openedAt} {formatDateTime(s.openedAt)}
-                </Text>
               </View>
-              <View style={styles.shiftTotalWrap}>
-                <Text style={styles.shiftSales}>{formatMoney(s.totalSales)}</Text>
-                <Text style={styles.shiftMeta}>
-                  {s.txCount} {t.invoices}
-                </Text>
+
+              <View style={styles.shiftDivider} />
+
+              {/* تفاصيل الوردية: ثلاث خانات معنونة */}
+              <View style={styles.shiftStats}>
+                <View style={styles.shiftStat}>
+                  <Text style={styles.shiftStatLabel}>{t.branch}</Text>
+                  <Text style={styles.shiftStatValue} numberOfLines={1}>
+                    {s.branchName}
+                  </Text>
+                </View>
+                <View style={styles.shiftStat}>
+                  <Text style={styles.shiftStatLabel}>{t.openedAt}</Text>
+                  <Text style={styles.shiftStatValue}>{formatTime(s.openedAt)}</Text>
+                </View>
+                <View style={styles.shiftStat}>
+                  <Text style={styles.shiftStatLabel}>{t.salesLabel}</Text>
+                  <Text style={[styles.shiftStatValue, styles.shiftSales]} numberOfLines={1}>
+                    {formatMoney(s.totalSales)}
+                  </Text>
+                  <Text style={styles.shiftStatCaption}>
+                    {s.txCount} {t.invoices}
+                  </Text>
+                </View>
               </View>
             </View>
           ))}
@@ -197,27 +222,50 @@ const styles = StyleSheet.create({
   txTime: { fontSize: fontSize.sm, color: colors.textMuted },
   txMetaLine: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
 
-  // ── بطاقة الوردية المفتوحة ─────────────────────────────────────────────────
+  // ── بطاقة الوردية المفتوحة: رأس (كاشير + حالة) ثم ثلاث خانات معنونة ────────
   shiftCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderSoft,
     borderRadius: radius.lg,
     padding: spacing.lg,
+    gap: spacing.md,
     ...shadow.card,
   },
-  shiftInfo: { flex: 1, gap: spacing.xs },
-  shiftNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  shiftName: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, textAlign: 'right', flexShrink: 1 },
-  openDot: { width: 8, height: 8, borderRadius: radius.full, backgroundColor: colors.success },
-  openLabel: { fontSize: fontSize.sm, fontWeight: '700', color: colors.success },
-  shiftMeta: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'right' },
-  shiftTotalWrap: { alignItems: 'flex-end', gap: 2 },
-  shiftSales: { fontSize: fontSize.lg, fontWeight: '800', color: colors.success },
+  shiftHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  shiftAvatarGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  shiftAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.full,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shiftName: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, textAlign: 'right', flexShrink: 1 },
+  openChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  openDot: { width: 7, height: 7, borderRadius: radius.full, backgroundColor: colors.success },
+  openLabel: { fontSize: fontSize.xs, fontWeight: '700', color: colors.success },
+  shiftDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  shiftStats: { flexDirection: 'row', alignItems: 'flex-start' },
+  shiftStat: { flex: 1, alignItems: 'center', gap: 2 },
+  shiftStatLabel: { fontSize: fontSize.xs, color: colors.textMuted },
+  shiftStatValue: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  shiftStatCaption: { fontSize: fontSize.xs, color: colors.textMuted },
+  shiftSales: { color: colors.success, fontSize: fontSize.md, fontWeight: '800' },
 
   footnote: {
     marginTop: spacing.lg,

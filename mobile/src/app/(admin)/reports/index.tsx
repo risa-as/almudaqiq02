@@ -47,21 +47,23 @@ export default function ReportsHub() {
       <Text style={styles.scope}>
         {t.branchScope} {selectedBranchName}
       </Text>
-      <View style={styles.list}>
+      <View style={styles.grid}>
         {ENTRIES.map(entry => (
           <Pressable
             key={entry.route}
-            style={styles.card}
+            style={styles.tile}
             onPress={() => router.push(entry.route as never)}
           >
             <View style={[styles.iconWrap, { backgroundColor: entry.tintSoft }]}>
-              <Ionicons name={entry.icon} size={24} color={entry.tint} />
+              <Ionicons name={entry.icon} size={26} color={entry.tint} />
             </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardLabel}>{entry.label}</Text>
-              <Text style={styles.cardHint}>{entry.hint}</Text>
-            </View>
-            <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
+            <Text style={styles.tileLabel} numberOfLines={1}>
+              {entry.label}
+            </Text>
+            <Text style={styles.tileHint} numberOfLines={2}>
+              {entry.hint}
+            </Text>
+            <View style={[styles.tileAccent, { backgroundColor: entry.tint }]} />
           </Pressable>
         ))}
       </View>
@@ -76,26 +78,42 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: spacing.md,
   },
-  list: { gap: spacing.md },
-  card: {
+  grid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
+  },
+  tile: {
+    width: '48.5%',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.xs,
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.borderSoft,
-    padding: spacing.lg,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    overflow: 'hidden',
     ...shadow.card,
   },
   iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.lg - 2,
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.xs,
   },
-  cardInfo: { flex: 1, gap: 2 },
-  cardLabel: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
-  cardHint: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
+  tileLabel: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  tileHint: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'center', lineHeight: 16 },
+  // شريط لوني رفيع أسفل البطاقة يميز كل تقرير
+  tileAccent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    opacity: 0.9,
+  },
 })
