@@ -28,14 +28,8 @@ export function Screen({
   const header = title ? (
     <View style={styles.header}>
       <View style={[styles.headerTextWrap, headerAction ? styles.headerTextPadded : null]}>
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         <View style={styles.accentBar} />
       </View>
       {headerAction ? <View style={styles.actionWrap}>{headerAction}</View> : null}
