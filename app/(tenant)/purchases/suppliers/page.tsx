@@ -125,7 +125,12 @@ export default function SuppliersPage() {
     useEffect(() => {
         if (branchLoading) return;
         fetchSuppliers();
-    }, [selectedBranch, branchLoading]);
+        // Depend on the stable branch id (string), not the selectedBranch object.
+        // BranchContext replaces that object with a fresh reference for the same
+        // branch (cache → API), which previously re-fired this effect ~3s later
+        // and re-loaded the page. The id is identical across both, so no refetch.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedBranch?.id, branchLoading]);
 
     useEffect(() => {
         const lowerSearch = searchTerm.toLowerCase();

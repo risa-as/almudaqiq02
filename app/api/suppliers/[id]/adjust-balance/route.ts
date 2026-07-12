@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
 import { enqueueSync } from '@/lib/sync-enqueue'
+import { logActionAs } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +91,9 @@ export async function POST(
       description: result.entry.description,
       date:        result.entry.date,
     })
+
+    await logActionAs(auth, 'SUPPLIER_ADJUST_BALANCE', 'Supplier', id,
+      `${supplier.name} — new balance: ${result.scopedBalance}`)
 
     return NextResponse.json({ success: true, balance: result.scopedBalance })
   } catch (error) {

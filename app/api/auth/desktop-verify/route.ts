@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
 import { verifyPassword } from '@/lib/auth'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimitAsync } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || request.headers.get('x-real-ip')
     || 'unknown'
-  const rl = checkRateLimit(`desktop-verify:${ip}`, { limit: 10, windowMs: 5 * 60_000 })
+  const rl = await checkRateLimitAsync(`desktop-verify:${ip}`, { limit: 10, windowMs: 5 * 60_000 })
   if (!rl.allowed) {
     return NextResponse.json({ error: 'محاولات كثيرة جداً. حاول لاحقاً.' }, { status: 429 })
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { logActionAs } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +97,9 @@ export async function POST(request: NextRequest) {
           startDate: newOffer.startDate, endDate: newOffer.endDate,
           isActive: newOffer.isActive,
         })
+
+        await logActionAs(auth, 'CREATE_OFFER', 'Offer', newOffer.id,
+            `Created offer: ${name} (${type} = ${Number(value)})`);
 
         return NextResponse.json(newOffer, { status: 201 });
     } catch (error) {

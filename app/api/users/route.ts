@@ -5,6 +5,7 @@ import { hashPassword } from '@/lib/auth';
 import { canManage } from '@/lib/roles';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
+import { logActionAs } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,10 @@ export async function POST(request: NextRequest) {
 
         if (!email || !password) {
             return NextResponse.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, { status: 400 });
+        }
+
+        if (String(password).length < 8) {
+            return NextResponse.json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' }, { status: 400 });
         }
 
         const username = rawUsername?.trim() ||
@@ -137,6 +142,9 @@ export async function POST(request: NextRequest) {
             }
         });
 
+        await logActionAs(auth, 'CREATE_USER', 'User', newUser.id,
+            `Created user: ${newUser.username} (${newUser.role})`);
+
         // Desktop → cloud: queue the new user for push (no-op on web).
         // We send the already-hashed password so the cloud stores the same hash.
         enqueueSync('users', 'INSERT', newUser.id, {
@@ -202,6 +210,9 @@ export async function DELETE(request: NextRequest) {
 
         await prisma.user.delete({ where: { id } });
 
+        await logActionAs(auth, 'DELETE_USER', 'User', id,
+            `Deleted user: ${user.username} (${user.role})`);
+
         // Web → other devices: record the delete so desktops hard-delete on pull.
         await logCloudDelete(tenantId, 'users', id);
         // Desktop → cloud: queue the delete for push (no-op on web).
@@ -248,6 +259,10 @@ export async function PATCH(request: NextRequest) {
             if (taken) return NextResponse.json({ error: 'البريد الإلكتروني مستخدم مسبقاً' }, { status: 400 });
         }
 
+        if (password?.trim() && password.trim().length < 8) {
+            return NextResponse.json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' }, { status: 400 });
+        }
+
         const updateData: Record<string, unknown> = {};
         if (username?.trim()) updateData.username = username.trim();
         if (email?.trim())    updateData.email    = email.trim();
@@ -259,6 +274,9 @@ export async function PATCH(request: NextRequest) {
             data: updateData,
             select: { id: true, username: true, email: true, role: true },
         });
+
+        await logActionAs(auth, 'UPDATE_USER', 'User', String(id),
+            `Updated user: ${updated.username} — fields: ${Object.keys(updateData).join(', ')}`);
 
         // Sync the same partial change. updateData already holds only the fields
         // that changed (incl. the bcrypt-hashed password when it was updated).

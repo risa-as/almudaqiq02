@@ -1,6 +1,5 @@
 'use client'
 import { useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { Upload, Download, X, CheckCircle, AlertTriangle, Loader2, FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface ImportResult {
@@ -49,23 +48,31 @@ export function ImportModal({ onClose, onImported }: Props) {
   const [result, setResult]       = useState<ImportResult | null>(null)
   const [showErrors, setShowErrors] = useState(false)
 
-  function downloadTemplate() {
-    const ws = XLSX.utils.json_to_sheet(TEMPLATE_ROWS)
+  async function downloadTemplate() {
+    // exceljs is heavy — load it on demand so it stays out of the page bundle.
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('المنتجات', { views: [{ rightToLeft: true }] })
 
-    // Column widths
-    ws['!cols'] = [
-      { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 14 },
-      { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
-    ]
+    const headers = Object.keys(TEMPLATE_ROWS[0])
+    const widths  = [25, 18, 18, 14, 20, 14, 16, 18, 16]
+    ws.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] ?? 16 }))
+    for (const row of TEMPLATE_ROWS) ws.addRow(row)
+    ws.getRow(1).font = { bold: true }
 
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'المنتجات')
-    XLSX.writeFile(wb, 'نموذج_استيراد_المخزون.xlsx')
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'نموذج_استيراد_المخزون.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   function handleFile(f: File) {
-    if (!f.name.match(/\.(xlsx|xls|csv)$/i)) {
-      alert('يرجى رفع ملف Excel (.xlsx, .xls) أو CSV')
+    if (!f.name.match(/\.(xlsx|csv)$/i)) {
+      alert('يرجى رفع ملف Excel حديث (.xlsx) أو CSV — صيغة .xls القديمة غير مدعومة')
       return
     }
     setFile(f)
@@ -169,7 +176,7 @@ export function ImportModal({ onClose, onImported }: Props) {
                 if (f) handleFile(f)
               }}
             >
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+              <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
               {file ? (
                 <div className="flex items-center justify-center gap-3">
@@ -187,7 +194,7 @@ export function ImportModal({ onClose, onImported }: Props) {
                 <>
                   <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-bold text-slate-500">اسحب الملف هنا أو انقر للاختيار</p>
-                  <p className="text-xs text-slate-400 mt-1">xlsx, xls, csv</p>
+                  <p className="text-xs text-slate-400 mt-1">xlsx, csv</p>
                 </>
               )}
             </div>

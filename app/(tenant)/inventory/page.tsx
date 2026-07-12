@@ -21,13 +21,12 @@ import {
   Save,
   Zap,
   Upload,
-  PackageSearch,
-  BarChart3,
   ArrowDownToLine,
   Tag,
   Pencil,
   History,
   Loader2,
+  PackageX,
 } from "lucide-react";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { ImportModal } from "@/components/inventory/ImportModal";
@@ -40,8 +39,11 @@ import StatCard from "@/components/ui/StatCard";
 import toast from "react-hot-toast";
 // Interfaces
 interface ProductUnit {
+  id?: string;
   name: string;
   price: number;
+  conversionFactor?: number;
+  barcode?: string;
 }
 
 interface Product {
@@ -223,13 +225,36 @@ export default function InventoryPage() {
   const [stockInLoading, setStockInLoading] = useState(false);
   const [barcodeToast, setBarcodeToast] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [stockInRowLoadingId, setStockInRowLoadingId] = useState<number | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (branchLoading) return;
-    fetchProducts();
-    fetchCategories();
-    fetchSuppliers();
+    const branchParam = selectedBranch?.id && selectedBranch.id !== "all"
+      ? `?branchId=${selectedBranch.id}` : "";
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/products${branchParam}`).then(r => r.json()).catch(() => []),
+      fetch("/api/categories").then(r => r.json()).catch(() => []),
+      fetch("/api/suppliers").then(r => r.json()).catch(() => []),
+    ]).then(([productsData, categoriesData, suppliersData]) => {
+      if (Array.isArray(productsData)) setProducts(productsData);
+      if (Array.isArray(categoriesData)) setCategories(categoriesData);
+      if (Array.isArray(suppliersData)) setSuppliers(suppliersData);
+      setLoading(false);
+    });
   }, [selectedBranch, branchLoading]);
+
+  useEffect(() => {
+    if (!isFilterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isFilterOpen]);
 
   // --- Global Barcode Scanner Listener ---
   useEffect(() => {
@@ -327,6 +352,41 @@ export default function InventoryPage() {
     [router],
   );
 
+  const openRowStockIn = async (product: Product) => {
+    setStockInRowLoadingId(product.id);
+    try {
+      const res = await fetch(`/api/products/${product.id}`);
+      const data = res.ok ? await res.json() : null;
+      const rawUnits: any[] = data?.units ?? product.units ?? [];
+      const units = rawUnits.map((u: any, i: number) => ({
+        id: u.id ?? String(i),
+        name: u.name,
+        conversionFactor: Number(u.conversionFactor) || 1,
+      }));
+      const firstUnit = units[0];
+      const baseCost = Number(data?.costPrice ?? product.costPrice) || 0;
+      setStockInQty("");
+      setStockInBaseCost(baseCost);
+      setStockInCost(baseCost > 0 ? String(baseCost * (firstUnit?.conversionFactor ?? 1)) : "");
+      setStockInSupplierId(data?.supplierId ? String(data.supplierId) : "");
+      setStockInExpiryDate("");
+      setStockInPaidAmount("");
+      setStockInIsPrepaid(false);
+      setStockInModal({
+        open: true,
+        productId: String(product.id),
+        productName: product.name,
+        unitId: firstUnit?.id ?? "",
+        units,
+        barcode: "",
+      });
+    } catch {
+      toast.error("تعذر تحميل بيانات المنتج");
+    } finally {
+      setStockInRowLoadingId(null);
+    }
+  };
+
   const handleStockInSubmit = async () => {
     if (!stockInModal.productId || !stockInModal.unitId || !stockInQty) {
       toast.error("يرجى تعبئة جميع الحقول المطلوبة");
@@ -383,35 +443,12 @@ export default function InventoryPage() {
     }
   };
 
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch("/api/categories");
-      if (res.ok) setCategories(await res.json());
-    } catch (e) {
-      console.error("Error fetching categories", e);
-    }
-  };
-
-  const fetchSuppliers = async () => {
-    try {
-      const res = await fetch("/api/suppliers");
-      if (res.ok) setSuppliers(await res.json());
-    } catch (e) {
-      console.error("Error fetching suppliers", e);
-    }
-  };
-
   const fetchProducts = async () => {
     try {
-      const branchParam =
-        selectedBranch?.id && selectedBranch.id !== "all"
-          ? `?branchId=${selectedBranch.id}`
-          : "";
+      const branchParam = selectedBranch?.id && selectedBranch.id !== "all"
+        ? `?branchId=${selectedBranch.id}` : "";
       const res = await fetch(`/api/products${branchParam}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
+      if (res.ok) setProducts(await res.json());
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
@@ -515,9 +552,10 @@ export default function InventoryPage() {
 
   // Calculate Stats
   const totalProducts = products.length;
+  const outOfStockCount = products.filter(p => p.baseStock === 0).length;
   const lowStockCount = products.filter((p) => {
     const threshold = p.minimumStock > 0 ? p.minimumStock : 10;
-    return p.baseStock <= threshold;
+    return p.baseStock > 0 && p.baseStock <= threshold;
   }).length;
   const totalValue = products.reduce(
     (sum, p) => sum + p.costPrice * p.baseStock,
@@ -1122,22 +1160,32 @@ export default function InventoryPage() {
         />
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="إجمالي المنتجات"
             value={totalProducts}
             icon={Package}
             gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
+            onClick={() => { setFilterStock("ALL"); setFilterCategory("ALL"); setFilterSupplier("ALL"); setSearch(""); }}
           />
           <StatCard
-            label="نواقص المخزون"
+            label="مخزون منخفض"
             value={lowStockCount}
             icon={AlertCircle}
-            gradient="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
-            valueColor="var(--value-negative)"
+            gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
+            valueColor={lowStockCount > 0 ? "var(--value-negative)" : undefined}
+            onClick={() => setFilterStock("LOW")}
           />
           <StatCard
-            label="القيمة التقديرية (التكلفة)"
+            label="نافذ من المخزون"
+            value={outOfStockCount}
+            icon={PackageX}
+            gradient="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
+            valueColor={outOfStockCount > 0 ? "var(--value-negative)" : undefined}
+            onClick={() => setFilterStock("OUT")}
+          />
+          <StatCard
+            label="القيمة التقديرية"
             value={formatCurrency(totalValue)}
             icon={DollarSign}
             gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
@@ -1145,41 +1193,31 @@ export default function InventoryPage() {
           />
         </div>
 
-        {/* Barcode Scanner Active Indicator */}
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3">
-          <div className="flex items-center justify-center w-9 h-9 bg-blue-100 rounded-xl flex-shrink-0">
-            <ScanLine size={20} className="text-blue-600 animate-pulse" />
-          </div>
-          <div className="flex-1">
-            <p className="text-blue-800 font-bold text-sm">
-              وضع المسح بالباركود نشط ⚡
-            </p>
-            <p className="text-blue-500 text-xs font-medium">
-              امسح أي باركود بجهاز القارئ — يفتح تلقائياً نافذة إدخال مخزون
-              للمنتجات الموجودة، أو نموذج إضافة منتج جديد للباركودات الجديدة
-            </p>
-          </div>
-          <span className="hidden md:flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-lg flex-shrink-0">
-            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse inline-block"></span>
-            نشط
-          </span>
-        </div>
-
         {/* Filters & Search */}
         <div className="bg-[var(--bg-card)] p-4 rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] flex flex-col md:flex-row gap-4 items-center justify-between relative z-20">
-          <div className="relative w-full md:w-96">
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+          <div className="flex items-center gap-3 flex-1">
+            <div className="relative w-full md:w-96">
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="بحث عن منتج بالاسم..."
+                className="block w-full pr-10 pl-4 py-3 border border-[var(--border-color)] rounded-xl focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-[var(--bg-page)] hover:bg-[var(--bg-card)] transition-colors text-right"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-            <input
-              type="text"
-              placeholder="بحث عن منتج بالاسم..."
-              className="block w-full pr-10 pl-4 py-3 border border-[var(--border-color)] rounded-xl focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-[var(--bg-page)] hover:bg-[var(--bg-card)] transition-colors text-right"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <span
+              className="hidden md:flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-2 rounded-xl flex-shrink-0"
+              title="وضع المسح بالباركود نشط — امسح أي باركود لفتح نافذة إدخال المخزون تلقائياً"
+            >
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+              <ScanLine size={13} />
+              باركود
+            </span>
           </div>
-          <div className="relative">
+          <div className="relative" ref={filterRef}>
             <button
               onClick={() => setIsFilterOpen(!isFilterOpen)}
               className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all border ${isFilterOpen ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
@@ -1286,6 +1324,25 @@ export default function InventoryPage() {
           </div>
         </div>
 
+        {/* Results counter */}
+        {!loading && (
+          <div className="flex items-center justify-between px-1">
+            <p className="text-sm font-bold" style={{ color: "var(--text-muted)" }}>
+              {filteredProducts.length === products.length
+                ? `${products.length} منتج`
+                : `يعرض ${filteredProducts.length} من ${products.length} منتج`}
+            </p>
+            {(filterStock !== "ALL" || filterCategory !== "ALL" || filterSupplier !== "ALL" || search) && (
+              <button
+                onClick={() => { setFilterStock("ALL"); setFilterCategory("ALL"); setFilterSupplier("ALL"); setSearch(""); }}
+                className="text-xs font-bold text-red-500 hover:text-red-600 hover:underline transition-colors"
+              >
+                إزالة كل الفلاتر
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Products Table */}
         <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
           <div className="overflow-x-auto">
@@ -1389,7 +1446,7 @@ export default function InventoryPage() {
                                   isOut
                                     ? "bg-red-50 text-red-600 border border-red-200"
                                     : isLow
-                                      ? "bg-blue-50 text-blue-600 border border-blue-200"
+                                      ? "bg-amber-50 text-amber-600 border border-amber-200"
                                       : "bg-green-50 text-green-700 border border-green-200"
                                 }`}
                               >
@@ -1454,6 +1511,16 @@ export default function InventoryPage() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
+                            {isAdmin && (
+                              <RowAction
+                                label="إدخال مخزون"
+                                icon={ArrowDownToLine}
+                                onClick={() => openRowStockIn(product)}
+                                color="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                                loading={stockInRowLoadingId === product.id}
+                                disabled={stockInRowLoadingId === product.id}
+                              />
+                            )}
                             {isAdmin && (
                               <RowAction
                                 label="تعديل المنتج"

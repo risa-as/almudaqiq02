@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
     ? ["@prisma/client", "@prisma/client-local"]
     : ["@prisma/client"],
   typescript: {
+    // Kept intentionally: shared files (login/sync routes) reference desktop-only
+    // Prisma models (syncQueue, cachedSubscriptionStatus…) that exist only in
+    // schema.local.prisma, so the cloud build always has known type errors there.
+    // Run `npx tsc --noEmit` before release and check YOUR files are clean.
     ignoreBuildErrors: true,
   },
   turbopack: {
@@ -38,6 +42,26 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // HSTS: browsers ignore it over plain HTTP, so it's safe for the
+          // Electron localhost server and only takes effect on the HTTPS cloud.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              // Next.js injects inline bootstrap scripts; dev + Turbopack need eval.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // Tailwind/Recharts inline styles + the Cairo font stylesheet.
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "img-src 'self' data: blob:",
+              "connect-src 'self' https:",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "frame-ancestors 'self'",
+            ].join('; '),
+          },
         ],
       },
     ]

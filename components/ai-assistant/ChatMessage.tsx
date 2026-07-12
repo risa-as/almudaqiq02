@@ -1,13 +1,117 @@
 'use client'
-import { Bot, User, RotateCcw, Database } from 'lucide-react'
+import { useState } from 'react'
+import { Bot, User, RotateCcw, Database, Sparkles, Check, Loader2 } from 'lucide-react'
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  PieChart, Pie, Cell, XAxis, YAxis, Tooltip,
+} from 'recharts'
+import type { MessageChart } from '@/lib/ai/charts'
+import type { ActionProposal } from '@/lib/ai/proposals'
 
 interface ChatMessageProps {
   role: 'user' | 'assistant'
   content: string
   toolsInvoked?: string[]
+  charts?: MessageChart[]
+  proposals?: ActionProposal[]
   isLoading?: boolean
+  isStreaming?: boolean
   isError?: boolean
   onRetry?: () => void
+}
+
+/** Confirm-gated action card: nothing executes until the user presses the button. */
+function ProposalCard({ proposal }: { proposal: ActionProposal }) {
+  const [state, setState] = useState<'idle' | 'working' | 'done' | 'failed'>('idle')
+
+  async function confirm() {
+    if (state === 'working' || state === 'done') return
+    setState('working')
+    try {
+      const res = await fetch(proposal.endpoint, {
+        method:  proposal.method,
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(proposal.payload),
+      })
+      setState(res.ok ? 'done' : 'failed')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <div className="mt-2.5 rounded-xl p-3"
+      style={{ background: 'rgba(9,75,159,0.06)', border: '1px solid rgba(9,75,159,0.2)' }}>
+      <p className="text-[11px] font-bold flex items-center gap-1.5 mb-1" style={{ color: '#094B9F' }}>
+        <Sparkles className="w-3.5 h-3.5" />
+        {proposal.title}
+      </p>
+      <p className="text-xs mb-2.5" style={{ color: 'var(--text-primary)' }}>{proposal.summary}</p>
+      {state === 'done' ? (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+          <Check className="w-3.5 h-3.5" /> تم التنفيذ بنجاح
+        </span>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={confirm}
+            disabled={state === 'working'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #094B9F, #063A8A)' }}
+          >
+            {state === 'working'
+              ? <><Loader2 className="w-3 h-3 animate-spin" /> جارٍ التنفيذ...</>
+              : <><Check className="w-3 h-3" /> تأكيد وتنفيذ</>}
+          </button>
+          {state === 'failed' && (
+            <span className="text-[11px] font-bold text-red-500">فشل التنفيذ — حاول مجدداً</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PIE_COLORS = ['#6366f1', '#8b5cf6', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#14b8a6', '#a855f7']
+
+function MessageChartView({ chart }: { chart: MessageChart }) {
+  const axisStyle = { fontSize: 10, fill: 'var(--text-secondary, #94a3b8)' }
+  return (
+    <div className="mt-2.5 pt-2.5" style={{ borderTop: '1px dashed var(--border-color)' }}>
+      <p className="text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-secondary, #94a3b8)' }}>
+        📊 {chart.title}
+      </p>
+      <div style={{ width: '100%', height: 150 }} dir="ltr">
+        <ResponsiveContainer width="100%" height="100%">
+          {chart.kind === 'area' ? (
+            <AreaChart data={chart.data} margin={{ top: 4, left: 0, right: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={axisStyle} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={axisStyle} tickLine={false} axisLine={false} width={44} />
+              <Tooltip formatter={(v: any) => Number(v).toLocaleString()} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="value" stroke="#6366f1" fill="rgba(99,102,241,0.18)" strokeWidth={2} />
+            </AreaChart>
+          ) : chart.kind === 'bar' ? (
+            <BarChart data={chart.data} margin={{ top: 4, left: 0, right: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={axisStyle} tickLine={false} axisLine={false} interval={0}
+                angle={chart.data.length > 5 ? -30 : 0} height={chart.data.length > 5 ? 44 : 24} textAnchor="end" />
+              <YAxis tick={axisStyle} tickLine={false} axisLine={false} width={44} />
+              <Tooltip formatter={(v: any) => Number(v).toLocaleString()} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+              <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          ) : (
+            <PieChart>
+              <Tooltip formatter={(v: any) => Number(v).toLocaleString()} contentStyle={{ fontSize: 11 }} />
+              <Pie data={chart.data} dataKey="value" nameKey="label" innerRadius={32} outerRadius={58} paddingAngle={2}>
+                {chart.data.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+            </PieChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
 }
 
 // Friendly Arabic labels for the data sources the assistant consulted — shown so the
@@ -33,12 +137,13 @@ const TOOL_LABELS: Record<string, string> = {
   get_branch_profit_detail:   'أرباح الفروع',
   get_stock_movements:        'حركة المخزون',
   get_supplier_prices:        'أسعار الموردين',
+  get_reorder_forecast:       'توقع إعادة الطلب',
 }
 
 const toolLabel = (tool: string) =>
   TOOL_LABELS[tool] ?? tool.replace('get_', '').replace(/_/g, ' ')
 
-export function ChatMessage({ role, content, toolsInvoked, isLoading, isError, onRetry }: ChatMessageProps) {
+export function ChatMessage({ role, content, toolsInvoked, charts, proposals, isLoading, isStreaming, isError, onRetry }: ChatMessageProps) {
   if (role === 'user') {
     return (
       <div className="flex justify-start gap-2 my-1.5">
@@ -104,6 +209,12 @@ export function ChatMessage({ role, content, toolsInvoked, isLoading, isError, o
                   <RotateCcw className="w-3 h-3" />
                   حاول مرة أخرى
                 </button>
+              )}
+              {!isError && !isStreaming && charts && charts.length > 0 && (
+                charts.map((chart, i) => <MessageChartView key={i} chart={chart} />)
+              )}
+              {!isError && !isStreaming && proposals && proposals.length > 0 && (
+                proposals.map((proposal, i) => <ProposalCard key={i} proposal={proposal} />)
               )}
               {!isError && toolsInvoked && toolsInvoked.length > 0 && (
                 <div

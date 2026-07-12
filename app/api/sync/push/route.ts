@@ -41,7 +41,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { verifyBranchToken } from '@/lib/auth'
 import { resolveConflict } from '@/lib/sync-engine/conflict-resolver'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimitAsync } from '@/lib/rate-limit'
 import { logCloudDelete } from '@/lib/sync-delete-log'
 
 export const dynamic = 'force-dynamic'
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limit: 60 push requests per minute per branch
-  const rl = checkRateLimit(`sync:push:${branchId}`, { limit: 60, windowMs: 60_000 })
+  const rl = await checkRateLimitAsync(`sync:push:${branchId}`, { limit: 60, windowMs: 60_000 })
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Too many sync requests' }, { status: 429 })
   }

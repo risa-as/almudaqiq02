@@ -543,6 +543,106 @@ model AiUsageLog {
   @@unique([tenantId, date])
 }
 
+// ─── AI Conversations (server-side chat history) ─────────────────────────────
+// Plain String scoping columns (no Tenant/User relations) so the tables can be
+// added with raw DDL without touching existing models.
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  title     String   @default("محادثة جديدة")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([tenantId, userId, updatedAt])
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // user | assistant
+  content        String
+  toolsInvoked   String? // JSON array of tool names
+  charts         String? // JSON array of MessageChart
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// ─── Stocktake (physical inventory count) ────────────────────────────────────
+// Plain String scoping columns (no relations to existing models) so the tables
+// can be added with raw DDL without touching existing models. Cloud-only.
+
+model StocktakeSession {
+  id          String    @id @default(cuid())
+  tenantId    String
+  branchId    String
+  status      String    @default("DRAFT") // DRAFT | COMPLETED | CANCELLED
+  notes       String?
+  createdBy   String? // userId
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  items StocktakeItem[]
+
+  @@index([tenantId, branchId, createdAt])
+}
+
+model StocktakeItem {
+  id          String  @id @default(cuid())
+  sessionId   String
+  productId   String
+  productName String // snapshot — survives product rename/delete
+  expectedQty Int
+  countedQty  Int?
+  note        String?
+
+  session StocktakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// ─── Purchase Orders (formal procurement cycle) ──────────────────────────────
+// DRAFT → ORDERED → RECEIVED (receiving books ProductBatches + SupplierLedger).
+// Plain String scoping columns; added via raw DDL. Cloud-only.
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  tenantId     String
+  branchId     String
+  supplierId   String?
+  supplierName String? // snapshot
+  status       String    @default("DRAFT") // DRAFT | ORDERED | RECEIVED | CANCELLED
+  notes        String?
+  createdBy    String? // userId
+  createdAt    DateTime  @default(now())
+  orderedAt    DateTime?
+  receivedAt   DateTime?
+
+  items PurchaseOrderItem[]
+
+  @@index([tenantId, branchId, createdAt])
+}
+
+model PurchaseOrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String // snapshot
+  quantity    Int // ordered, in BASE units
+  costPrice   Decimal @default(0)
+  receivedQty Int? // filled on receive (base units)
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
 // ─── Sync Delete Log ──────────────────────────────────────────────────────────
 // Records every hard-delete that happens on cloud so desktop can mirror it.
 // Pull route returns entries newer than pullCursor; desktop applyPull deletes

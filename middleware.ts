@@ -21,6 +21,8 @@ const PUBLIC_PATHS = [
   '/api/auth/refresh',
   '/api/auth/desktop-verify',
   '/api/sync/',
+  '/api/cron/', // secured internally via CRON_SECRET bearer token
+
   '/_next',
   '/favicon.ico',
   '/logo.png',
@@ -59,6 +61,7 @@ const STOCK_KEEPER_ALLOWED = [
   '/inventory',
   '/purchases/suppliers',
   '/api/inventory',
+  '/api/stocktake',
   '/api/products',
   '/api/suppliers',
   '/api/purchases',

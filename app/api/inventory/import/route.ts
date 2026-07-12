@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { getAuthContext } from '@/lib/api-helpers'
 import { prisma } from '@/lib/prisma'
 
@@ -12,6 +12,82 @@ function generateBarcode(): string {
 function normalize(v: unknown): string {
   if (v === null || v === undefined) return ''
   return String(v).trim()
+}
+
+/** Flatten an exceljs cell value (rich text, formula result, hyperlink…) to a primitive. */
+function cellToPrimitive(v: ExcelJS.CellValue): string | number {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string' || typeof v === 'number') return v
+  if (typeof v === 'boolean') return v ? 1 : 0
+  if (v instanceof Date) return v.toISOString()
+  if (typeof v === 'object') {
+    if ('result' in v && v.result !== undefined) return cellToPrimitive(v.result as ExcelJS.CellValue)
+    if ('richText' in v && Array.isArray(v.richText)) return v.richText.map(r => r.text).join('')
+    if ('text' in v && typeof v.text === 'string') return v.text
+  }
+  return String(v)
+}
+
+/** Parse an .xlsx buffer into row objects keyed by the header row (like sheet_to_json). */
+async function parseXlsx(buffer: Buffer): Promise<Record<string, unknown>[]> {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer)
+  const ws = wb.worksheets[0]
+  if (!ws) return []
+
+  const headers: string[] = []
+  ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+    headers[col] = normalize(cellToPrimitive(cell.value))
+  })
+
+  const rows: Record<string, unknown>[] = []
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    const obj: Record<string, unknown> = {}
+    let hasValue = false
+    for (let c = 1; c < headers.length; c++) {
+      if (!headers[c]) continue
+      const val = cellToPrimitive(row.getCell(c).value)
+      obj[headers[c]] = val
+      if (val !== '') hasValue = true
+    }
+    if (hasValue) rows.push(obj)
+  }
+  return rows
+}
+
+/** Minimal CSV parser (quoted fields, commas, CRLF, UTF-8 BOM). */
+function parseCsv(text: string): Record<string, unknown>[] {
+  const clean = text.replace(/^﻿/, '')
+  const lines: string[][] = []
+  let field = '', row: string[] = [], inQuotes = false
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (clean[i + 1] === '"') { field += '"'; i++ } else inQuotes = false
+      } else field += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      row.push(field); field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && clean[i + 1] === '\n') i++
+      row.push(field); field = ''
+      if (row.some(f => f.trim() !== '')) lines.push(row)
+      row = []
+    } else field += ch
+  }
+  row.push(field)
+  if (row.some(f => f.trim() !== '')) lines.push(row)
+
+  if (lines.length < 2) return []
+  const headers = lines[0].map(h => h.trim())
+  return lines.slice(1).map(cells => {
+    const obj: Record<string, unknown> = {}
+    headers.forEach((h, i) => { if (h) obj[h] = cells[i] ?? '' })
+    return obj
+  })
 }
 
 function toNum(v: unknown): number {
@@ -40,11 +116,19 @@ export async function POST(request: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer())
 
+  const fileName = (file.name ?? '').toLowerCase()
+  if (fileName.endsWith('.xls')) {
+    return NextResponse.json(
+      { error: 'صيغة .xls القديمة غير مدعومة — افتح الملف في Excel واحفظه بصيغة .xlsx ثم أعد الرفع' },
+      { status: 400 }
+    )
+  }
+
   let rows: Record<string, unknown>[]
   try {
-    const wb = XLSX.read(buffer, { type: 'buffer' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+    rows = fileName.endsWith('.csv')
+      ? parseCsv(buffer.toString('utf8'))
+      : await parseXlsx(buffer)
   } catch {
     return NextResponse.json({ error: 'فشل قراءة ملف Excel — تأكد من صحة تنسيق الملف' }, { status: 400 })
   }

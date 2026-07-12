@@ -68,6 +68,7 @@ const NAV = [
     children: [
       { href: "/inventory", label: "قائمة المنتجات", icon: Boxes, exact: true },
       { href: "/inventory/batches", label: "إدارة الدفعات", icon: Database },
+      { href: "/inventory/stocktake", label: "جرد المخزون", icon: CalendarX2 },
       { href: "/transfers", label: "نقل المخزون", icon: ArrowLeftRight },
     ],
   },
@@ -90,6 +91,11 @@ const NAV = [
         label: "الموردون",
         icon: ShoppingBag,
         exact: true,
+      },
+      {
+        href: "/purchases/orders",
+        label: "أوامر الشراء",
+        icon: FileText,
       },
       {
         href: "/purchases/suppliers/smart-buy",
@@ -139,6 +145,9 @@ const NAV = [
       { href: "/reports/branches", label: "مقارنة الفروع", icon: Building2 },
       { href: "/reports/audit", label: "سجل المراجعة", icon: Shield },
       { href: "/reports/customers-debt", label: "ذمم العملاء", icon: User },
+      { href: "/reports/supplier-payables", label: "مستحقات الموردين", icon: ShoppingBag },
+      { href: "/reports/offers-performance", label: "أداء العروض", icon: Tag },
+      { href: "/reports/abc-analysis", label: "تحليل ABC", icon: LucideBarChart3 },
     ],
   },
   {

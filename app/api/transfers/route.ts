@@ -4,6 +4,7 @@ import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
 import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
+import { logActionAs } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +77,9 @@ export async function POST(request: NextRequest) {
     requestedBy: transfer.requestedBy, status: transfer.status,
     createdAt: transfer.createdAt,
   })
+
+  await logActionAs(auth, 'CREATE_TRANSFER', 'StockTransfer', transfer.id,
+    `Transfer ${from.name} → ${to.name} (${items.length} items)`)
 
   return NextResponse.json(transfer, { status: 201 })
 }

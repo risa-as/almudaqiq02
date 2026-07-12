@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { logActionAs } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
     const auth = await getAuthContext();
@@ -134,6 +135,9 @@ export async function POST(req: NextRequest) {
                 cost:      0,
             })),
         })
+
+        await logActionAs(auth, 'RETURN', 'Transaction', result.id,
+            `Return from invoice ${originalTransactionId} — amount: ${refundTotal}`);
 
         return NextResponse.json({ success: true, returnId: result.id });
 

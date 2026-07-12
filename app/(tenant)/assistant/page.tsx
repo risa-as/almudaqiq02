@@ -1,12 +1,12 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useEffect, useState } from 'react'
-import { Bot, Trash2, Zap, Lightbulb } from 'lucide-react'
+import { Bot, Trash2, Zap, Lightbulb, History, X } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { ChatMessage } from '@/components/ai-assistant/ChatMessage'
 import { ChatInput } from '@/components/ai-assistant/ChatInput'
 import { useBranch } from '@/contexts/BranchContext'
-import { useChat } from '@/hooks/useChat'
+import { useChat, type ConversationSummary } from '@/hooks/useChat'
 import { QUESTION_CATEGORIES, type QuestionCategory } from '@/lib/ai/quick-questions'
 
 // All categories except 'general' shown as tabs; general merged into first tab display
@@ -110,11 +110,30 @@ export default function AssistantPage() {
   const {
     messages, input, setInput, isLoading, usage,
     sendMessage, retryLast, clearChat, messagesEndRef,
+    conversationId, listConversations, loadConversation, deleteConversation,
   } = useChat({ storageKey: 'ai_chat_history_page', branchId: selectedBranch?.id })
 
   const [activeTab, setActiveTab] = useState<string>(TABS[0].id)
   const [showQuestions, setShowQuestions] = useState(false)
   const [questionsTab, setQuestionsTab] = useState<string>(TABS[0].id)
+  const [showHistory, setShowHistory] = useState(false)
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+
+  async function toggleHistory() {
+    const next = !showHistory
+    setShowHistory(next)
+    if (next) setConversations(await listConversations())
+  }
+
+  async function handleResume(id: string) {
+    const ok = await loadConversation(id)
+    if (ok) setShowHistory(false)
+  }
+
+  async function handleDeleteConversation(id: string) {
+    await deleteConversation(id)
+    setConversations(prev => prev.filter(c => c.id !== id))
+  }
 
   const questionsActiveCat = [...TABS, GENERAL].find(c => c.id === questionsTab) ?? TABS[0]
 
@@ -155,6 +174,17 @@ export default function AssistantPage() {
               <Lightbulb className="w-3.5 h-3.5" />
               أسئلة سريعة
             </button>
+            <button
+              onClick={toggleHistory}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
+              style={showHistory
+                ? { background: 'rgba(9,75,159,0.15)', color: '#094B9F', border: '1px solid rgba(9,75,159,0.3)' }
+                : { background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }
+              }
+            >
+              <History className="w-3.5 h-3.5" />
+              سجل المحادثات
+            </button>
             {messages.length > 0 && (
               <button onClick={clearChat}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
@@ -166,6 +196,47 @@ export default function AssistantPage() {
           </div>
         }
       />
+
+      {/* ── Conversation history panel ─────────────────────────────── */}
+      {showHistory && (
+        <div className="shrink-0 mb-3 rounded-2xl px-4 py-3"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+              <History className="w-3.5 h-3.5" />
+              محادثاتك السابقة
+            </span>
+            <button onClick={() => setShowHistory(false)} className="p-1 rounded-lg hover:opacity-70">
+              <X className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+            </button>
+          </div>
+          {conversations.length === 0 ? (
+            <p className="text-xs py-2" style={{ color: 'var(--text-muted)' }}>لا توجد محادثات محفوظة بعد</p>
+          ) : (
+            <div className="max-h-48 overflow-y-auto space-y-1" style={{ scrollbarWidth: 'thin' }}>
+              {conversations.map(c => (
+                <div key={c.id}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 transition-all"
+                  style={{
+                    background: c.id === conversationId ? 'rgba(9,75,159,0.08)' : 'transparent',
+                    border: `1px solid ${c.id === conversationId ? 'rgba(9,75,159,0.2)' : 'transparent'}`,
+                  }}>
+                  <button onClick={() => handleResume(c.id)} className="flex-1 text-right hover:opacity-80">
+                    <p className="text-xs font-bold truncate" style={{ color: 'var(--text-primary)' }}>{c.title}</p>
+                    <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      {c.messagesCount} رسالة · {new Date(c.updatedAt).toLocaleDateString('ar')}
+                    </p>
+                  </button>
+                  <button onClick={() => handleDeleteConversation(c.id)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="حذف">
+                    <Trash2 className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Usage bar ──────────────────────────────────────────────── */}
       {usage && usage.limit > 0 && (

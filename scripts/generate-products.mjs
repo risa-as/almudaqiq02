@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { fileURLToPath } from 'url'
 import path from 'path'
 
@@ -155,26 +155,17 @@ const products = [
   { 'اسم المنتج': 'ماء ورد 250 مل',            'القسم': 'توابل وبهارات',        'المورد': 'شركة البهارات العربية','سعر الشراء': 1000,  'اسم الوحدة': 'قارورة',       'سعر البيع': 1500,  'معامل التحويل': 1,  'الباركود': '6281006001016', 'الكمية الأولية': 40  },
 ]
 
-const ws = XLSX.utils.json_to_sheet(products)
+const wb = new ExcelJS.Workbook()
+const ws = wb.addWorksheet('المنتجات', { views: [{ rightToLeft: true }] })
 
-// Set column widths
-ws['!cols'] = [
-  { wch: 30 }, // اسم المنتج
-  { wch: 20 }, // القسم
-  { wch: 22 }, // المورد
-  { wch: 14 }, // سعر الشراء
-  { wch: 18 }, // اسم الوحدة
-  { wch: 14 }, // سعر البيع
-  { wch: 16 }, // معامل التحويل
-  { wch: 18 }, // الباركود
-  { wch: 16 }, // الكمية الأولية
-]
-
-const wb = XLSX.utils.book_new()
-XLSX.utils.book_append_sheet(wb, ws, 'المنتجات')
+const headers = Object.keys(products[0])
+const widths  = [30, 20, 22, 14, 18, 14, 16, 18, 16]
+ws.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] ?? 16 }))
+for (const p of products) ws.addRow(p)
+ws.getRow(1).font = { bold: true }
 
 const outPath = path.join(__dirname, '..', 'public', 'قائمة_منتجات_نموذجية.xlsx')
-XLSX.writeFile(wb, outPath)
+await wb.xlsx.writeFile(outPath)
 
 console.log(`✅ تم إنشاء الملف: ${outPath}`)
 console.log(`📦 عدد المنتجات: ${products.length}`)

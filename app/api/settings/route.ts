@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { verifyAccessToken } from '@/lib/auth'
 import { enqueueSync } from '@/lib/sync-enqueue'
+import { logAction } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,6 +117,9 @@ export async function PUT(request: NextRequest) {
         storeAddress: updated.storeAddress, footerMessage: updated.footerMessage,
         autoPrint: updated.autoPrint, currency: updated.currency,
       })
+
+      await logAction('UPDATE_SETTINGS', 'StoreSettings', updated.id,
+        `Store settings updated for branch ${branchId}`, undefined, tenantId, branchId)
 
       return NextResponse.json({ success: true, settings: updated })
     }

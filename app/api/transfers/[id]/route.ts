@@ -4,6 +4,7 @@ import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
 import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
+import { logActionAs } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       })
     }
   }
+
+  await logActionAs(auth, `TRANSFER_${status}`, 'StockTransfer', id,
+    `Transfer status changed to ${status}`)
 
   return NextResponse.json({ success: true })
 }

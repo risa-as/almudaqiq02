@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { logActionAs } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             description: result.ledgerEntry.description,
             date:        result.ledgerEntry.date,
         });
+
+        await logActionAs(auth, result.ledgerEntry.type === 'RETURN' ? 'SUPPLIER_RETURN' : 'SUPPLIER_PAYMENT',
+            'Supplier', id, `${supplier.name} — amount: ${paymentAmount}`);
 
         return NextResponse.json({ success: true, message: 'تم تسجيل الدفعة بنجاح', data: result });
 

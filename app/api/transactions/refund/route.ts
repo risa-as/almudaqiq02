@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { logActionAs } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -183,6 +184,9 @@ export async function POST(request: NextRequest) {
                 cost:      Number(item.cost ?? 0),
             })),
         })
+
+        await logActionAs(auth, 'REFUND', 'Transaction', refundTx.id,
+            `Refund from invoice ${originalTxId} — amount: ${Number(totalAmount)}`);
 
         return NextResponse.json({ success: true, transaction: refundTx });
 

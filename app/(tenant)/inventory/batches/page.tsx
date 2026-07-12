@@ -129,7 +129,8 @@ export default function BatchesManagementPage() {
     };
 
     const handleExport = async () => {
-        const XLSX = await import('xlsx');
+        // exceljs is heavy — load on demand so it stays out of the page bundle.
+        const ExcelJS = (await import('exceljs')).default;
 
         const now = new Date();
         const exportDate = now.toLocaleString('ar-IQ');
@@ -193,12 +194,13 @@ export default function BatchesManagementPage() {
             ],
         ];
 
-        const ws1 = XLSX.utils.aoa_to_sheet(sheet1);
-        ws1['!cols'] = [
-            { wch: 5  }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 20 },
-            { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 16 },
-            { wch: 22 }, { wch: 22 }, { wch: 22 },
-        ];
+        const wb = new ExcelJS.Workbook();
+        const ws1 = wb.addWorksheet('تقرير الدفعات', { views: [{ rightToLeft: true }] });
+        ws1.addRows(sheet1);
+        [5, 18, 28, 14, 20, 16, 14, 20, 22, 16, 22, 22, 22]
+            .forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
+        ws1.getRow(1).font = { bold: true };
+        ws1.getRow(4).font = { bold: true };
 
         // ════ SHEET 2: الملخص الإحصائي ════
         const totalValue = filteredBatches.reduce((s, b) => s + b.quantity * b.costPrice, 0);
@@ -260,13 +262,19 @@ export default function BatchesManagementPage() {
             ...topCats.map(([name, { count, value }]) => [name, count, +value.toFixed(2)]),
         ];
 
-        const ws2 = XLSX.utils.aoa_to_sheet(sheet2);
-        ws2['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 20 }];
+        const ws2 = wb.addWorksheet('الملخص الإحصائي', { views: [{ rightToLeft: true }] });
+        ws2.addRows(sheet2);
+        [34, 18, 20].forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
+        ws2.getRow(1).font = { bold: true };
 
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws1, 'تقرير الدفعات');
-        XLSX.utils.book_append_sheet(wb, ws2, 'الملخص الإحصائي');
-        XLSX.writeFile(wb, fileName);
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const openEdit = (batch: BatchItem) => {

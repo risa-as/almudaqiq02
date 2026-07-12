@@ -249,6 +249,35 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: 'get_reorder_forecast',
+    description: 'Forecast product demand: daily sales rate, projected days until stock runs out, and suggested reorder quantity. Use for questions like "what should I reorder?", "when will product X run out?", or purchase planning.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days_back:  { type: 'string', description: 'History window in days to compute the sales rate (default 30)' },
+        cover_days: { type: 'string', description: 'How many days of stock the reorder should cover (default 14)' },
+        branch_id:  { type: 'string' },
+        limit:      { type: 'string', description: 'Max products to return (default 20)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'propose_create_offer',
+    description: 'Prepare a promotional offer PROPOSAL for the user to confirm. Never creates anything by itself — the user must press the confirm button. Use when the user asks to create an offer/discount, or when you recommend a promotion for slow-moving stock and the user agrees.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name:         { type: 'string', description: 'Offer display name in Arabic' },
+        offer_type:   { type: 'string', enum: ['PERCENTAGE_DISCOUNT', 'FIXED_DISCOUNT'], description: 'Discount type' },
+        value:        { type: 'string', description: 'Discount value: percent (1-90) for PERCENTAGE_DISCOUNT, amount for FIXED_DISCOUNT' },
+        product_name: { type: 'string', description: 'Optional: apply to one product (partial Arabic name match). Omit for a general offer.' },
+        days:         { type: 'string', description: 'Offer duration in days from today (default 7)' },
+      },
+      required: ['name', 'offer_type', 'value'],
+    },
+  },
+  {
     name: 'get_supplier_prices',
     description: 'Compare supplier prices — show products per supplier with cost price history. Use for questions about supplier pricing.',
     parameters: {
@@ -1322,6 +1351,145 @@ async function getSupplierPrices(args: any, auth: AuthContext) {
   }
 }
 
+// ─── NEW: Reorder Forecast (demand prediction) ───────────────────────────────
+
+async function getReorderForecast(args: any, auth: AuthContext) {
+  const db = getTenantPrisma(auth.tenantId)
+  const daysBack  = Math.max(7, parseInt(args.days_back ?? '30', 10) || 30)
+  const coverDays = Math.max(1, parseInt(args.cover_days ?? '14', 10) || 14)
+  const limit     = Math.min(parseInt(args.limit ?? '20', 10) || 20, 50)
+  const branchId  = args.branch_id ?? auth.branchId ?? undefined
+  const since     = subDays(new Date(), daysBack)
+
+  const [transactions, batches] = await Promise.all([
+    db.transaction.findMany({
+      where: { type: 'SALE', date: { gte: since }, ...(branchId ? { branchId } : {}) },
+      include: {
+        items: {
+          include: {
+            unit:    { select: { conversionFactor: true } },
+            product: { select: { name: true, supplier: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
+    // Current stock in BASE units, branch-scoped via batches (never Product.baseStock).
+    db.productBatch.findMany({
+      where: branchId ? { branchId } : {},
+      select: { productId: true, quantity: true },
+    }),
+  ])
+
+  const stockMap: Record<string, number> = {}
+  for (const b of batches) stockMap[b.productId] = (stockMap[b.productId] ?? 0) + b.quantity
+
+  const soldMap: Record<string, { name: string; supplier: string; baseSold: number }> = {}
+  for (const tx of transactions) {
+    for (const item of (tx as any).items) {
+      const pid = item.productId
+      if (!soldMap[pid]) {
+        soldMap[pid] = {
+          name:     item.product.name,
+          supplier: item.product.supplier?.name ?? 'غير محدد',
+          baseSold: 0,
+        }
+      }
+      soldMap[pid].baseSold += Number(item.quantity) * Number(item.unit?.conversionFactor ?? 1)
+    }
+  }
+
+  const forecasts = Object.entries(soldMap)
+    .map(([pid, p]) => {
+      const dailyRate    = p.baseSold / daysBack
+      const currentStock = stockMap[pid] ?? 0
+      const daysLeft     = dailyRate > 0 ? currentStock / dailyRate : Infinity
+      const suggested    = Math.max(0, Math.ceil(dailyRate * coverDays - currentStock))
+      return {
+        product:            p.name,
+        supplier:           p.supplier,
+        current_stock:      Math.round(currentStock),
+        daily_sales_rate:   Math.round(dailyRate * 100) / 100,
+        days_until_stockout: Number.isFinite(daysLeft) ? Math.round(daysLeft * 10) / 10 : null,
+        projected_stockout_date: Number.isFinite(daysLeft)
+          ? format(addDays(new Date(), Math.floor(daysLeft)), 'yyyy-MM-dd')
+          : null,
+        suggested_reorder_qty: suggested,
+        urgency: daysLeft <= 3 ? 'عاجل' : daysLeft <= 7 ? 'قريب' : daysLeft <= coverDays ? 'مراقبة' : 'كافٍ',
+      }
+    })
+    .filter(f => f.daily_sales_rate > 0)
+    .sort((a, b) => (a.days_until_stockout ?? 1e9) - (b.days_until_stockout ?? 1e9))
+    .slice(0, limit)
+
+  return {
+    analysis_window_days: daysBack,
+    reorder_cover_days:   coverDays,
+    urgent_count:         forecasts.filter(f => f.urgency === 'عاجل').length,
+    products:             forecasts,
+    note: 'المعدل محسوب من مبيعات الفترة المحددة بوحدات الأساس؛ الكمية المقترحة تكفي لتغطية الأيام المطلوبة بعد خصم المخزون الحالي',
+  }
+}
+
+// ─── NEW: Propose Create Offer (human-in-the-loop, never writes) ─────────────
+
+async function proposeCreateOffer(args: any, auth: AuthContext) {
+  if (!['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER'].includes(auth.role)) {
+    return { error: 'unauthorized', message: 'إنشاء العروض متاح للمدراء فقط' }
+  }
+
+  const db = getTenantPrisma(auth.tenantId)
+  const name  = String(args.name ?? '').trim()
+  const type  = args.offer_type === 'FIXED_DISCOUNT' ? 'FIXED_DISCOUNT' : 'PERCENTAGE_DISCOUNT'
+  const value = Number(args.value)
+  const days  = Math.min(Math.max(parseInt(args.days ?? '7', 10) || 7, 1), 90)
+
+  if (!name) return { error: 'invalid', message: 'اسم العرض مطلوب' }
+  if (!Number.isFinite(value) || value <= 0) return { error: 'invalid', message: 'قيمة الخصم غير صالحة' }
+  if (type === 'PERCENTAGE_DISCOUNT' && value > 90) {
+    return { error: 'invalid', message: 'نسبة الخصم يجب ألا تتجاوز 90%' }
+  }
+
+  let productId: string | null = null
+  let productName: string | null = null
+  if (args.product_name) {
+    const product = await db.product.findFirst({
+      where:  { name: { contains: String(args.product_name), mode: 'insensitive' } },
+      select: { id: true, name: true },
+    })
+    if (!product) {
+      return { error: 'not_found', message: `لم أجد منتجاً باسم "${args.product_name}" — تأكد من الاسم` }
+    }
+    productId = product.id
+    productName = product.name
+  }
+
+  const startDate = new Date()
+  const endDate   = addDays(startDate, days)
+  const valueLabel = type === 'PERCENTAGE_DISCOUNT' ? `${value}%` : `${value}`
+
+  return {
+    __proposal: {
+      kind:     'create_offer',
+      title:    'اقتراح عرض ترويجي',
+      summary:  `${name} — خصم ${valueLabel}${productName ? ` على "${productName}"` : ' (عام)'} لمدة ${days} يوم`,
+      endpoint: '/api/offers',
+      method:   'POST',
+      payload: {
+        name,
+        type,
+        value,
+        productId,
+        branchId: auth.branchId ?? null,
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate:   format(endDate, 'yyyy-MM-dd'),
+        isActive:  true,
+      },
+    },
+    status:  'awaiting_confirmation',
+    message: 'تم تجهيز الاقتراح — أخبر المستخدم أن يضغط زر التأكيد الظاهر في المحادثة لإنشاء العرض فعلياً. لا يوجد أي إجراء نُفِّذ بعد.',
+  }
+}
+
 // ─── Main Dispatcher ──────────────────────────────────────────────────────────
 
 export async function executeToolCall(name: string, args: unknown, auth: AuthContext): Promise<unknown> {
@@ -1360,6 +1528,8 @@ export async function executeToolCall(name: string, args: unknown, auth: AuthCon
     case 'get_product_margins':       return getProductMargins(a, auth)
     case 'get_branch_profit_detail':  return getBranchProfitDetail(a, auth)
     case 'get_stock_movements':       return getStockMovements(a, auth)
+    case 'get_reorder_forecast':      return getReorderForecast(a, auth)
+    case 'propose_create_offer':      return proposeCreateOffer(a, auth)
     case 'get_supplier_prices':       return getSupplierPrices(a, auth)
     default:
       return { error: 'unknown_tool', tool: name }

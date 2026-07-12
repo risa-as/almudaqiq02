@@ -80,7 +80,16 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [initialized, setInitialized] = useState(false);
     const [search, setSearch] = useState('');
-    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+    // Seed the range with the same default as <DateRangeFilter defaultPreset="this_month">
+    // so the first fetch already carries the right dates. When the filter mounts and
+    // fires its onChange with identical values, the deps don't change → no second fetch
+    // (which previously caused the table to re-show its skeleton after the page appeared).
+    const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+        const d = new Date();
+        const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+        const end = d.toISOString().split('T')[0];
+        return { start, end };
+    });
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ total: 0, pages: 1, page: 1 });
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
 import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimitAsync } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
             || request.headers.get('x-real-ip')
             || 'unknown';
-        const rl = checkRateLimit(`gen-license:${ip}`, { limit: 5, windowMs: 10 * 60_000 });
+        const rl = await checkRateLimitAsync(`gen-license:${ip}`, { limit: 5, windowMs: 10 * 60_000 });
         if (!rl.allowed) {
             return NextResponse.json({ error: 'محاولات كثيرة جداً. حاول لاحقاً.' }, { status: 429 });
         }

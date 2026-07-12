@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
+import { logActionAs } from '@/lib/audit';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     try {
         const body = await request.json();
@@ -52,6 +54,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           isActive: updatedOffer.isActive,
         })
 
+        await logActionAs(auth, 'UPDATE_OFFER', 'Offer', updatedOffer.id,
+            `Updated offer: ${updatedOffer.name}`);
+
         return NextResponse.json(updatedOffer);
     } catch (error) {
         console.error('Failed to update offer:', error);
@@ -60,8 +65,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const tenantId = auth.tenantId;
 
     try {
         const { id: offerId } = await params;
@@ -80,6 +86,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
         enqueueSync('offers', 'DELETE', offerId, { id: offerId })
         await logCloudDelete(tenantId, 'offers', offerId)
+
+        await logActionAs(auth, 'DELETE_OFFER', 'Offer', offerId,
+            `Deleted offer: ${existing.name}`);
 
         return NextResponse.json({ success: true });
     } catch (error) {
