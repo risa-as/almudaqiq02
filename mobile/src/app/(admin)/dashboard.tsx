@@ -22,7 +22,7 @@ import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
 import { useBranchSelection } from '@/stores/branch'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
-import { formatMoney } from '@/utils/format'
+import { formatDate, formatMoney } from '@/utils/format'
 
 const t = {
   title: 'الرئيسية',
@@ -105,31 +105,47 @@ export default function AdminDashboard() {
   const goInventory = () => router.push('/(admin)/inventory' as never)
 
   const greeting = new Date().getHours() < 12 ? t.greetingMorning : t.greetingEvening
+  const greetingLine = user?.username ? `${greeting}، ${user.username} 👋` : `${greeting} 👋`
+  const brand = user?.tenantName || ar.appName
 
   return (
     <Screen refreshing={refreshing} onRefresh={onRefresh}>
-      {/* ── الهيدر البطولي (نيلي → بنفسجي) ── */}
+      {/* ── الهيدر البطولي (نيلي → بنفسجي) مع دوائر زخرفية ── */}
       <LinearGradient
         colors={[colors.gradientFrom, colors.gradientTo]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
+        <View style={styles.heroBlob1} pointerEvents="none" />
+        <View style={styles.heroBlob2} pointerEvents="none" />
+
         <View style={styles.heroTop}>
+          <View style={styles.heroAvatar}>
+            <Ionicons name="storefront" size={22} color={colors.onPrimary} />
+          </View>
           <View style={styles.heroTextWrap}>
-            <Text style={styles.heroGreeting}>{greeting} 👋</Text>
+            <Text style={styles.heroGreeting} numberOfLines={1}>
+              {greetingLine}
+            </Text>
             <Text style={styles.heroName} numberOfLines={1}>
-              {user?.tenantName || user?.username || ar.appName}
+              {brand}
             </Text>
           </View>
-          <View style={styles.heroBadge}>
-            <Ionicons name="storefront-outline" size={14} color={colors.onPrimary} />
-            <Text style={styles.heroBadgeText} numberOfLines={1}>
+        </View>
+
+        <View style={styles.heroFooter}>
+          <View style={styles.heroChip}>
+            <Ionicons name="calendar-outline" size={13} color={colors.onPrimary} />
+            <Text style={styles.heroChipText}>{formatDate(new Date())}</Text>
+          </View>
+          <View style={styles.heroChip}>
+            <Ionicons name="storefront-outline" size={13} color={colors.onPrimary} />
+            <Text style={styles.heroChipText} numberOfLines={1}>
               {selectedBranchName}
             </Text>
           </View>
         </View>
-        <Text style={styles.heroHint}>{t.title} · {ar.common.today}</Text>
       </LinearGradient>
 
       {/* ── بطاقات اليوم ── */}
@@ -292,27 +308,57 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.lg,
+    overflow: 'hidden',
     ...shadow.button,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  heroTextWrap: { flex: 1, gap: 2 },
-  heroGreeting: { color: 'rgba(255,255,255,0.85)', fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
+  // دوائر شفافة زخرفية تعطي عمقًا للهيدر (مقصوصة بحدود البطاقة)
+  heroBlob1: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    top: -55,
+    left: -35,
+  },
+  heroBlob2: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    bottom: -50,
+    right: -20,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.30)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTextWrap: { flex: 1, gap: 3 },
+  heroGreeting: { color: 'rgba(255,255,255,0.88)', fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
   heroName: { color: colors.onPrimary, fontSize: fontSize.xl, fontWeight: '800', textAlign: 'right', letterSpacing: -0.3 },
-  heroBadge: {
+  heroFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  heroChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: 'rgba(255,255,255,0.26)',
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    maxWidth: 150,
+    paddingVertical: spacing.xs + 1,
+    flexShrink: 1,
   },
-  heroBadgeText: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: '600' },
-  heroHint: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.xs, textAlign: 'right' },
+  heroChipText: { color: colors.onPrimary, fontSize: fontSize.xs, fontWeight: '700' },
   branchBadge: {
     flexDirection: 'row',
     alignItems: 'center',
