@@ -1,8 +1,10 @@
 # SuperMarket Cloud — Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-16
+Auto-generated from feature plans. Last updated: 2026-07-11
 
 ## Active Technologies
+- TypeScript 5.x (mobile); existing Next.js 16.1.6 backend untouched except the 3 files above + Expo SDK (latest stable at `create` time), expo-router, @tanstack/react-query v5, zustand, expo-secure-store, expo-camera (CameraView barcode scanning), react-native-gifted-charts, date-fns (021-mobile-app)
+- None on-device beyond SecureStore (tokens) and React Query in-memory cache; server PostgreSQL is the single source of truth (021-mobile-app)
 
 - **Framework**: Next.js 16.1.6 (App Router, TypeScript)
 - **Database**: PostgreSQL + Prisma 5.22 (multi-tenant scoped client)

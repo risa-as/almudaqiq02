@@ -7,7 +7,8 @@ import {
   generateSuperAdminAccessToken,
   generateSuperAdminRefreshToken,
 } from '@/lib/auth'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimitAsync } from '@/lib/rate-limit'
+import { logAction } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -272,7 +273,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || request.headers.get('x-real-ip')
     || 'unknown'
-  const rl = checkRateLimit(`login:${ip}`, { limit: 10, windowMs: 5 * 60_000 })
+  const rl = await checkRateLimitAsync(`login:${ip}`, { limit: 10, windowMs: 5 * 60_000 })
   if (!rl.allowed) {
     return NextResponse.json({ error: 'محاولات كثيرة جداً. حاول مرة أخرى بعد قليل.' }, { status: 429 })
   }
@@ -284,6 +285,8 @@ export async function POST(request: NextRequest) {
   }
   const { email, password } = parsed.data
   const isEmail = email.includes('@')
+  // Mobile clients declare themselves to receive the refresh token in the body (no cookie jar).
+  const isMobile = request.headers.get('x-client-type')?.toLowerCase() === 'mobile'
 
   // ── 1. البحث في SuperAdmin (SQLite) ────────────────────────────────────────
   const superAdmin = await prisma.superAdmin.findFirst({
@@ -307,6 +310,11 @@ export async function POST(request: NextRequest) {
     }
 
     await prisma.superAdmin.update({ where: { id: superAdmin.id }, data: { failedAttempts: 0, lockedUntil: null } })
+
+    // Mobile app never receives super-admin tokens — that role works via the web platform only.
+    if (isMobile) {
+      return NextResponse.json({ error: 'حساب مشغّل المنصة يعمل عبر لوحة الويب فقط' }, { status: 403 })
+    }
 
     const [accessToken, refreshToken] = await Promise.all([
       generateSuperAdminAccessToken(superAdmin.id),
@@ -357,7 +365,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'تعذّر حفظ بيانات المستخدم محليًا' }, { status: 500 })
     }
     // Cloud already verified credentials + tenant/subscription gates.
-    return await issueLocalLoginResponse(user)
+    return await issueLocalLoginResponse(user, isMobile)
   }
 
   if (!user) {
@@ -381,6 +389,11 @@ export async function POST(request: NextRequest) {
       where: { id: user.id },
       data:  { failedAttempts: attempts, lockedUntil: locked ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null },
     })
+    await logAction(
+      locked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', 'User', user.id,
+      `Failed login attempt ${attempts}/${MAX_ATTEMPTS}`,
+      user.username, user.tenantId, user.branchId ?? undefined,
+    )
     return NextResponse.json({
       error: locked ? `تم قفل الحساب لمدة ${LOCK_MINUTES} دقيقة` : 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
     }, { status: 401 })
@@ -414,17 +427,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return await issueLocalLoginResponse(user)
+  return await issueLocalLoginResponse(user, isMobile)
 }
 
 async function issueLocalLoginResponse(user: {
   id: string
   email: string | null
+  username?: string | null
   role: string
   tenantId: string
   branchId: string | null
   tenant: { id: string; name: string }
-}) {
+}, isMobile: boolean) {
+  await logAction('LOGIN', 'User', user.id, 'Successful login',
+    user.username ?? user.email ?? 'System', user.tenantId, user.branchId ?? undefined)
   const { accessToken, refreshToken } = await generateTokenPair({
     sub:      user.id,
     role:     user.role,
@@ -436,7 +452,12 @@ async function issueLocalLoginResponse(user: {
   })
   const res = NextResponse.json({
     accessToken,
-    user:       { id: user.id, email: user.email, role: user.role },
+    // Mobile has no cookie jar — it stores the refresh token itself (SecureStore).
+    ...(isMobile ? { refreshToken } : {}),
+    user: {
+      id: user.id, email: user.email, role: user.role,
+      ...(isMobile ? { username: user.username ?? null, branchId: user.branchId } : {}),
+    },
     tenant:     { id: user.tenant.id, name: user.tenant.name },
     redirectTo: redirectTo(user.role),
   })
