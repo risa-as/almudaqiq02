@@ -4,11 +4,13 @@ import { router } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { fetchExpiryReport, fetchInventoryAlerts, type ExpiryUrgency } from '@/api/endpoints/inventory'
 import { AccountCard } from '@/components/AccountCard'
+import { Hero } from '@/components/Hero'
 import { Screen } from '@/components/Screen'
 import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDate } from '@/utils/format'
+import { greetingFor } from '@/utils/greeting'
 
 const S = {
   alerts: 'التنبيهات',
@@ -44,7 +46,8 @@ function urgencyColor(u: ExpiryUrgency): string {
 }
 
 export default function StockMore() {
-  const branchId = useAuthStore(s => s.user?.branchId ?? null)
+  const user = useAuthStore(s => s.user)
+  const branchId = user?.branchId ?? null
 
   const alertsQuery = useQuery({
     queryKey: ['inventory-alerts', branchId],
@@ -68,6 +71,17 @@ export default function StockMore() {
         expiryQuery.refetch()
       }}
     >
+      {/* ── الهيدر البطولي ── */}
+      <Hero
+        greeting={greetingFor(user?.username)}
+        title={user?.tenantName || ar.appName}
+        icon="cube"
+        chips={[
+          { icon: 'calendar-outline', text: formatDate(new Date()) },
+          { icon: 'card-outline', text: 'أمين المخزن' },
+        ]}
+      />
+
       {/* ── التنبيهات: تحت الحد الأدنى ── */}
       <Text style={styles.sectionTitle}>{S.alerts}</Text>
 
