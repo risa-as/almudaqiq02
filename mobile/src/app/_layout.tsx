@@ -2,9 +2,11 @@ import { useEffect, useRef } from 'react'
 import { AppState, I18nManager, StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { useFonts } from 'expo-font'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from '@/api/queryClient'
 import { OfflineBanner } from '@/components/OfflineBanner'
+import { applyGlobalFont, fontAssets } from '@/theme/fonts'
 import { useAuthStore } from '@/stores/auth'
 
 // ── تفعيل RTL (يسري بالكامل بعد أول إعادة تشغيل للتطبيق) ─────────────────────
@@ -22,6 +24,7 @@ const FEATURES_REFRESH_AFTER_MS = 5 * 60_000
 export default function RootLayout() {
   const restore = useAuthStore(s => s.restore)
   const backgroundedAt = useRef<number | null>(null)
+  const [fontsLoaded, fontError] = useFonts(fontAssets)
 
   useEffect(() => {
     restore()
@@ -41,6 +44,11 @@ export default function RootLayout() {
     })
     return () => sub.remove()
   }, [])
+
+  // لا نعرض أي نص قبل تحميل الخطوط حتى لا يومض الخط الافتراضي؛ عند فشل التحميل
+  // نكمل بالخط الافتراضي بدل تعطيل التطبيق.
+  if (!fontsLoaded && !fontError) return null
+  applyGlobalFont()
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -72,7 +72,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     justifyContent: 'center',
   },
-  headerTextWrap: { alignItems: 'center', gap: 3 },
+  // بدون alignItems:center حتى لا ينكمش النص إلى عرض أطول كلمة (يسبب كلمة/سطر)؛
+  // النص يأخذ العرض الكامل ويتوسّط عبر textAlign، والشريط يتوسّط بـ alignSelf.
+  headerTextWrap: { gap: 3 },
   // عند وجود زر جانبي: هامش يمنع العنوان الطويل من الدخول تحته
   headerTextPadded: { paddingHorizontal: 52 },
   title: { fontSize: 22, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.3 },
@@ -83,6 +85,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.primary,
     marginTop: spacing.xs + 2,
+    alignSelf: 'center',
   },
   actionWrap: {
     position: 'absolute',
