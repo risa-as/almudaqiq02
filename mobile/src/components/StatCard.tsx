@@ -45,14 +45,14 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.lg - 2,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   content: { flex: 1, gap: 2 },
-  label: { color: colors.textSecondary, fontSize: fontSize.sm, textAlign: 'right' },
+  label: { color: colors.textSecondary, fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
   value: { fontSize: fontSize.xl, fontWeight: '800', textAlign: 'right' },
   hint: { color: colors.textMuted, fontSize: fontSize.xs, textAlign: 'right' },
 })

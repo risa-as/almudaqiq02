@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
   chip: {
     flex: 1,
     paddingVertical: spacing.sm + 2,
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

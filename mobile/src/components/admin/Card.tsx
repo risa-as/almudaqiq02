@@ -20,7 +20,7 @@ export function SectionTitle({ children, action }: PropsWithChildren<{ action?: 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderSoft,
     padding: spacing.lg,
@@ -30,8 +30,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
-  title: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  title: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
 })

@@ -8,7 +8,7 @@ import { LoadingView } from '@/components/LoadingView'
 import { Screen } from '@/components/Screen'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
 const LIVE_REFETCH_MS = 30_000
@@ -36,10 +36,10 @@ const PAYMENT_LABELS: Record<string, string> = {
   SPLIT: 'جزئي',
 }
 
-function TxRow({ tx, divider }: { tx: LiveTransaction; divider: boolean }) {
+function TxRow({ tx }: { tx: LiveTransaction }) {
   const isSale = tx.type === 'SALE'
   return (
-    <View style={[styles.txRow, divider && styles.rowDivider]}>
+    <View style={styles.txCard}>
       <View style={styles.txInfo}>
         <View style={styles.txTitleRow}>
           <Text style={styles.txReceipt}>#{tx.receiptNumber}</Text>
@@ -47,6 +47,9 @@ function TxRow({ tx, divider }: { tx: LiveTransaction; divider: boolean }) {
             <Text style={[styles.typeBadgeText, { color: isSale ? colors.success : colors.danger }]}>
               {TX_TYPE_LABELS[tx.type] ?? tx.type}
             </Text>
+          </View>
+          <View style={styles.payChip}>
+            <Text style={styles.payChipText}>{PAYMENT_LABELS[tx.paymentMethod ?? ''] ?? tx.paymentMethod ?? '—'}</Text>
           </View>
         </View>
         <Text style={styles.txMeta}>
@@ -59,7 +62,7 @@ function TxRow({ tx, divider }: { tx: LiveTransaction; divider: boolean }) {
         <Text style={[styles.txAmount, { color: isSale ? colors.text : colors.danger }]}>
           {formatMoney(tx.totalAmount)}
         </Text>
-        <Text style={styles.txMeta}>{PAYMENT_LABELS[tx.paymentMethod ?? ''] ?? tx.paymentMethod ?? '—'}</Text>
+        <Text style={styles.txMeta}>{ar.common.currency}</Text>
       </View>
     </View>
   )
@@ -110,14 +113,18 @@ export default function AdminSales() {
     <Screen title={t.title} refreshing={refreshing} onRefresh={onRefresh}>
       {/* ── الورديات المفتوحة ── */}
       <SectionTitle>{t.openShifts}</SectionTitle>
-      <Card>
-        {shiftsQ.isError ? (
+      {shiftsQ.isError ? (
+        <Card>
           <ErrorState error={shiftsQ.error} onRetry={() => void shiftsQ.refetch()} />
-        ) : openShifts.length === 0 ? (
+        </Card>
+      ) : openShifts.length === 0 ? (
+        <Card>
           <EmptyState message={t.noOpenShifts} icon="time-outline" />
-        ) : (
-          openShifts.map((s, i) => (
-            <View key={s.id} style={[styles.txRow, i > 0 && styles.rowDivider]}>
+        </Card>
+      ) : (
+        <View style={styles.cardList}>
+          {openShifts.map(s => (
+            <View key={s.id} style={styles.txCard}>
               <View style={styles.txInfo}>
                 <Text style={styles.shiftName}>{s.user?.username ?? '—'}</Text>
                 <Text style={styles.txMeta}>{s.branchName}</Text>
@@ -132,43 +139,59 @@ export default function AdminSales() {
                 </Text>
               </View>
             </View>
-          ))
-        )}
-      </Card>
+          ))}
+        </View>
+      )}
 
       {/* ── الفواتير الحية ── */}
       <SectionTitle>{t.liveInvoices}</SectionTitle>
-      <Card>
-        {transactions.length === 0 ? (
+      {transactions.length === 0 ? (
+        <Card>
           <EmptyState message={t.noInvoices} icon="receipt-outline" />
-        ) : (
-          transactions.map((tx, i) => <TxRow key={tx.id} tx={tx} divider={i > 0} />)
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <View style={styles.cardList}>
+          {transactions.map(tx => (
+            <TxRow key={tx.id} tx={tx} />
+          ))}
+        </View>
+      )}
       <Text style={styles.footnote}>{`يتم التحديث تلقائيًا كل 30 ثانية — العملة: ${ar.common.currency}`}</Text>
     </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  txRow: {
+  cardList: { gap: spacing.sm },
+  txCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
     gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    ...shadow.card,
   },
-  rowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
   txInfo: { flex: 1, gap: 2 },
   txTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   txReceipt: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
-  typeBadge: { borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  typeBadge: { borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   typeBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
+  payChip: {
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: colors.primarySoft,
+  },
+  payChipText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.primary },
   txMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   txAmountWrap: { alignItems: 'flex-end', gap: 2 },
-  txAmount: { fontSize: fontSize.md, fontWeight: '700' },
-  shiftName: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, textAlign: 'right' },
-  shiftSales: { fontSize: fontSize.md, fontWeight: '700', color: colors.success },
+  txAmount: { fontSize: fontSize.lg, fontWeight: '800' },
+  shiftName: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  shiftSales: { fontSize: fontSize.lg, fontWeight: '800', color: colors.success },
   footnote: {
     marginTop: spacing.md,
     fontSize: fontSize.xs,

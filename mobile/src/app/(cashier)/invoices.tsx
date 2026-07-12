@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   invoiceDate: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   typeBadge: {
     backgroundColor: colors.successSoft,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },

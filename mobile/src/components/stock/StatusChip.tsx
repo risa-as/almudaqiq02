@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 3,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     alignSelf: 'flex-start',
   },
   text: { fontSize: fontSize.xs, fontWeight: '700' },

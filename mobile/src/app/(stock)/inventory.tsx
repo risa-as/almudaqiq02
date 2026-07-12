@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
   rowQty: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text },
   qtyLow: { color: colors.warning },
   qtyOut: { color: colors.danger },
-  badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },
+  badge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.md },
   badgeText: { fontSize: fontSize.xs, fontWeight: '700' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
   modalCard: {

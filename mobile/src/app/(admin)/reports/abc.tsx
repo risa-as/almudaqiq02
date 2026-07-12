@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAbcReport, type AbcClass, type AbcProductRow } from '@/api/endpoints/reports'
-import { Card, SectionTitle } from '@/components/admin/Card'
+import { Card } from '@/components/admin/Card'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingView } from '@/components/LoadingView'
@@ -70,19 +70,20 @@ export default function AbcReportScreen() {
           const summary = q.data.summary.classes[cls]
           const products = q.data.products.filter(p => p.class === cls)
           return (
-            <View key={cls}>
-              <SectionTitle
-                action={
-                  <View style={[styles.classBadge, { backgroundColor: meta.tintSoft }]}>
-                    <Text style={[styles.classBadgeText, { color: meta.tint }]}>
-                      {summary.count} {t.products} • {summary.revenueShare.toFixed(1)}% {t.ofRevenue}
-                    </Text>
-                  </View>
-                }
-              >
-                {meta.label}
-              </SectionTitle>
-              <Card>
+            <View key={cls} style={styles.classSection}>
+              {/* رأس مجموعة ملوّن: A أخضر / B كهرماني / C أحمر */}
+              <View style={[styles.classHeader, { backgroundColor: meta.tintSoft, borderColor: `${meta.tint}33` }]}>
+                <View style={styles.classHeaderRight}>
+                  <View style={[styles.classDot, { backgroundColor: meta.tint }]} />
+                  <Text style={[styles.classHeaderTitle, { color: meta.tint }]}>{meta.label}</Text>
+                </View>
+                <View style={styles.classBadge}>
+                  <Text style={[styles.classBadgeText, { color: meta.tint }]}>
+                    {summary.count} {t.products} • {summary.revenueShare.toFixed(1)}% {t.ofRevenue}
+                  </Text>
+                </View>
+              </View>
+              <Card style={styles.classCard}>
                 <Text style={styles.classDesc}>{meta.desc}</Text>
                 {products.length === 0 ? (
                   <EmptyState />
@@ -100,7 +101,27 @@ export default function AbcReportScreen() {
 
 const styles = StyleSheet.create({
   subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right', marginBottom: spacing.sm },
-  classBadge: { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  classSection: { marginTop: spacing.lg },
+  classHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  classHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  classDot: { width: 10, height: 10, borderRadius: radius.full },
+  classHeaderTitle: { fontSize: fontSize.md, fontWeight: '800', textAlign: 'right' },
+  classCard: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+  },
+  classBadge: { borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   classBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
   classDesc: {
     fontSize: fontSize.xs,

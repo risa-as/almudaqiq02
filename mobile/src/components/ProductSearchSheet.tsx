@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
   },

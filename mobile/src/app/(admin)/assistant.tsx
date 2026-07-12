@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   bubbleAssistant: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderSoft,
+    borderColor: colors.border,
     borderTopLeftRadius: radius.sm,
     ...shadow.card,
   },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.sm },
   exampleChip: {
     backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md - 2,
     fontSize: fontSize.md,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 48,
     height: 48,
-    borderRadius: radius.full,
+    borderRadius: radius.lg,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',

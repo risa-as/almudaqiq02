@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   amountBadge: {
     backgroundColor: colors.dangerSoft,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },

@@ -141,6 +141,6 @@ const styles = StyleSheet.create({
   rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   rowAmounts: { alignItems: 'flex-end', gap: 2 },
   rowRevenue: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
-  statusBadge: { borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  statusBadge: { borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   statusBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
 })

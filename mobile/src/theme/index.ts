@@ -46,13 +46,14 @@ export const spacing = {
 } as const
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 28,
-  /** أزرار الإجراء الرئيسية — شكل حبة الدواء */
-  pill: 999,
+  sm: 4,
+  md: 6,
+  lg: 8,
+  xl: 10,
+  xxl: 12,
+  /** أزرار الإجراء الرئيسية — زوايا ناعمة صغيرة (وليس حبة دواء) */
+  pill: 8,
+  /** للعناصر الدائرية فعلًا فقط: صور رمزية / فقاعات أيقونات / نقاط / أزرار مستديرة */
   full: 999,
 } as const
 
@@ -76,13 +77,13 @@ export const control = {
 } as const
 
 export const shadow = {
-  /** ظل البطاقات الناعم الافتراضي */
+  /** ظل البطاقات الناعم الافتراضي — خفيف ومشدود */
   card: {
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   /** ظل مرتفع — أوراق سفلية / عناصر عائمة */
   elevated: {
@@ -92,12 +93,12 @@ export const shadow = {
     shadowRadius: 24,
     elevation: 8,
   },
-  /** ظل ملوّن لزر الإجراء الرئيسي */
+  /** ظل ملوّن خفيف لزر الإجراء الرئيسي */
   button: {
     shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
 } as const

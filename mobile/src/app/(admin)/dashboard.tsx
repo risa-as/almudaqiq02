@@ -10,7 +10,7 @@ import {
   fetchProfit,
   fetchShiftsReport,
 } from '@/api/endpoints/reports'
-import { Card, SectionTitle } from '@/components/admin/Card'
+import { Card } from '@/components/admin/Card'
 import { BarChart } from '@/components/admin/BarChart'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
@@ -33,6 +33,8 @@ const t = {
   invoiceCount: 'عدد الفواتير',
   returnsToday: 'مرتجعات اليوم',
   weeklyChart: 'مبيعات آخر 7 أيام',
+  weeklyTitle: 'مبيعات الأسبوع',
+  weeklyHint: 'آخر 7 أيام',
   openShifts: 'الورديات المفتوحة',
   noOpenShifts: 'لا توجد ورديات مفتوحة الآن',
   alerts: 'تنبيهات المخزون',
@@ -166,13 +168,16 @@ export default function AdminDashboard() {
       </View>
 
       {/* ── مبيعات الأسبوع (مخطط أعمدة يدوي) ── */}
-      <SectionTitle>{t.weeklyChart}</SectionTitle>
-      <Card>
+      <Card style={styles.chartCard}>
+        <View style={styles.chartHeader}>
+          <Text style={styles.chartTitle}>{t.weeklyTitle}</Text>
+          <Text style={styles.chartHint}>{t.weeklyHint}</Text>
+        </View>
         <BarChart data={dash.sparkline.map(p => ({ label: p.label, value: p.total }))} />
       </Card>
 
       {/* ── تنبيهات المخزون ── */}
-      <SectionTitle>{t.alerts}</SectionTitle>
+      <SectionHeader icon="notifications-outline" title={t.alerts} count={lowStockCount + nearExpiryCount} tint={colors.danger} tintSoft={colors.dangerSoft} />
       <View style={styles.statsRow}>
         <Pressable style={styles.flex1} onPress={goInventory}>
           <StatCard
@@ -197,7 +202,7 @@ export default function AdminDashboard() {
       </View>
 
       {/* ── الورديات المفتوحة ── */}
-      <SectionTitle>{t.openShifts}</SectionTitle>
+      <SectionHeader icon="time-outline" title={t.openShifts} count={openShifts.length} tint={colors.success} tintSoft={colors.successSoft} />
       <Card>
         {shiftsQ.isError ? (
           <ErrorState error={shiftsQ.error} onRetry={() => void shiftsQ.refetch()} />
@@ -220,7 +225,7 @@ export default function AdminDashboard() {
       </Card>
 
       {/* ── روابط سريعة ── */}
-      <SectionTitle>{t.quickLinks}</SectionTitle>
+      <SectionHeader icon="apps-outline" title={t.quickLinks} />
       <View style={styles.linksRow}>
         <QuickLink icon="checkmark-done-outline" label={t.approvals} onPress={() => router.push('/(admin)/approvals' as never)} />
         <QuickLink icon="people-outline" label={t.users} onPress={() => router.push('/(admin)/users' as never)} />
@@ -251,20 +256,49 @@ function QuickLink({
   )
 }
 
+/** رأس قسم موحّد: أيقونة + عنوان + شارة عدد اختيارية — إيقاع رأسي ثابت (16px). */
+function SectionHeader({
+  icon,
+  title,
+  count,
+  tint = colors.primary,
+  tintSoft = colors.primarySoft,
+}: {
+  icon: keyof typeof Ionicons.glyphMap
+  title: string
+  count?: number
+  tint?: string
+  tintSoft?: string
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderRight}>
+        <Ionicons name={icon} size={16} color={colors.textSecondary} />
+        <Text style={styles.sectionHeaderTitle}>{title}</Text>
+      </View>
+      {typeof count === 'number' ? (
+        <View style={[styles.sectionCount, { backgroundColor: tintSoft }]}>
+          <Text style={[styles.sectionCountText, { color: tint }]}>{count}</Text>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   hero: {
     borderRadius: radius.xxl,
-    padding: spacing.xl,
+    padding: spacing.lg,
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.sm,
     ...shadow.button,
   },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  heroTextWrap: { flex: 1, gap: spacing.xs },
-  heroGreeting: { color: 'rgba(255,255,255,0.85)', fontSize: fontSize.md, fontWeight: '600', textAlign: 'right' },
-  heroName: { color: colors.onPrimary, fontSize: fontSize.title, fontWeight: '800', textAlign: 'right', letterSpacing: -0.3 },
+  heroTextWrap: { flex: 1, gap: 2 },
+  heroGreeting: { color: 'rgba(255,255,255,0.85)', fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
+  heroName: { color: colors.onPrimary, fontSize: fontSize.xl, fontWeight: '800', textAlign: 'right', letterSpacing: -0.3 },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,25 +306,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.28)',
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     maxWidth: 150,
   },
   heroBadgeText: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: '600' },
-  heroHint: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.sm, textAlign: 'right' },
+  heroHint: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.xs, textAlign: 'right' },
   branchBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     maxWidth: 160,
   },
   branchBadgeText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '600' },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  chartCard: { marginTop: spacing.xs, gap: spacing.md },
+  chartHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chartTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  chartHint: { fontSize: fontSize.xs, color: colors.textMuted },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  sectionHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sectionHeaderTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  sectionCount: {
+    minWidth: 24,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  sectionCountText: { fontSize: fontSize.xs, fontWeight: '800' },
   shiftRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,8 +366,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     paddingVertical: spacing.lg,
+    ...shadow.card,
   },
   quickLinkIcon: {
     width: 44,

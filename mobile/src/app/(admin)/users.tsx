@@ -174,6 +174,6 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1, gap: 2 },
   rowTitle: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, textAlign: 'right' },
   rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
-  roleBadge: { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  roleBadge: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   roleBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
 })

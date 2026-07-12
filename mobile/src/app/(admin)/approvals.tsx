@@ -22,7 +22,7 @@ import { Screen } from '@/components/Screen'
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
 const t = {
@@ -39,6 +39,8 @@ const t = {
   rejectTransferMsg: 'سيتم إلغاء طلب التحويل نهائيًا. هل أنت متأكد؟',
   transferApproved: 'تمت الموافقة على التحويل',
   transferRejected: 'تم رفض التحويل',
+  transferPendingChip: 'بانتظار الموافقة',
+  orderDraftChip: 'مسودة',
   orders: 'أوامر شراء بانتظار المراجعة',
   noOrders: 'لا توجد أوامر شراء بانتظار المراجعة',
   supplier: 'المورد',
@@ -100,16 +102,22 @@ function TransfersSection({ bid }: { bid: string | null }) {
   return (
     <>
       <SectionTitle>{t.transfers}</SectionTitle>
-      <Card>
-        {q.isPending ? (
+      {q.isPending ? (
+        <Card>
           <LoadingView />
-        ) : q.isError ? (
+        </Card>
+      ) : q.isError ? (
+        <Card>
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
-        ) : q.data.length === 0 ? (
+        </Card>
+      ) : q.data.length === 0 ? (
+        <Card>
           <EmptyState message={t.noTransfers} icon="swap-horizontal-outline" />
-        ) : (
-          q.data.map((tr, i) => (
-            <View key={tr.id} style={[styles.item, i > 0 && styles.rowDivider]}>
+        </Card>
+      ) : (
+        <View style={styles.itemList}>
+          {q.data.map(tr => (
+            <View key={tr.id} style={styles.itemCard}>
               <View style={styles.itemHeader}>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemTitle}>
@@ -119,6 +127,9 @@ function TransfersSection({ bid }: { bid: string | null }) {
                     {transferItemsCount(tr.items)} {t.items} • {formatDateTime(tr.createdAt)}
                   </Text>
                   {tr.notes ? <Text style={styles.itemMeta}>{tr.notes}</Text> : null}
+                </View>
+                <View style={[styles.statusChip, { backgroundColor: colors.warningSoft }]}>
+                  <Text style={[styles.statusChipText, { color: colors.warning }]}>{t.transferPendingChip}</Text>
                 </View>
               </View>
               <View style={styles.actionsRow}>
@@ -138,9 +149,9 @@ function TransfersSection({ bid }: { bid: string | null }) {
                 </Pressable>
               </View>
             </View>
-          ))
-        )}
-      </Card>
+          ))}
+        </View>
+      )}
     </>
   )
 }
@@ -179,16 +190,22 @@ function OrdersSection({ bid }: { bid: string | null }) {
   return (
     <>
       <SectionTitle>{t.orders}</SectionTitle>
-      <Card>
-        {q.isPending ? (
+      {q.isPending ? (
+        <Card>
           <LoadingView />
-        ) : q.isError ? (
+        </Card>
+      ) : q.isError ? (
+        <Card>
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
-        ) : drafts.length === 0 ? (
+        </Card>
+      ) : drafts.length === 0 ? (
+        <Card>
           <EmptyState message={t.noOrders} icon="clipboard-outline" />
-        ) : (
-          drafts.map((o, i) => (
-            <View key={o.id} style={[styles.item, i > 0 && styles.rowDivider]}>
+        </Card>
+      ) : (
+        <View style={styles.itemList}>
+          {drafts.map(o => (
+            <View key={o.id} style={styles.itemCard}>
               <View style={styles.itemHeader}>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemTitle}>
@@ -199,6 +216,9 @@ function OrdersSection({ bid }: { bid: string | null }) {
                     {formatDateTime(o.createdAt)}
                   </Text>
                   {o.notes ? <Text style={styles.itemMeta}>{o.notes}</Text> : null}
+                </View>
+                <View style={[styles.statusChip, { backgroundColor: colors.infoSoft }]}>
+                  <Text style={[styles.statusChipText, { color: colors.info }]}>{t.orderDraftChip}</Text>
                 </View>
               </View>
               <View style={styles.actionsRow}>
@@ -218,9 +238,9 @@ function OrdersSection({ bid }: { bid: string | null }) {
                 </Pressable>
               </View>
             </View>
-          ))
-        )}
-      </Card>
+          ))}
+        </View>
+      )}
     </>
   )
 }
@@ -246,25 +266,39 @@ export default function AdminApprovals() {
 }
 
 const styles = StyleSheet.create({
-  rowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
-  item: { paddingVertical: spacing.md, gap: spacing.md },
-  itemHeader: { flexDirection: 'row', alignItems: 'center' },
+  itemList: { gap: spacing.sm },
+  itemCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadow.card,
+  },
+  itemHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   itemInfo: { flex: 1, gap: 2 },
   itemTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
   itemMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
-  actionsRow: { flexDirection: 'row', gap: spacing.md },
+  statusChip: {
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  statusChipText: { fontSize: fontSize.xs, fontWeight: '700' },
+  actionsRow: { flexDirection: 'row', gap: spacing.sm },
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.lg,
+    height: 44,
   },
-  approveBtn: { backgroundColor: colors.success },
+  approveBtn: { backgroundColor: colors.primary, ...shadow.button },
   approveBtnText: { color: colors.onPrimary, fontWeight: '700', fontSize: fontSize.sm },
-  rejectBtn: { backgroundColor: colors.dangerSoft },
+  rejectBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.danger },
   rejectBtnText: { color: colors.danger, fontWeight: '700', fontSize: fontSize.sm },
   btnDisabled: { opacity: 0.5 },
 })

@@ -529,6 +529,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   reviewInfo: { flex: 1, gap: 2 },
-  diffBadge: { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 4 },
+  diffBadge: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 4 },
   reviewWarning: { color: colors.textMuted, fontSize: fontSize.xs, textAlign: 'center', marginTop: spacing.sm },
 })
