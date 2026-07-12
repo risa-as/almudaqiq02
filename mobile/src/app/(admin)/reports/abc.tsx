@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAbcReport, type AbcClass, type AbcProductRow, type DateRange } from '@/api/endpoints/reports'
-import { DateRangeFilter } from '@/components/admin/DateRangeFilter'
+import { ReportRangeFilter } from '@/components/admin/ReportRangeFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingView } from '@/components/LoadingView'
@@ -49,17 +49,21 @@ function ProductRow({
   return (
     <View style={styles.row}>
       <View style={styles.rowMain}>
-        <View style={[styles.rankBadge, { backgroundColor: tintSoft }]}>
-          <Text style={[styles.rankText, { color: tint }]}>{p.rank}</Text>
-        </View>
+        {/* كتلة الاسم على اليمين: رتبة + اسم وتحته الفئة والكمية */}
         <View style={styles.rowInfo}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {p.name}
-          </Text>
-          <Text style={styles.rowMeta} numberOfLines={1}>
-            {p.category} • {t.qty} {formatMoney(p.quantity)}
-          </Text>
+          <View style={[styles.rankBadge, { backgroundColor: tintSoft }]}>
+            <Text style={[styles.rankText, { color: tint }]}>{p.rank}</Text>
+          </View>
+          <View style={styles.textCol}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {p.name}
+            </Text>
+            <Text style={styles.rowMeta} numberOfLines={1}>
+              {p.category} • {t.qty} {formatMoney(p.quantity)}
+            </Text>
+          </View>
         </View>
+        {/* المبالغ على اليسار */}
         <View style={styles.rowAmounts}>
           <Text style={styles.rowRevenue}>{formatMoney(p.revenue)}</Text>
           <Text style={styles.rowProfit}>
@@ -90,7 +94,7 @@ export default function AbcReportScreen() {
   return (
     <Screen title={t.title} subtitle={t.subtitle} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
       <View style={styles.rangeRow}>
-        <DateRangeFilter value={range} onChange={setRange} />
+        <ReportRangeFilter onRangeChange={setRange} />
       </View>
 
       {q.isPending ? (
@@ -184,7 +188,7 @@ export default function AbcReportScreen() {
 }
 
 const styles = StyleSheet.create({
-  rangeRow: { flexDirection: 'row', justifyContent: 'flex-start', marginBottom: spacing.md },
+  rangeRow: { marginBottom: spacing.md },
 
   // ── الملخص العلوي ──────────────────────────────────────────────────────────
   summaryCard: {
@@ -251,9 +255,11 @@ const styles = StyleSheet.create({
   row: { paddingVertical: spacing.md, gap: spacing.sm },
   rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // كتلة الاسم (اليمين): رتبة + عمود نص، تأخذ المساحة المتبقية
+  rowInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rankBadge: { width: 30, height: 30, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   rankText: { fontSize: fontSize.sm, fontWeight: '800' },
-  rowInfo: { flex: 1, gap: 2 },
+  textCol: { flex: 1, gap: 2 },
   rowTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
   rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   rowAmounts: { alignItems: 'flex-end', gap: 2 },
