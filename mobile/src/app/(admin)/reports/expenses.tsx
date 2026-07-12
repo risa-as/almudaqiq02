@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { fetchExpenses, type ExpensePeriod } from '@/api/endpoints/expenses'
+import type { DateRange } from '@/api/endpoints/reports'
 import { Card, SectionTitle } from '@/components/admin/Card'
+import { DateRangeFilter } from '@/components/admin/DateRangeFilter'
 import { PeriodFilter } from '@/components/admin/PeriodFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
@@ -16,6 +18,7 @@ import { formatDate, formatMoney } from '@/utils/format'
 
 const t = {
   title: 'المصروفات',
+  subtitle: 'قائمة المصروفات حسب الفترة',
   total: 'إجمالي المصروفات',
   count: 'عدد المصروفات',
   list: 'القائمة',
@@ -31,19 +34,33 @@ const PERIODS: { value: ExpensePeriod; label: string }[] = [
 
 export default function ExpensesReportScreen() {
   const [period, setPeriod] = useState<ExpensePeriod>('month')
+  const [range, setRange] = useState<DateRange | null>(null)
   const { selectedBranchId } = useBranchSelection()
   const bid = selectedBranchId
 
   const q = useQuery({
-    queryKey: ['report-expenses', period, bid],
-    queryFn: () => fetchExpenses(period, bid),
+    queryKey: ['report-expenses', period, bid, range?.startDate ?? null, range?.endDate ?? null],
+    queryFn: () => fetchExpenses(period, bid, range),
   })
 
   const total = (q.data ?? []).reduce((sum, e) => sum + Number(e.amount), 0)
 
   return (
-    <Screen title={t.title} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
-      <PeriodFilter options={PERIODS} value={period} onChange={setPeriod} />
+    <Screen title={t.title} subtitle={t.subtitle} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
+      {/* فترات جاهزة + فترة مخصصة (من → إلى) */}
+      <View style={styles.filtersRow}>
+        <View style={styles.filtersChips}>
+          <PeriodFilter
+            options={PERIODS}
+            value={(range ? '' : period) as ExpensePeriod}
+            onChange={p => {
+              setRange(null)
+              setPeriod(p)
+            }}
+          />
+        </View>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </View>
 
       {q.isPending ? (
         <LoadingView />
@@ -103,6 +120,8 @@ export default function ExpensesReportScreen() {
 }
 
 const styles = StyleSheet.create({
+  filtersRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  filtersChips: { flex: 1 },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md, marginBottom: spacing.md },
   row: {
     flexDirection: 'row',

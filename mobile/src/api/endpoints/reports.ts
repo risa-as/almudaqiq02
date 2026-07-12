@@ -7,6 +7,12 @@ import { normalizeBranchId } from '@/stores/branch'
  */
 export type Money = number | string
 
+/** فترة مخصصة (من → إلى) بصيغة YYYY-MM-DD — تُمرَّر للمسارات الداعمة لها فقط. */
+export interface DateRange {
+  startDate: string
+  endDate: string
+}
+
 // ── GET /api/reports/dashboard ────────────────────────────────────────────────
 export interface DashboardReport {
   today: { sales: number; returns: number; netSales: number; txCount: number }
@@ -78,10 +84,14 @@ export interface SalesReport {
 
 export function fetchSalesReport(
   period: SalesPeriod,
-  selectedBranchId: string | null
+  selectedBranchId: string | null,
+  range?: DateRange | null
 ): Promise<SalesReport> {
+  // الخادم: period=custom&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   return api<SalesReport>('/api/reports/sales', {
-    query: { period, branchId: normalizeBranchId(selectedBranchId) },
+    query: range
+      ? { period: 'custom', startDate: range.startDate, endDate: range.endDate, branchId: normalizeBranchId(selectedBranchId) }
+      : { period, branchId: normalizeBranchId(selectedBranchId) },
   })
 }
 
@@ -110,9 +120,14 @@ export interface AbcReport {
   products: AbcProductRow[]
 }
 
-export function fetchAbcReport(selectedBranchId: string | null): Promise<AbcReport> {
+export function fetchAbcReport(selectedBranchId: string | null, range?: DateRange | null): Promise<AbcReport> {
+  // الخادم يقبل startDate/endDate اختياريًا (الافتراضي: آخر 90 يومًا)
   return api<AbcReport>('/api/reports/abc-analysis', {
-    query: { branchId: normalizeBranchId(selectedBranchId) },
+    query: {
+      branchId: normalizeBranchId(selectedBranchId),
+      startDate: range?.startDate,
+      endDate: range?.endDate,
+    },
   })
 }
 
@@ -144,9 +159,17 @@ export interface OffersPerformanceReport {
   offers: OfferPerformanceRow[]
 }
 
-export function fetchOffersReport(selectedBranchId: string | null): Promise<OffersPerformanceReport> {
+export function fetchOffersReport(
+  selectedBranchId: string | null,
+  range?: DateRange | null
+): Promise<OffersPerformanceReport> {
+  // الخادم يقبل startDate/endDate اختياريًا (الافتراضي: آخر 30 يومًا)
   return api<OffersPerformanceReport>('/api/reports/offers-performance', {
-    query: { branchId: normalizeBranchId(selectedBranchId) },
+    query: {
+      branchId: normalizeBranchId(selectedBranchId),
+      startDate: range?.startDate,
+      endDate: range?.endDate,
+    },
   })
 }
 

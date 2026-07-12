@@ -21,7 +21,7 @@ export const ar = {
     sessionExpired: 'انتهت الجلسة، يرجى تسجيل الدخول من جديد',
     offlineNotice: 'لا يوجد اتصال بالإنترنت — العمليات تتطلب اتصالاً نشطًا',
     today: 'اليوم',
-    currency: 'ر.ي',
+    currency: 'د.ع',
   },
 
   login: {

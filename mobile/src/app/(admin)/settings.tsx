@@ -6,6 +6,7 @@ import { Card, SectionTitle } from '@/components/admin/Card'
 import { Screen } from '@/components/Screen'
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
+import { useAuthStore } from '@/stores/auth'
 import { ALL_BRANCHES, ALL_BRANCHES_LABEL, useBranchSelection } from '@/stores/branch'
 import { colors, fontSize, radius, spacing } from '@/theme'
 
@@ -48,6 +49,7 @@ function NavRow({ icon, label, hint, divider, onPress }: NavRowProps) {
 export default function AdminSettings() {
   const router = useRouter()
   const aiEnabled = useFeature('ai_assistant')
+  const tenantName = useAuthStore(s => s.user?.tenantName)
   const { branches, selectedBranchId, canSwitch, select } = useBranchSelection()
 
   // خيارات المبدّل: "جميع الفروع" تظهر فقط عند وجود أكثر من فرع (كما في الويب)
@@ -57,7 +59,7 @@ export default function AdminSettings() {
       : branches
 
   return (
-    <Screen title={ar.tabs.more}>
+    <Screen title={ar.tabs.more} subtitle={tenantName ?? undefined}>
       <AccountCard />
 
       {/* ── مبدّل الفروع — ADMIN فقط (مدير الفرع مثبّت على فرعه، US4-AS3) ── */}

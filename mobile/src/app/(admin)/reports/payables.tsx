@@ -30,11 +30,12 @@ export default function PayablesReportScreen() {
   const q = useQuery({ queryKey: ['report-payables', bid], queryFn: () => fetchPayablesReport(bid) })
 
   return (
-    <Screen title={t.title} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
-      <Text style={styles.subtitle}>
-        {t.subtitle} — {selectedBranchName}
-      </Text>
-
+    <Screen
+      title={t.title}
+      subtitle={`${t.subtitle} — ${selectedBranchName}`}
+      refreshing={q.isRefetching}
+      onRefresh={() => void q.refetch()}
+    >
       {q.isPending ? (
         <LoadingView />
       ) : q.isError ? (

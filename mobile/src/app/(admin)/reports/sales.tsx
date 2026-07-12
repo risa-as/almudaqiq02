@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
-import { fetchSalesReport, type SalesPeriod } from '@/api/endpoints/reports'
+import { fetchSalesReport, type DateRange, type SalesPeriod } from '@/api/endpoints/reports'
 import { BarChart } from '@/components/admin/BarChart'
 import { Card, SectionTitle } from '@/components/admin/Card'
+import { DateRangeFilter } from '@/components/admin/DateRangeFilter'
 import { PeriodFilter } from '@/components/admin/PeriodFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
@@ -17,6 +18,7 @@ import { formatDateTime, formatMoney } from '@/utils/format'
 
 const t = {
   title: 'تقرير المبيعات',
+  subtitle: 'الإجماليات والفواتير حسب الفترة',
   totalSales: 'إجمالي المبيعات',
   txCount: 'عدد الفواتير',
   netProfit: 'صافي الربح',
@@ -34,17 +36,24 @@ const PERIODS: { value: SalesPeriod; label: string }[] = [
 
 export default function SalesReportScreen() {
   const [period, setPeriod] = useState<SalesPeriod>('daily')
+  const [range, setRange] = useState<DateRange | null>(null)
   const { selectedBranchId } = useBranchSelection()
   const bid = selectedBranchId
 
   const q = useQuery({
-    queryKey: ['report-sales', period, bid],
-    queryFn: () => fetchSalesReport(period, bid),
+    queryKey: ['report-sales', period, bid, range?.startDate ?? null, range?.endDate ?? null],
+    queryFn: () => fetchSalesReport(period, bid, range),
   })
 
   return (
-    <Screen title={t.title} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
-      <PeriodFilter options={PERIODS} value={period} onChange={setPeriod} />
+    <Screen title={t.title} subtitle={t.subtitle} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
+      {/* فترات جاهزة + فترة مخصصة (من → إلى) — الفترة المخصصة تتقدم عند تفعيلها */}
+      <View style={styles.filtersRow}>
+        <View style={styles.filtersChips}>
+          <PeriodFilter options={PERIODS} value={range ? ('' as SalesPeriod) : period} onChange={p => { setRange(null); setPeriod(p) }} />
+        </View>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </View>
 
       {q.isPending ? (
         <LoadingView />
@@ -118,6 +127,8 @@ export default function SalesReportScreen() {
 }
 
 const styles = StyleSheet.create({
+  filtersRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  filtersChips: { flex: 1 },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   row: {
     flexDirection: 'row',

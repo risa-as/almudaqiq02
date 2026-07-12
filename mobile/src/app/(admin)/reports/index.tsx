@@ -7,6 +7,7 @@ import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 const t = {
   title: 'التقارير',
+  pageSubtitle: 'تحليلات وتقارير الأداء',
   branchScope: 'نطاق العرض:',
   sales: 'تقرير المبيعات',
   salesHint: 'الإجماليات والفواتير حسب الفترة',
@@ -42,7 +43,7 @@ export default function ReportsHub() {
   const { selectedBranchName } = useBranchSelection()
 
   return (
-    <Screen title={t.title}>
+    <Screen title={t.title} subtitle={t.pageSubtitle}>
       <Text style={styles.scope}>
         {t.branchScope} {selectedBranchName}
       </Text>

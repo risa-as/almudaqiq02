@@ -15,12 +15,14 @@ const LIVE_REFETCH_MS = 30_000
 
 const t = {
   title: 'المبيعات',
+  subtitle: 'فواتير اليوم والورديات المفتوحة',
   liveInvoices: 'الفواتير الحية',
   noInvoices: 'لا توجد فواتير بعد',
   openShifts: 'الورديات المفتوحة',
   noOpenShifts: 'لا توجد ورديات مفتوحة الآن',
   openedAt: 'فُتحت',
   invoices: 'فاتورة',
+  openChip: 'مفتوحة',
 }
 
 const TX_TYPE_LABELS: Record<string, string> = {
@@ -36,34 +38,31 @@ const PAYMENT_LABELS: Record<string, string> = {
   SPLIT: 'جزئي',
 }
 
+/**
+ * بطاقة فاتورة نظيفة: سطر رئيسي (المبلغ ↔ الوقت) + سطر ثانوي باهت
+ * (طريقة الدفع • رقم الفاتورة). شارة واحدة فقط وتظهر للإرجاع/الاسترداد حصرًا.
+ */
 function TxRow({ tx }: { tx: LiveTransaction }) {
   const isSale = tx.type === 'SALE'
+  const payment = PAYMENT_LABELS[tx.paymentMethod ?? ''] ?? tx.paymentMethod ?? '—'
   return (
     <View style={styles.txCard}>
-      <View style={styles.txInfo}>
-        <View style={styles.txTitleRow}>
-          <Text style={styles.txReceipt}>#{tx.receiptNumber}</Text>
-          <View style={[styles.typeBadge, { backgroundColor: isSale ? colors.successSoft : colors.dangerSoft }]}>
-            <Text style={[styles.typeBadgeText, { color: isSale ? colors.success : colors.danger }]}>
-              {TX_TYPE_LABELS[tx.type] ?? tx.type}
-            </Text>
-          </View>
-          <View style={styles.payChip}>
-            <Text style={styles.payChipText}>{PAYMENT_LABELS[tx.paymentMethod ?? ''] ?? tx.paymentMethod ?? '—'}</Text>
-          </View>
+      <View style={styles.txPrimaryRow}>
+        <View style={styles.txAmountGroup}>
+          <Text style={[styles.txAmount, !isSale && styles.txAmountNegative]}>
+            {formatMoney(tx.totalAmount)} {ar.common.currency}
+          </Text>
+          {!isSale ? (
+            <View style={styles.typeChip}>
+              <Text style={styles.typeChipText}>{TX_TYPE_LABELS[tx.type] ?? tx.type}</Text>
+            </View>
+          ) : null}
         </View>
-        <Text style={styles.txMeta}>
-          {tx.user?.username ?? '—'}
-          {tx.customer?.name ? ` • ${tx.customer.name}` : ''}
-        </Text>
-        <Text style={styles.txMeta}>{formatDateTime(tx.date)}</Text>
+        <Text style={styles.txTime}>{formatDateTime(tx.date)}</Text>
       </View>
-      <View style={styles.txAmountWrap}>
-        <Text style={[styles.txAmount, { color: isSale ? colors.text : colors.danger }]}>
-          {formatMoney(tx.totalAmount)}
-        </Text>
-        <Text style={styles.txMeta}>{ar.common.currency}</Text>
-      </View>
+      <Text style={styles.txMetaLine}>
+        {payment} • #{tx.receiptNumber}
+      </Text>
     </View>
   )
 }
@@ -92,7 +91,7 @@ export default function AdminSales() {
 
   if (txQ.isPending) {
     return (
-      <Screen title={t.title} scroll={false}>
+      <Screen title={t.title} subtitle={t.subtitle} scroll={false}>
         <LoadingView />
       </Screen>
     )
@@ -100,7 +99,7 @@ export default function AdminSales() {
 
   if (txQ.isError) {
     return (
-      <Screen title={t.title} scroll={false}>
+      <Screen title={t.title} subtitle={t.subtitle} scroll={false}>
         <ErrorState error={txQ.error} onRetry={() => void txQ.refetch()} />
       </Screen>
     )
@@ -110,7 +109,7 @@ export default function AdminSales() {
   const openShifts = (shiftsQ.data ?? []).filter(s => !s.closedAt)
 
   return (
-    <Screen title={t.title} refreshing={refreshing} onRefresh={onRefresh}>
+    <Screen title={t.title} subtitle={t.subtitle} refreshing={refreshing} onRefresh={onRefresh}>
       {/* ── الورديات المفتوحة ── */}
       <SectionTitle>{t.openShifts}</SectionTitle>
       {shiftsQ.isError ? (
@@ -124,17 +123,22 @@ export default function AdminSales() {
       ) : (
         <View style={styles.cardList}>
           {openShifts.map(s => (
-            <View key={s.id} style={styles.txCard}>
-              <View style={styles.txInfo}>
-                <Text style={styles.shiftName}>{s.user?.username ?? '—'}</Text>
-                <Text style={styles.txMeta}>{s.branchName}</Text>
-                <Text style={styles.txMeta}>
-                  {t.openedAt} {formatDateTime(s.openedAt)}
+            <View key={s.id} style={styles.shiftCard}>
+              <View style={styles.shiftInfo}>
+                <View style={styles.shiftNameRow}>
+                  <Text style={styles.shiftName} numberOfLines={1}>
+                    {s.user?.username ?? '—'}
+                  </Text>
+                  <View style={styles.openDot} />
+                  <Text style={styles.openLabel}>{t.openChip}</Text>
+                </View>
+                <Text style={styles.shiftMeta}>
+                  {s.branchName} • {t.openedAt} {formatDateTime(s.openedAt)}
                 </Text>
               </View>
-              <View style={styles.txAmountWrap}>
+              <View style={styles.shiftTotalWrap}>
                 <Text style={styles.shiftSales}>{formatMoney(s.totalSales)}</Text>
-                <Text style={styles.txMeta}>
+                <Text style={styles.shiftMeta}>
                   {s.txCount} {t.invoices}
                 </Text>
               </View>
@@ -163,7 +167,38 @@ export default function AdminSales() {
 
 const styles = StyleSheet.create({
   cardList: { gap: spacing.sm },
+
+  // ── بطاقة الفاتورة: سطران فقط وحجما نص اثنان ──────────────────────────────
   txCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
+  txPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  txAmountGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
+  txAmount: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text },
+  txAmountNegative: { color: colors.danger },
+  typeChip: {
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: colors.dangerSoft,
+  },
+  typeChipText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.danger },
+  txTime: { fontSize: fontSize.sm, color: colors.textMuted },
+  txMetaLine: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
+
+  // ── بطاقة الوردية المفتوحة ─────────────────────────────────────────────────
+  shiftCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -172,30 +207,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSoft,
     borderRadius: radius.lg,
-    padding: spacing.md,
+    padding: spacing.lg,
     ...shadow.card,
   },
-  txInfo: { flex: 1, gap: 2 },
-  txTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  txReceipt: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
-  typeBadge: { borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  typeBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
-  payChip: {
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    backgroundColor: colors.primarySoft,
-  },
-  payChipText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.primary },
-  txMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
-  txAmountWrap: { alignItems: 'flex-end', gap: 2 },
-  txAmount: { fontSize: fontSize.lg, fontWeight: '800' },
-  shiftName: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
+  shiftInfo: { flex: 1, gap: spacing.xs },
+  shiftNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  shiftName: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, textAlign: 'right', flexShrink: 1 },
+  openDot: { width: 8, height: 8, borderRadius: radius.full, backgroundColor: colors.success },
+  openLabel: { fontSize: fontSize.sm, fontWeight: '700', color: colors.success },
+  shiftMeta: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'right' },
+  shiftTotalWrap: { alignItems: 'flex-end', gap: 2 },
   shiftSales: { fontSize: fontSize.lg, fontWeight: '800', color: colors.success },
+
   footnote: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
     fontSize: fontSize.xs,
     color: colors.textMuted,
     textAlign: 'center',
+    opacity: 0.8,
   },
 })

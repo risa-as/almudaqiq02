@@ -22,6 +22,7 @@ import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 
 const t = {
   title: 'المساعد الذكي',
+  subtitle: 'اسأل عن بياناتك بالعربية',
   placeholder: 'اسأل عن مبيعاتك ومخزونك…',
   emptyTitle: 'مرحبًا! أنا مساعدك الذكي',
   emptyHint: 'اسألني بالعربية عن بياناتك، مثل:',
@@ -116,14 +117,14 @@ export default function AdminAssistant() {
 
   if (!aiEnabled) {
     return (
-      <Screen title={t.title} scroll={false}>
+      <Screen title={t.title} subtitle={t.subtitle} scroll={false}>
         <UpgradeState />
       </Screen>
     )
   }
 
   return (
-    <Screen title={t.title} scroll={false}>
+    <Screen title={t.title} subtitle={t.subtitle} scroll={false}>
       <KeyboardAvoidingView
         style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

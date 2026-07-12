@@ -15,6 +15,7 @@ import { formatDateTime } from '@/utils/format'
 
 const t = {
   title: 'المستخدمون',
+  subtitle: 'قائمة الموظفين وسجل التدقيق',
   staff: 'الموظفون',
   noStaff: 'لا يوجد موظفون',
   orgWide: 'كل الفروع',
@@ -108,7 +109,7 @@ export default function AdminUsers() {
   const onRefresh = () => void usersQ.refetch()
 
   return (
-    <Screen title={t.title} refreshing={usersQ.isRefetching} onRefresh={onRefresh}>
+    <Screen title={t.title} subtitle={t.subtitle} refreshing={usersQ.isRefetching} onRefresh={onRefresh}>
       <SectionTitle>{`${t.staff}${usersQ.data ? ` (${usersQ.data.length})` : ''}`}</SectionTitle>
       <Card>
         {usersQ.isPending ? (

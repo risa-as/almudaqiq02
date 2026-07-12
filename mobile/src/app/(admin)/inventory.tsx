@@ -43,7 +43,7 @@ export default function AdminInventoryOverview() {
 
   if (alertsQ.isPending || expiryQ.isPending) {
     return (
-      <Screen title={t.title} scroll={false}>
+      <Screen title={t.title} subtitle={`${t.scope} ${selectedBranchName}`} scroll={false}>
         <LoadingView />
       </Screen>
     )
@@ -51,7 +51,7 @@ export default function AdminInventoryOverview() {
 
   if (alertsQ.isError) {
     return (
-      <Screen title={t.title} scroll={false}>
+      <Screen title={t.title} subtitle={`${t.scope} ${selectedBranchName}`} scroll={false}>
         <ErrorState error={alertsQ.error} onRetry={() => void alertsQ.refetch()} />
       </Screen>
     )
@@ -61,11 +61,12 @@ export default function AdminInventoryOverview() {
   const expiry = expiryQ.isError ? null : expiryQ.data
 
   return (
-    <Screen title={t.title} refreshing={refreshing} onRefresh={onRefresh}>
-      <Text style={styles.scope}>
-        {t.scope} {selectedBranchName}
-      </Text>
-
+    <Screen
+      title={t.title}
+      subtitle={`${t.scope} ${selectedBranchName}`}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+    >
       {/* ── إجماليات ── */}
       <View style={styles.statsRow}>
         <StatCard

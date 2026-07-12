@@ -27,6 +27,7 @@ import { formatDateTime, formatMoney } from '@/utils/format'
 
 const t = {
   title: 'الموافقات',
+  subtitle: 'التحويلات وأوامر الشراء المعلقة',
   transfers: 'تحويلات معلقة',
   noTransfers: 'لا توجد تحويلات بانتظار الموافقة',
   transferLine: (from: string, to: string) => `${from} ← ${to}`,
@@ -257,7 +258,7 @@ export default function AdminApprovals() {
   }
 
   return (
-    <Screen title={t.title} onRefresh={onRefresh}>
+    <Screen title={t.title} subtitle={t.subtitle} onRefresh={onRefresh}>
       {/* قسم التحويلات يُخفى كليًا عند قفل ميزة stock_transfers (FR-017) */}
       {transfersEnabled ? <TransfersSection bid={bid} /> : null}
       <OrdersSection bid={bid} />

@@ -6,6 +6,8 @@ import { colors, fontSize, spacing } from '@/theme'
 interface ScreenProps {
   /** عنوان يظهر أعلى الشاشة (اختياري) */
   title?: string
+  /** سطر وصفي مختصر أسفل العنوان (اختياري) */
+  subtitle?: string
   /** عنصر إضافي بجانب العنوان (زر/فلتر) */
   headerAction?: ReactNode
   /** لفّ المحتوى بـ ScrollView (الافتراضي true) */
@@ -14,11 +16,24 @@ interface ScreenProps {
   onRefresh?: () => void
 }
 
-export function Screen({ title, headerAction, scroll = true, refreshing, onRefresh, children }: PropsWithChildren<ScreenProps>) {
+export function Screen({
+  title,
+  subtitle,
+  headerAction,
+  scroll = true,
+  refreshing,
+  onRefresh,
+  children,
+}: PropsWithChildren<ScreenProps>) {
   const header = title ? (
     <View style={styles.header}>
-      <Text style={styles.title}>{title}</Text>
-      {headerAction}
+      <View style={styles.headerRow}>
+        <View style={styles.headerTextWrap}>
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
+        {headerAction}
+      </View>
     </View>
   ) : null
 
@@ -50,14 +65,22 @@ export function Screen({ title, headerAction, scroll = true, refreshing, onRefre
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    gap: spacing.md,
   },
-  title: { fontSize: fontSize.title, fontWeight: '800', color: colors.text, textAlign: 'right', letterSpacing: -0.3 },
-  body: { flex: 1, paddingHorizontal: spacing.lg },
-  scrollBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  headerTextWrap: { flex: 1, gap: 2 },
+  title: { fontSize: 24, fontWeight: '800', color: colors.text, textAlign: 'right', letterSpacing: -0.3 },
+  subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
+  body: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  scrollBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
 })
