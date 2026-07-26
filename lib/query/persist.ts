@@ -59,10 +59,12 @@ const PERSISTED_KEYS = new Set([
   'customers',
   'customer',
   'offers',
+  'branches',        // قائمة الفروع — BranchContext يجلبها في كل صفحة
   'branches-admin',
   'transfers',
   'expenses',
   'orders',
+  'stocktake',       // قائمة جلسات الجرد (لا 'stocktake-detail': جلسة عدٍّ جارية)
 ])
 
 interface Envelope {
@@ -86,6 +88,24 @@ function shouldPersist(query: Query): boolean {
 }
 
 /**
+ * عمر مُصطنع يُمنح للاستعلامات المستعادة من القرص.
+ *
+ * لماذا: staleTime في المزوّد خمس دقائق. بلا هذا التعديل قد يُستعاد استعلام
+ * كُتب قبل دقيقتين فيُعدّه React Query «طازجًا» ولا يُعيد جلبه — فيرى المستخدم
+ * كميات مخزون أو أرصدة من جلسةٍ سابقة دون أي تحديث. البيانات المستعادة من
+ * جلسة أخرى لا يمكن الوثوق بطزاجتها مهما كان عمرها.
+ *
+ * الحل: نُقدّم طابعها الزمني ليتجاوز staleTime، فتُعدّ قديمة ويُعاد جلبها في
+ * الخلفية فور التركيب — مع بقائها معروضة (لا شاشة انتظار). لا نستعمل صفرًا لأن
+ * hydrate لا يكتب إلا إذا كان الطابع أحدث من الموجود، والاستعلام الجديد يبدأ
+ * بصفر، فيُلغى الاستيراد كليًا. أي قيمة موجبة قديمة تحقّق الأمرين.
+ *
+ * ملاحظة: هذا يحفظ سلوك التنقّل داخل الجلسة كما هو — استعلامات الجلسة الحالية
+ * تحتفظ بطابعها الحقيقي فلا شبكة خلال الخمس دقائق.
+ */
+const RESTORED_AGE_MS = 6 * 60 * 1000
+
+/**
  * يُعيد ملء الكاش من localStorage. يُنادى مرة واحدة قبل أول رسم.
  *
  * hydrate لا يطمس بيانات أحدث: الاستعلامات التي بدأ جلبها فعلًا ستُحدَّث
@@ -105,6 +125,15 @@ export function restoreQueryCache(client: QueryClient): void {
     if (!envelope.savedAt || Date.now() - envelope.savedAt > MAX_AGE_MS) {
       window.localStorage.removeItem(STORAGE_KEY)
       return
+    }
+
+    // وسم كل استعلام مستعاد بأنه قديم ⇒ يُعرض فورًا ثم يُصحَّح من الشبكة
+    const staleAt = Date.now() - RESTORED_AGE_MS
+    const state = envelope.state as { queries?: { state?: { dataUpdatedAt?: number } }[] }
+    if (Array.isArray(state?.queries)) {
+      for (const q of state.queries) {
+        if (q?.state) q.state.dataUpdatedAt = staleAt
+      }
     }
 
     hydrate(client, envelope.state)
