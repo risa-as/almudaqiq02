@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const branchId = searchParams.get('branchId');
         const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
+        // full=1 → the complete low-stock list instead of the 10-row dashboard
+        // preview. The full list is computed in memory below either way, so this
+        // costs nothing extra; only the trailing slice is skipped.
+        const full = searchParams.get('full') === '1';
 
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
@@ -48,7 +52,7 @@ export async function GET(req: NextRequest) {
         );
 
         // Use batch sum if available, fall back to product.baseStock for products with no batches
-        const lowStock = allProducts
+        const lowStockAll = allProducts
             .map(p => ({
                 id: p.id,
                 name: p.name,
@@ -61,10 +65,15 @@ export async function GET(req: NextRequest) {
                 const threshold = p.minimumStock > 0 ? p.minimumStock : DEFAULT_MIN_STOCK;
                 return p.baseStock <= threshold;
             })
-            .sort((a, b) => a.baseStock - b.baseStock)
-            .slice(0, 10);
+            .sort((a, b) => a.baseStock - b.baseStock);
 
-        return NextResponse.json({ lowStock, expiringBatches });
+        // counts is always the true total — the preview badge must not report the
+        // truncated length as if it were the whole picture.
+        return NextResponse.json({
+            lowStock: full ? lowStockAll : lowStockAll.slice(0, 10),
+            expiringBatches,
+            counts: { lowStock: lowStockAll.length },
+        });
 
     } catch (error) {
         console.error('Failed to fetch inventory alerts:', error);

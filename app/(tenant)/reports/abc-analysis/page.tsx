@@ -1,10 +1,13 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { BarChart3, Download, Search } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import PageHeader from '@/components/ui/PageHeader'
 import { useBranch } from '@/contexts/BranchContext'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { formatCurrency } from '@/lib/format'
 
 type AbcClass = 'A' | 'B' | 'C'
 
@@ -44,25 +47,21 @@ export default function AbcAnalysisPage() {
 
   const [startDate, setStartDate] = useState(() => toDateInput(new Date(Date.now() - 90 * 86400000)))
   const [endDate, setEndDate]     = useState(() => toDateInput(new Date()))
-  const [data, setData]           = useState<AbcData | null>(null)
-  const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [classFilter, setClassFilter] = useState<AbcClass | 'all'>('all')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
+  const bId = selectedBranch?.id ?? 'all'
+  const abcQuery = useQuery({
+    queryKey: ['report-abc-analysis', bId, startDate, endDate],
+    queryFn: () => {
       const params = new URLSearchParams({ startDate, endDate })
       if (selectedBranch?.id) params.set('branchId', selectedBranch.id)
-      const res = await fetch(`/api/reports/abc-analysis?${params}`)
-      const json = await res.json()
-      if (res.ok) setData(json)
-    } catch { /* ignore */ } finally {
-      setLoading(false)
-    }
-  }, [startDate, endDate, selectedBranch?.id])
-
-  useEffect(() => { load() }, [load])
+      return fetchJson<AbcData>(`/api/reports/abc-analysis?${params}`)
+    },
+    placeholderData: (prev) => prev,
+  })
+  const data = abcQuery.data ?? null
+  const loading = abcQuery.isPending
 
   const filtered = useMemo(() => {
     if (!data) return []
@@ -71,6 +70,12 @@ export default function AbcAnalysisPage() {
       (!search.trim() || p.name.includes(search.trim()) || p.category.includes(search.trim()))
     )
   }, [data, search, classFilter])
+
+  /** أعلى نسبة مساهمة — مرجع تحجيم أشرطة المساهمة في الجدول */
+  const topShare = useMemo(
+    () => (data?.products.length ? Math.max(...data.products.map(p => p.sharePct)) : 0),
+    [data],
+  )
 
   const pieData = useMemo(() => {
     if (!data) return []
@@ -163,66 +168,161 @@ export default function AbcAnalysisPage() {
         </div>
       ) : (
         <>
-          {/* Class cards + pie */}
+          {/* Class cards + donut */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {(['A', 'B', 'C'] as AbcClass[]).map(k => {
               const c = data.summary.classes[k]
               const meta = CLASS_META[k]
               return (
-                <div key={k} className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-                  <div className="flex items-center justify-between mb-1">
+                <div key={k} className="rounded-2xl p-4 flex flex-col"
+                  // شريط علوي بلون الفئة — يربط البطاقة بقطاعها في الدائرة وبصفوف الجدول
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderTop: `3px solid ${meta.color}` }}>
+                  <div className="flex items-center justify-between mb-2">
                     <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black border ${meta.badge}`}>{meta.label}</span>
-                    <span className="text-xs font-black" style={{ color: meta.color }}>{c.revenueShare.toFixed(1)}%</span>
+                    <span className="text-sm font-black tabular-nums" style={{ color: meta.color }}>{c.revenueShare.toFixed(1)}%</span>
                   </div>
-                  <p className="text-2xl font-black mt-2" style={{ color: 'var(--text-primary)' }}>{c.count}</p>
-                  <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>منتج — إيراد {fmt(c.revenue)}</p>
+
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-2xl font-black tabular-nums" style={{ color: 'var(--text-primary)' }}>{c.count}</p>
+                    <p className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>منتج</p>
+                  </div>
+                  <p className="text-xs font-bold mt-0.5 tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                    {formatCurrency(c.revenue)}
+                  </p>
+
+                  {/* حصة الفئة من الإيراد كشريط — الرقم وحده لا يُظهر الحجم النسبي */}
+                  <div className="h-1.5 rounded-full overflow-hidden mt-3"
+                    style={{ background: 'var(--bg-hover, rgba(148,163,184,0.18))' }}>
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, c.revenueShare)}%`, background: meta.color }} />
+                  </div>
+
                   <p className="text-[10px] mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{meta.desc}</p>
                 </div>
               )
             })}
-            <div className="rounded-2xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }} dir="ltr">
-              <ResponsiveContainer width="100%" height={140}>
-                <PieChart>
-                  <Tooltip formatter={(v: any) => Number(v).toLocaleString()} contentStyle={{ fontSize: 11 }} />
-                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={60} paddingAngle={2}>
-                    {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+
+            {/* الدائرة: أصبح لها عنوان وإجمالي في المنتصف ومفتاح ألوان — كانت رسمًا صامتًا */}
+            <div className="rounded-2xl p-3 flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+              <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>توزيع الإيراد</p>
+              <div className="relative" dir="ltr">
+                <ResponsiveContainer width="100%" height={128}>
+                  <PieChart>
+                    <Tooltip
+                      formatter={(v: any) => formatCurrency(Number(v))}
+                      contentStyle={{ fontSize: 11, borderRadius: 10, direction: 'rtl' }}
+                    />
+                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={62} paddingAngle={2} stroke="none">
+                      {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* الإجمالي في قلب الدائرة بدل ترك الفراغ */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>الإجمالي</p>
+                  <p className="text-xs font-black tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                    {fmt(data.summary.totalRevenue)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2.5 mt-1">
+                {(['A', 'B', 'C'] as AbcClass[]).map(k => (
+                  <span key={k} className="flex items-center gap-1 text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>
+                    <span className="w-2 h-2 rounded-full" style={{ background: CLASS_META[k].color }} />
+                    {k}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Table */}
           <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-            <div className="max-h-[55vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+            {/* عدّاد النتائج — لم يكن هناك ما يوضّح أثر الفلاتر على القائمة */}
+            <div className="flex items-center justify-between px-4 py-2.5"
+              style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>
+                عرض <span className="tabular-nums" style={{ color: 'var(--text-primary)' }}>{filtered.length}</span>
+                {' '}من {data.products.length} منتج
+              </p>
+              {(classFilter !== 'all' || search.trim()) && (
+                <button
+                  onClick={() => { setClassFilter('all'); setSearch('') }}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg transition-all hover:opacity-70"
+                  style={{ color: 'var(--text-muted)', background: 'var(--bg-hover, rgba(148,163,184,0.1))' }}
+                >
+                  مسح الفلاتر
+                </button>
+              )}
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
               <table className="w-full text-sm">
-                <thead className="sticky top-0" style={{ background: 'var(--bg-card)' }}>
+                <thead className="sticky top-0 z-10"
+                  style={{ background: 'var(--bg-card)', boxShadow: '0 1px 0 var(--border-color)' }}>
                   <tr style={{ color: 'var(--text-muted)' }}>
                     <th className="text-center px-3 py-3 text-xs font-bold">#</th>
                     <th className="text-right px-4 py-3 text-xs font-bold">المنتج</th>
-                    <th className="text-right px-4 py-3 text-xs font-bold">القسم</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold">الكمية</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold">الإيراد</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold">الربح</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold">المساهمة</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold">الفئة</th>
+                    <th className="text-center px-3 py-3 text-xs font-bold whitespace-nowrap">الكمية</th>
+                    <th className="text-center px-3 py-3 text-xs font-bold whitespace-nowrap">الإيراد</th>
+                    <th className="text-center px-3 py-3 text-xs font-bold whitespace-nowrap">الربح</th>
+                    <th className="text-right px-3 py-3 text-xs font-bold whitespace-nowrap w-40">المساهمة</th>
+                    <th className="text-center px-3 py-3 text-xs font-bold whitespace-nowrap">التراكمي</th>
+                    <th className="text-center px-3 py-3 text-xs font-bold">الفئة</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(p => (
-                    <tr key={p.productId} style={{ borderTop: '1px solid var(--border-color)' }}>
-                      <td className="px-3 py-2.5 text-center text-xs" style={{ color: 'var(--text-muted)' }}>{p.rank}</td>
-                      <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{p.name}</td>
-                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{p.category}</td>
-                      <td className="px-4 py-2.5 text-center">{fmt(p.quantity)}</td>
-                      <td className="px-4 py-2.5 text-center font-bold" style={{ color: 'var(--text-primary)' }}>{fmt(p.revenue)}</td>
-                      <td className={`px-4 py-2.5 text-center font-bold ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmt(p.profit)}</td>
-                      <td className="px-4 py-2.5 text-center text-xs" style={{ color: 'var(--text-muted)' }}>{p.sharePct.toFixed(1)}%</td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black border ${CLASS_META[p.class].badge}`}>{p.class}</span>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-12 text-center">
+                        <Search className="w-8 h-8 mx-auto mb-2 opacity-25" style={{ color: 'var(--text-muted)' }} />
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+                          لا توجد منتجات مطابقة للفلاتر الحالية
+                        </p>
                       </td>
                     </tr>
-                  ))}
+                  ) : filtered.map(p => {
+                    const meta = CLASS_META[p.class]
+                    // الشريط يُقاس نسبةً لأعلى منتج، وإلا بدت كل الأشرطة صفرًا تقريبًا
+                    const barPct = topShare > 0 ? Math.max(2, (p.sharePct / topShare) * 100) : 0
+                    return (
+                      <tr key={p.productId}
+                        className="transition-colors hover:bg-blue-50/40"
+                        // حدّ جانبي بلون الفئة ⇒ نطاقات A/B/C تُقرأ أثناء التمرير
+                        style={{ borderTop: '1px solid var(--border-color)', borderRight: `3px solid ${meta.color}` }}>
+                        <td className="px-3 py-2.5 text-center text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>{p.rank}</td>
+                        <td className="px-4 py-2.5">
+                          <p className="font-semibold leading-snug" style={{ color: 'var(--text-primary)' }}>{p.name}</p>
+                          {/* القسم صار سطرًا ثانويًا بدل عمود مستقلّ — عرض أقلّ وقراءة أوضح */}
+                          <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{p.category}</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums">{fmt(p.quantity)}</td>
+                        <td className="px-3 py-2.5 text-center font-bold tabular-nums whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                          {formatCurrency(p.revenue)}
+                        </td>
+                        <td className={`px-3 py-2.5 text-center font-bold tabular-nums whitespace-nowrap ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {formatCurrency(p.profit)}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden min-w-[48px]"
+                              style={{ background: 'var(--bg-hover, rgba(148,163,184,0.18))' }}>
+                              <div className="h-full rounded-full" style={{ width: `${barPct}%`, background: meta.color }} />
+                            </div>
+                            <span className="text-[11px] font-bold tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+                              {p.sharePct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                        {/* التراكمي كان يُجلب من الخادم ولا يُعرض — وهو جوهر تصنيف ABC */}
+                        <td className="px-3 py-2.5 text-center text-xs font-bold tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                          {p.cumulativePct.toFixed(1)}%
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black border ${meta.badge}`}>{p.class}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

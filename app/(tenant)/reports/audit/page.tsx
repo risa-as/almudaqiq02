@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import {
     ShieldAlert, Search, Clock, ChevronDown, ChevronUp, X,
     ShoppingCart, PackagePlus, RotateCcw, ArrowLeftRight, Database,
@@ -170,12 +172,6 @@ const PERIOD_OPTS = [
 export default function AuditReportPage() {
   usePageTitle('سجل التدقيق');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [logs,    setLogs]    = useState<AuditLog[]>([]);
-    const [stats,   setStats]   = useState<any>(null);
-    const [filters, setFilters] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
-
     const [search,    setSearch]    = useState('');
     const [period,    setPeriod]    = useState('month');
     const [selAction, setSelAction] = useState('');
@@ -186,19 +182,28 @@ export default function AuditReportPage() {
 
     useEffect(() => {
         if (branchLoading) return;
-        setLoading(true);
         setPage(1);
-        const params = new URLSearchParams({ period });
-        if (selAction) params.set('action', selAction);
-        if (selEntity) params.set('entity', selEntity);
-        if (selUser)   params.set('username', selUser);
-        if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-        fetch(`/api/audit?${params}`)
-            .then(r => r.json())
-            .then(d => { setLogs(d.logs ?? []); setStats(d.stats ?? null); setFilters(d.filters ?? null); })
-            .catch(console.error)
-            .finally(() => { setLoading(false); setInitialized(true); });
     }, [selectedBranch, branchLoading, period, selAction, selEntity, selUser]);
+
+    const bId = selectedBranch?.id ?? 'all';
+    const auditQuery = useQuery({
+        queryKey: ['report-audit', bId, period, selAction, selEntity, selUser],
+        queryFn: () => {
+            const params = new URLSearchParams({ period });
+            if (selAction) params.set('action', selAction);
+            if (selEntity) params.set('entity', selEntity);
+            if (selUser)   params.set('username', selUser);
+            if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
+            return fetchJson<{ logs?: AuditLog[]; stats?: any; filters?: any }>(`/api/audit?${params}`);
+        },
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const logs    = auditQuery.data?.logs ?? [];
+    const stats   = auditQuery.data?.stats ?? null;
+    const filters = auditQuery.data?.filters ?? null;
+    const loading = auditQuery.isFetching;
+    const initialized = !(branchLoading || auditQuery.isPending);
 
     const filtered = useMemo(() =>
         logs.filter(l => {

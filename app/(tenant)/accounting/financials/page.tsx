@@ -1,7 +1,9 @@
 "use client";
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/query/fetcher";
 import {
   TrendingUp,
   TrendingDown,
@@ -60,21 +62,13 @@ const DATE_OPTIONS = [
 export default function FinancialReportPage() {
   usePageTitle('الملخص المالي');
   const { selectedBranch, loading: branchLoading } = useBranch();
-  const [data, setData] = useState<FinancialData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("THIS_MONTH");
   const [customDates, setCustomDates] = useState({ start: "", end: "" });
 
-  useEffect(() => {
-    if (branchLoading) return;
-    if (dateFilter === "CUSTOM" && (!customDates.start || !customDates.end))
-      return;
-    fetchData();
-  }, [dateFilter, customDates, selectedBranch, branchLoading]);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
+  const bId = selectedBranch?.id ?? "all";
+  const financialsQuery = useQuery({
+    queryKey: ["financials", bId, dateFilter, customDates.start, customDates.end],
+    queryFn: () => {
       const today = new Date();
       let start = new Date(),
         end = new Date();
@@ -101,14 +95,15 @@ export default function FinancialReportPage() {
       if (selectedBranch?.id && selectedBranch.id !== "all")
         url += `&branchId=${selectedBranch.id}`;
 
-      const res = await fetch(url);
-      if (res.ok) setData(await res.json());
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return fetchJson<FinancialData>(url);
+    },
+    enabled:
+      !branchLoading &&
+      !(dateFilter === "CUSTOM" && (!customDates.start || !customDates.end)),
+    placeholderData: (prev) => prev,
+  });
+  const data = financialsQuery.data ?? null;
+  const loading = financialsQuery.isPending;
 
   const isSingleDay = useMemo(() => {
     if (dateFilter === "TODAY" || dateFilter === "YESTERDAY") return true;

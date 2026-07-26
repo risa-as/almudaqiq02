@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import Link from 'next/link';
 import {
     Package, Search, ArrowDownToLine, ArrowUpFromLine,
@@ -38,11 +40,6 @@ function ProductLink({ id, name }: { id?: string | null; name: string }) {
 export default function StockMovementReport() {
   usePageTitle('حركة المخزون');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [movements,    setMovements]    = useState<any[]>([]);
-    const [stats,        setStats]        = useState<any>(null);
-    const [topProducts,  setTopProducts]  = useState<any[]>([]);
-    const [loading,      setLoading]      = useState(true);
-    const [initialized, setInitialized] = useState(false);
     const [search,       setSearch]       = useState('');
     const [period,       setPeriod]       = useState('month');
     const [typeFilter,   setTypeFilter]   = useState('all');
@@ -50,17 +47,26 @@ export default function StockMovementReport() {
 
     useEffect(() => {
         if (branchLoading) return;
-        setLoading(true);
         setPage(1);
-        const params = new URLSearchParams({ period });
-        if (typeFilter !== 'all') params.set('type', typeFilter);
-        if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-        fetch(`/api/reports/stock-movement?${params}`)
-            .then(r => r.json())
-            .then(d => { setMovements(d.movements ?? []); setStats(d.stats ?? null); setTopProducts(d.topProducts ?? []); })
-            .catch(console.error)
-            .finally(() => { setLoading(false); setInitialized(true); });
     }, [selectedBranch, branchLoading, period, typeFilter]);
+
+    const bId = selectedBranch?.id ?? 'all';
+    const movementQuery = useQuery({
+        queryKey: ['report-stock-movement', bId, period, typeFilter],
+        queryFn: () => {
+            const params = new URLSearchParams({ period });
+            if (typeFilter !== 'all') params.set('type', typeFilter);
+            if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
+            return fetchJson<{ movements?: any[]; stats?: any; topProducts?: any[] }>(`/api/reports/stock-movement?${params}`);
+        },
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const movements   = movementQuery.data?.movements ?? [];
+    const stats       = movementQuery.data?.stats ?? null;
+    const topProducts = movementQuery.data?.topProducts ?? [];
+    const loading = movementQuery.isFetching;
+    const initialized = !(branchLoading || movementQuery.isPending);
 
     const filtered = useMemo(() =>
         movements.filter(m =>

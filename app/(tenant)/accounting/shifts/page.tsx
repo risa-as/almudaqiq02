@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import {
     Wallet, Search, TrendingDown, TrendingUp, Minus,
     Download, Clock, Users, CheckCircle, AlertCircle, Activity, DollarSign,
@@ -43,21 +45,21 @@ function DiffBadge({ diff }: { diff: number | null }) {
 export default function ShiftsReport() {
   usePageTitle('الورديات');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [shifts, setShifts]           = useState<any[]>([]);
-    const [loading, setLoading]         = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedId, setExpandedId]   = useState<string | null>(null);
 
-    useEffect(() => {
-        if (branchLoading) return;
-        setLoading(true);
-        const q = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
-        fetch(`/api/reports/shifts${q}`)
-            .then(r => r.json())
-            .then(data => setShifts(Array.isArray(data) ? data : []))
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, [selectedBranch, branchLoading]);
+    const bId = selectedBranch?.id ?? 'all';
+    const shiftsQuery = useQuery({
+        queryKey: ['shifts-report', bId],
+        queryFn: async () => {
+            const q = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
+            const data = await fetchJsonOr<any>(`/api/reports/shifts${q}`, []);
+            return Array.isArray(data) ? data : [];
+        },
+        enabled: !branchLoading,
+    });
+    const shifts: any[] = shiftsQuery.data ?? [];
+    const loading = shiftsQuery.isPending;
 
     const filtered = useMemo(() =>
         shifts.filter(s =>

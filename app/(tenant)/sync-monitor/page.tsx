@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import {
   RefreshCw, Wifi, WifiOff, Clock, CheckCircle2,
   AlertTriangle, Loader2, RotateCcw, Activity, CloudUpload,
@@ -147,13 +149,10 @@ function StatCard({
 
 export default function SyncMonitorPage() {
   usePageTitle('مراقبة المزامنة');
-  const [data, setData]             = useState<QueueData | null>(null)
   const [status, setStatus]         = useState<SyncStatus>({ online: false, pending: 0, lastSyncAt: null, syncing: false })
-  const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [retrying, setRetrying]     = useState(false)
   const [showSynced, setShowSynced] = useState(false)
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [activeTab, setActiveTab]   = useState<string>('')
   // pendingForceSync: tracks the brief window between clicking "مزامنة فورية" and
   // the sync-worker reporting back via IPC. Without it the button looks dead on click.
@@ -162,36 +161,37 @@ export default function SyncMonitorPage() {
   const forceSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load queue data ────────────────────────────────────────────────────────
-  // `manual` distinguishes user-triggered refreshes (which show the spinner)
-  // from the silent 15-second auto-refresh (which doesn't flash UI).
+  // Auto-refreshes every 15 seconds via refetchInterval; toggling showSynced
+  // switches the query key while keeping the previous rows on screen.
+  const queueQuery = useQuery({
+    queryKey: ['sync-queue', showSynced],
+    queryFn: () => fetchJson<QueueData>(`/api/sync/queue${showSynced ? '?all=1' : ''}`),
+    refetchInterval: 15_000,
+    placeholderData: (prev) => prev,
+  })
+  const { refetch } = queueQuery
+  const data = queueQuery.data ?? null
+  const loading = queueQuery.isPending
+  const lastRefresh = useMemo(
+    () => (queueQuery.dataUpdatedAt ? new Date(queueQuery.dataUpdatedAt) : new Date()),
+    [queueQuery.dataUpdatedAt],
+  )
+
+  // `manual` keeps the button spinner semantics: user-triggered refreshes show
+  // the spinner for at least 500ms so the click registers visually.
   const refresh = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true)
     const startedAt = Date.now()
     try {
-      const url = `/api/sync/queue${showSynced ? '?all=1' : ''}`
-      const res = await fetch(url)
-      if (res.ok) {
-        setData(await res.json())
-        setLastRefresh(new Date())
-      }
-    } catch { /* silent */ }
-    finally {
-      setLoading(false)
+      await refetch()
+    } finally {
       if (manual) {
-        // Keep the spinner up for at least 500ms so the click registers visually
-        // even when the API responds instantly.
         const elapsed = Date.now() - startedAt
         const wait = Math.max(0, 500 - elapsed)
         setTimeout(() => setRefreshing(false), wait)
       }
     }
-  }, [showSynced])
-
-  useEffect(() => {
-    refresh()
-    const t = setInterval(() => refresh(false), 15_000)
-    return () => clearInterval(t)
-  }, [refresh])
+  }, [refetch])
 
   // Auto-select first tab when data first loads, or when active tab disappears
   useEffect(() => {

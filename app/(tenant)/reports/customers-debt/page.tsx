@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import Link from 'next/link';
 import {
     Users, DollarSign, Clock, AlertTriangle, Search,
@@ -122,19 +124,20 @@ function CustomerRow({ row }: { row: DebtRow }) {
 export default function CustomersDebtPage() {
   usePageTitle('ديون العملاء');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [data,    setData]    = useState<{ summary: Summary; customers: DebtRow[] } | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
     const [search,  setSearch]  = useState('');
     const [bucket,  setBucket]  = useState<string>('ALL');
 
-    useEffect(() => {
-        if (branchLoading) return;
-        setLoading(true);
-        const q = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
-        fetch(`/api/reports/customers-debt${q}`)
-            .then(r => r.json()).then(setData).catch(console.error).finally(() => { setLoading(false); setInitialized(true); });
-    }, [selectedBranch, branchLoading]);
+    const bId = selectedBranch?.id ?? 'all';
+    const q = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
+    const debtQuery = useQuery({
+        queryKey: ['report-customers-debt', bId],
+        queryFn: () => fetchJson<{ summary: Summary; customers: DebtRow[] }>(`/api/reports/customers-debt${q}`),
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const data = debtQuery.data ?? null;
+    const loading = debtQuery.isFetching;
+    const initialized = !(branchLoading || debtQuery.isPending);
 
     const filtered = useMemo(() => {
         if (!data) return [];

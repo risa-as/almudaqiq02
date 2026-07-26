@@ -1,7 +1,9 @@
 "use client";
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/query/fetcher";
 import Link from "next/link";
 import {
   Package,
@@ -320,23 +322,20 @@ const CustomPieTooltip = ({ active, payload }: any) => {
 export default function InventoryReportPage() {
   usePageTitle('تقرير المخزون');
   const { selectedBranch, loading: branchLoading } = useBranch();
-  const [data, setData] = useState<InventoryData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("ALL");
 
-  useEffect(() => {
-    if (branchLoading) return;
-    setLoading(true);
-    const q =
-      selectedBranch?.id && selectedBranch.id !== "all"
-        ? `?branchId=${selectedBranch.id}`
-        : "";
-    fetch(`/api/reports/inventory${q}`)
-      .then((r) => r.json())
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [selectedBranch, branchLoading]);
+  const bId = selectedBranch?.id ?? "all";
+  const q =
+    selectedBranch?.id && selectedBranch.id !== "all"
+      ? `?branchId=${selectedBranch.id}`
+      : "";
+  const inventoryQuery = useQuery({
+    queryKey: ["report-inventory", bId],
+    queryFn: () => fetchJson<InventoryData>(`/api/reports/inventory${q}`),
+    enabled: !branchLoading,
+  });
+  const data = inventoryQuery.data ?? null;
+  const loading = branchLoading || inventoryQuery.isPending;
 
   const allCategories = useMemo(() => {
     if (!data) return [];

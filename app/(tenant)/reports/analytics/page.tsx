@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { Activity } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import { DateRangeFilter } from '@/components/ui/DateRangeFilter';
@@ -17,35 +19,27 @@ import ActionableInsights from './components/ActionableInsights';
 export default function AdvancedAnalyticsPage() {
   usePageTitle('التحليلات المتقدمة');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
     const [startDate, setStartDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
     const [endDate,   setEndDate]   = useState(() => new Date().toISOString().split('T')[0]);
 
-    useEffect(() => {
-        if (branchLoading) return;
-        fetchAnalyticsData();
-    }, [startDate, endDate, selectedBranch, branchLoading]);
-
-    const fetchAnalyticsData = async () => {
-        setLoading(true);
-        try {
+    const bId = selectedBranch?.id ?? 'all';
+    const analyticsQuery = useQuery({
+        queryKey: ['report-analytics', bId, startDate, endDate],
+        queryFn: () => {
             const start = new Date(startDate); start.setHours(0, 0, 0, 0);
             const end   = new Date(endDate);   end.setHours(23, 59, 59, 999);
             let url = `/api/reports/analytics?startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
             if (selectedBranch?.id && selectedBranch.id !== 'all') {
                 url += `&branchId=${selectedBranch.id}`;
             }
-            const res = await fetch(url);
-            if (res.ok) setData(await res.json());
-        } catch (error) {
-            console.error('Failed to fetch analytics:', error);
-        } finally {
-            setLoading(false);
-            setInitialized(true);
-        }
-    };
+            return fetchJson<any>(url);
+        },
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const data = analyticsQuery.data ?? null;
+    const loading = analyticsQuery.isFetching;
+    const initialized = !(branchLoading || analyticsQuery.isPending);
 
     if (!initialized) {
         return (

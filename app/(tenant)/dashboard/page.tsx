@@ -7,7 +7,8 @@ import {
   FileText, ArrowDownToLine, Tag, Zap, Receipt,
   LayoutDashboard, Settings2, Award,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJsonOr } from "@/lib/query/fetcher";
 import StatCard from "@/components/ui/StatCard";
 import { formatCurrency } from "@/lib/format";
 import { useBranch } from "@/contexts/BranchContext";
@@ -63,35 +64,46 @@ export default function Home() {
   usePageTitle("لوحة التحكم");
   const { selectedBranch, loading: branchLoading } = useBranch();
 
-  const [alerts, setAlerts] = useState<{ lowStock: any[]; expiringBatches: any[] } | null>(null);
-  const [profit, setProfit] = useState<ProfitData>({
-    revenue: 0, grossRevenue: 0, refunds: 0, cogs: 0, expenses: 0, netProfit: 0, grossProfit: 0,
+  const bId = selectedBranch?.id && selectedBranch.id !== "all" ? selectedBranch.id : null;
+  const bq = bId ? `?branchId=${bId}` : "";
+  const bq2 = bId ? `&branchId=${bId}` : "";
+  const branchKey = bId ?? "all";
+
+  const alertsQuery = useQuery({
+    queryKey: ["dashboard-alerts", branchKey],
+    queryFn: () => fetchJsonOr<{ lowStock: any[]; expiringBatches: any[] }>(`/api/inventory/alerts${bq}`, { lowStock: [], expiringBatches: [] }),
+    enabled: !branchLoading,
   });
-  const [dashData, setDashData] = useState<DashData | null>(null);
-  const [latestTransactions, setLatestTransactions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const profitQuery = useQuery({
+    queryKey: ["dashboard-profit", branchKey],
+    queryFn: () => fetchJsonOr<(ProfitData & { error?: string }) | null>(`/api/reports/profit?period=daily${bq2}`, null),
+    enabled: !branchLoading,
+  });
+  const txQuery = useQuery({
+    queryKey: ["dashboard-tx", branchKey],
+    queryFn: () => fetchJsonOr<any>(`/api/transactions?limit=7${bq2}`, []),
+    enabled: !branchLoading,
+  });
+  const dashQuery = useQuery({
+    queryKey: ["dashboard-summary", branchKey],
+    queryFn: () => fetchJsonOr<(DashData & { error?: string }) | null>(`/api/reports/dashboard${bq}`, null),
+    enabled: !branchLoading,
+  });
 
-  useEffect(() => {
-    if (branchLoading) return;
-    const bId = selectedBranch?.id && selectedBranch.id !== "all" ? selectedBranch.id : null;
-    const bq = bId ? `?branchId=${bId}` : "";
-    const bq2 = bId ? `&branchId=${bId}` : "";
-    setLoading(true);
-
-    Promise.all([
-      fetch(`/api/inventory/alerts${bq}`).then(r => r.json()).catch(() => ({ lowStock: [], expiringBatches: [] })),
-      fetch(`/api/reports/profit?period=daily${bq2}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/transactions?limit=7${bq2}`).then(r => r.json()).catch(() => []),
-      fetch(`/api/reports/dashboard${bq}`).then(r => r.json()).catch(() => null),
-    ]).then(([alertsData, profitData, txData, dash]) => {
-      setAlerts(alertsData);
-      if (profitData && !profitData.error) setProfit(profitData);
-      if (Array.isArray(txData)) setLatestTransactions(txData.slice(0, 7));
-      else if (txData?.transactions) setLatestTransactions(txData.transactions.slice(0, 7));
-      if (dash && !dash.error) setDashData(dash);
-      setLoading(false);
-    });
-  }, [selectedBranch?.id, branchLoading]);
+  const alerts = alertsQuery.data ?? null;
+  const profitData = profitQuery.data;
+  const profit: ProfitData = profitData && !profitData.error
+    ? profitData
+    : { revenue: 0, grossRevenue: 0, refunds: 0, cogs: 0, expenses: 0, netProfit: 0, grossProfit: 0 };
+  const txData = txQuery.data;
+  const latestTransactions: any[] = Array.isArray(txData)
+    ? txData.slice(0, 7)
+    : txData?.transactions
+      ? txData.transactions.slice(0, 7)
+      : [];
+  const dashRaw = dashQuery.data;
+  const dashData: DashData | null = dashRaw && !dashRaw.error ? dashRaw : null;
+  const loading = alertsQuery.isPending || profitQuery.isPending || txQuery.isPending || dashQuery.isPending;
 
   const quickActions = [
     { href: "/inventory/new", icon: Package, label: "منتج جديد", gradient: "linear-gradient(135deg,#10b981,#059669)", glow: "rgba(16,185,129,0.2)" },

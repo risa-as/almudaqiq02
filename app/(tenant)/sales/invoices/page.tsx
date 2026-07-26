@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson, fetchJsonOr } from '@/lib/query/fetcher';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Search, FileText, ChevronLeft, ChevronRight, Eye, Printer, X, RotateCcw, Receipt, TrendingUp, Package, User, Banknote, CreditCard, Clock, Layers, Check, ScanLine, RotateCw, Filter, Tag, Pencil, Loader2 } from 'lucide-react';
 import { HowItWorks } from '@/components/ui/HowItWorks';
@@ -76,9 +78,7 @@ function SkeletonRow() {
 export default function OrdersPage() {
   usePageTitle('الفواتير');
     const { confirm, dialog } = useConfirm();
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
+    const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     // Seed the range with the same default as <DateRangeFilter defaultPreset="this_month">
     // so the first fetch already carries the right dates. When the filter mounts and
@@ -91,7 +91,6 @@ export default function OrdersPage() {
         return { start, end };
     });
     const [page, setPage] = useState(1);
-    const [pagination, setPagination] = useState({ total: 0, pages: 1, page: 1 });
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [printReceipt, setPrintReceipt] = useState<ReceiptData | null>(null);
     const { selectedBranch, loading: branchLoading } = useBranch();
@@ -100,50 +99,39 @@ export default function OrdersPage() {
     const [returnItems, setReturnItems] = useState<{ [key: number]: number }>({});
     const [refunding, setRefunding] = useState(false);
     const [showPrintModal, setShowPrintModal] = useState(false);
-    const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
 
-    useEffect(() => {
-        fetch('/api/settings')
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (data) setStoreSettings({
-                    storeName: data.storeName || '',
-                    storePhone: data.storePhone || '',
-                    storeAddress: data.storeAddress || '',
-                    footerMessage: data.footerMessage || '',
-                });
-            })
-            .catch(() => {});
-    }, []);
-
-    useEffect(() => {
-        if (branchLoading) return;
-        fetchOrders();
-    }, [page, search, selectedBranch?.id, branchLoading, dateRange.start, dateRange.end]);
-
-    const fetchOrders = async () => {
-        setLoading(true);
-        try {
-            const branchQuery = selectedBranch?.id ? `&branchId=${selectedBranch.id}` : '';
-            const dateQuery = dateRange.start && dateRange.end ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
-            const res = await fetch(`/api/orders?page=${page}&search=${search}${branchQuery}${dateQuery}`);
-            if (res.ok) {
-                const data = await res.json();
-                setOrders(data.orders);
-                setPagination(data.pagination);
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-            setInitialized(true);
+    const settingsQuery = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => fetchJsonOr<any>('/api/settings', null),
+    });
+    const storeSettings: StoreSettings | null = settingsQuery.data
+        ? {
+            storeName: settingsQuery.data.storeName || '',
+            storePhone: settingsQuery.data.storePhone || '',
+            storeAddress: settingsQuery.data.storeAddress || '',
+            footerMessage: settingsQuery.data.footerMessage || '',
         }
-    };
+        : null;
+
+    const bId = selectedBranch?.id ?? 'all';
+    const branchQuery = selectedBranch?.id ? `&branchId=${selectedBranch.id}` : '';
+    const dateQuery = dateRange.start && dateRange.end ? `&startDate=${dateRange.start}&endDate=${dateRange.end}` : '';
+    const ordersQuery = useQuery({
+        queryKey: ['orders', bId, page, search, dateRange.start, dateRange.end],
+        queryFn: () => fetchJson<{ orders: Order[]; pagination: { total: number; pages: number; page: number } }>(
+            `/api/orders?page=${page}&search=${search}${branchQuery}${dateQuery}`
+        ),
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const orders = ordersQuery.data?.orders ?? [];
+    const pagination = ordersQuery.data?.pagination ?? { total: 0, pages: 1, page: 1 };
+    const loading = ordersQuery.isPending;
+    const initialized = !ordersQuery.isPending;
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
-        fetchOrders();
     };
 
     const handlePrint = (orderId: number) => {
@@ -232,7 +220,9 @@ export default function OrdersPage() {
                 setIsReturnMode(false);
                 setReturnItems({});
                 setSelectedOrder(null);
-                fetchOrders();
+                await queryClient.invalidateQueries({ queryKey: ['orders'] });
+                queryClient.invalidateQueries({ queryKey: ['customers'] });
+                queryClient.invalidateQueries({ queryKey: ['customer'] });
             } else {
                 const data = await res.json().catch(() => ({}));
                 toast.error(data.error || 'فشلت العملية');

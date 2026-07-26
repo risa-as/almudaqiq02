@@ -93,11 +93,6 @@ const NAV = [
         exact: true,
       },
       {
-        href: "/purchases/orders",
-        label: "أوامر الشراء",
-        icon: FileText,
-      },
-      {
         href: "/purchases/suppliers/smart-buy",
         label: "الشراء الذكي",
         icon: TrendingUp,
@@ -145,7 +140,6 @@ const NAV = [
       { href: "/reports/branches", label: "مقارنة الفروع", icon: Building2 },
       { href: "/reports/audit", label: "سجل المراجعة", icon: Shield },
       { href: "/reports/customers-debt", label: "ذمم العملاء", icon: User },
-      { href: "/reports/supplier-payables", label: "مستحقات الموردين", icon: ShoppingBag },
       { href: "/reports/offers-performance", label: "أداء العروض", icon: Tag },
       { href: "/reports/abc-analysis", label: "تحليل ABC", icon: LucideBarChart3 },
     ],

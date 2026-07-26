@@ -27,7 +27,10 @@ export async function GET(
             items: {
                 include: {
                     product: { select: { name: true } },
-                    unit: { select: { name: true } }
+                    // unit.price = catalog price — the invoice view compares it against the
+                    // sold price to flag (and show) a manual price edit on that line, using
+                    // the same rule the POS used to set Transaction.priceEdited.
+                    unit: { select: { name: true, price: true } }
                 }
             },
             customer: { select: { name: true, phone: true } },
@@ -63,6 +66,31 @@ export async function GET(
 
         if (!transaction) {
             return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+        }
+
+        // ── How much of each line has already been sent back ───────────────────
+        // Lets the invoice view show a «returned» marker per product and cap the
+        // return stepper at what is still returnable, instead of letting the cashier
+        // pick a quantity the return/refund guard will only reject on submit.
+        // Keyed by productId|unitId to match those guards exactly; a sale writes one
+        // line per product+unit (the cart merges duplicates), so keys are unique.
+        if (transaction.type === 'SALE') {
+            const priorReturns = await prisma.transactionItem.findMany({
+                where: { transaction: { originalTxId: transaction.id, type: { in: ['REFUND', 'RETURN'] } } },
+                select: { productId: true, unitId: true, quantity: true },
+            });
+            const returnedMap = new Map<string, number>();
+            for (const l of priorReturns) {
+                const key = `${l.productId}|${l.unitId}`;
+                returnedMap.set(key, (returnedMap.get(key) ?? 0) + Math.abs(Number(l.quantity)));
+            }
+            return NextResponse.json({
+                ...transaction,
+                items: transaction.items.map(item => ({
+                    ...item,
+                    returnedQuantity: returnedMap.get(`${item.productId}|${item.unitId}`) ?? 0,
+                })),
+            });
         }
 
         return NextResponse.json(transaction);

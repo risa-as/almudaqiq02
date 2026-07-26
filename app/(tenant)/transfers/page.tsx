@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { useConfirm } from '@/hooks/useConfirm'
 import {
     ArrowLeftRight, Plus, CheckCircle, XCircle, Clock, Truck,
@@ -46,8 +48,7 @@ export default function TransfersPage() {
   usePageTitle('التحويلات');
     const { branches, loading: branchesLoading } = useBranch()
     const { confirm, dialog } = useConfirm()
-    const [transfers, setTransfers]   = useState<Transfer[]>([])
-    const [loading, setLoading]       = useState(true)
+    const queryClient = useQueryClient()
     const [filterStatus, setFilter]   = useState('ALL')
     const [showModal, setShowModal]   = useState(false)
     // Transfers span multiple branches, so they're managed from the cloud only.
@@ -55,16 +56,16 @@ export default function TransfersPage() {
     const [isDesktop, setIsDesktop]   = useState(false)
     useEffect(() => { setIsDesktop(!!window.electron) }, [])
 
-    const load = useCallback((status?: string) => {
-        setLoading(true)
-        const q = status && status !== 'ALL' ? `?status=${status}` : ''
-        fetch(`/api/transfers${q}`)
-            .then(r => r.json())
-            .then(setTransfers)
-            .finally(() => setLoading(false))
-    }, [])
-
-    useEffect(() => { load(filterStatus) }, [filterStatus, load])
+    const transfersQuery = useQuery({
+        queryKey: ['transfers', filterStatus],
+        queryFn: () => {
+            const q = filterStatus && filterStatus !== 'ALL' ? `?status=${filterStatus}` : ''
+            return fetchJson<Transfer[]>(`/api/transfers${q}`)
+        },
+        placeholderData: (prev) => prev,
+    })
+    const transfers = transfersQuery.data ?? []
+    const loading = transfersQuery.isPending
 
     const changeStatus = async (id: string, status: string, label: string) => {
         if (status === 'CANCELLED' && !await confirm({ title: 'إلغاء الطلب', message: 'هل تريد إلغاء هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.', variant: 'warning', confirmLabel: 'إلغاء الطلب', cancelLabel: 'تراجع' })) return
@@ -73,7 +74,7 @@ export default function TransfersPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status }),
         })
-        if (res.ok) { toast.success(label); load(filterStatus) }
+        if (res.ok) { toast.success(label); queryClient.invalidateQueries({ queryKey: ['transfers'] }) }
         else toast.error('فشل تحديث الحالة')
     }
 
@@ -325,7 +326,7 @@ export default function TransfersPage() {
                 <CreateTransferModal
                     branches={branches}
                     onClose={() => setShowModal(false)}
-                    onSuccess={() => { setShowModal(false); load(filterStatus); toast.success('تم إنشاء طلب النقل') }}
+                    onSuccess={() => { setShowModal(false); queryClient.invalidateQueries({ queryKey: ['transfers'] }); toast.success('تم إنشاء طلب النقل') }}
                 />
             )}
         </div>

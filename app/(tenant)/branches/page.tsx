@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useUser } from '@/hooks/useUser'
 import {
@@ -30,11 +32,25 @@ export default function BranchesPage() {
   usePageTitle('الفروع');
   const { confirm, dialog } = useConfirm()
   const { isElectron } = useUser()
-  const [branches, setBranches] = useState<Branch[]>([])
-  const [loading, setLoading]   = useState(true)
+  const queryClient = useQueryClient()
   const [copied, setCopied]     = useState<string | null>(null)
+
+  const branchesQuery = useQuery({
+    queryKey: ['branches-admin'],
+    queryFn: () => fetchJson<Branch[]>('/api/branches'),
+  })
+  const branches = branchesQuery.data ?? []
+  const loading = branchesQuery.isPending
+
   // Plan branch cap (-1 / null = unlimited). Used to block creating over the limit.
-  const [maxBranches, setMaxBranches] = useState<number | null>(null)
+  const billingQuery = useQuery({
+    queryKey: ['billing'],
+    queryFn: () => fetch('/api/billing', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null),
+  })
+  const planMaxBranches = billingQuery.data?.subscription?.plan?.maxBranches
+  const maxBranches: number | null = typeof planMaxBranches === 'number' ? planMaxBranches : null
 
   // Create modal
   const [createOpen,    setCreateOpen]    = useState(false)
@@ -51,22 +67,6 @@ export default function BranchesPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
   const [activatingId,   setActivatingId]   = useState<string | null>(null)
 
-  const load = () => {
-    setLoading(true)
-    fetch('/api/branches').then(r => r.json()).then(setBranches).finally(() => setLoading(false))
-  }
-  useEffect(() => {
-    load()
-    // Read the current plan's branch cap so we can disable creation at the limit.
-    fetch('/api/billing', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const mb = d?.subscription?.plan?.maxBranches
-        if (typeof mb === 'number') setMaxBranches(mb)
-      })
-      .catch(() => {})
-  }, [])
-
   // ── Create ──────────────────────────────────────────────────────────────────
   async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -80,7 +80,7 @@ export default function BranchesPage() {
       const d = await res.json()
       if (!res.ok) { toast.error(d.error ?? 'حدث خطأ'); return }
       setCreatedResult({ activationCode: d.activationCode, branchToken: d.branchToken })
-      load()
+      queryClient.invalidateQueries({ queryKey: ['branches-admin'] })
     } catch { toast.error('تعذر الاتصال بالخادم') }
     finally { setCreateSaving(false) }
   }
@@ -109,7 +109,7 @@ export default function BranchesPage() {
       if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'حدث خطأ'); return }
       toast.success('تم تحديث الفرع')
       setEditTarget(null)
-      load()
+      queryClient.invalidateQueries({ queryKey: ['branches-admin'] })
     } catch { toast.error('تعذر الاتصال بالخادم') }
     finally { setEditSaving(false) }
   }
@@ -122,7 +122,7 @@ export default function BranchesPage() {
       const res = await fetch(`/api/branches/${b.id}`, { method: 'DELETE' })
       if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'حدث خطأ'); return }
       toast.success('تم إيقاف الفرع')
-      load()
+      queryClient.invalidateQueries({ queryKey: ['branches-admin'] })
     } catch { toast.error('تعذر الاتصال بالخادم') }
     finally { setDeactivatingId(null) }
   }
@@ -137,7 +137,7 @@ export default function BranchesPage() {
       })
       if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'تعذّر تفعيل الفرع'); return }
       toast.success('تم تفعيل الفرع')
-      load()
+      queryClient.invalidateQueries({ queryKey: ['branches-admin'] })
     } catch { toast.error('تعذر الاتصال بالخادم') }
     finally { setActivatingId(null) }
   }

@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJsonOr } from "@/lib/query/fetcher";
 import { useConfirm } from "@/hooks/useConfirm";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -175,20 +177,13 @@ export default function InventoryPage() {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
   // ... (State remains same)
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
 
   // Filter State
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
-    [],
-  );
-  const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>(
-    [],
-  );
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
   const [filterSupplier, setFilterSupplier] = useState<string>("ALL");
   const [filterStock, setFilterStock] = useState<string>("ALL"); // ALL, LOW, OUT
@@ -228,22 +223,29 @@ export default function InventoryPage() {
   const [stockInRowLoadingId, setStockInRowLoadingId] = useState<number | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (branchLoading) return;
-    const branchParam = selectedBranch?.id && selectedBranch.id !== "all"
-      ? `?branchId=${selectedBranch.id}` : "";
-    setLoading(true);
-    Promise.all([
-      fetch(`/api/products${branchParam}`).then(r => r.json()).catch(() => []),
-      fetch("/api/categories").then(r => r.json()).catch(() => []),
-      fetch("/api/suppliers").then(r => r.json()).catch(() => []),
-    ]).then(([productsData, categoriesData, suppliersData]) => {
-      if (Array.isArray(productsData)) setProducts(productsData);
-      if (Array.isArray(categoriesData)) setCategories(categoriesData);
-      if (Array.isArray(suppliersData)) setSuppliers(suppliersData);
-      setLoading(false);
-    });
-  }, [selectedBranch, branchLoading]);
+  const branchKey = selectedBranch?.id ?? "all";
+  const branchParam = selectedBranch?.id && selectedBranch.id !== "all"
+    ? `?branchId=${selectedBranch.id}` : "";
+
+  const productsQuery = useQuery({
+    queryKey: ["products", branchKey],
+    queryFn: () => fetchJsonOr<Product[]>(`/api/products${branchParam}`, []),
+    enabled: !branchLoading,
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => fetchJsonOr<{ id: number; name: string }[]>("/api/categories", []),
+  });
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => fetchJsonOr<{ id: number; name: string }[]>("/api/suppliers", []),
+  });
+
+  const products = Array.isArray(productsQuery.data) ? productsQuery.data : [];
+  const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
+  const suppliers = Array.isArray(suppliersQuery.data) ? suppliersQuery.data : [];
+  const loading =
+    productsQuery.isPending || categoriesQuery.isPending || suppliersQuery.isPending;
 
   useEffect(() => {
     if (!isFilterOpen) return;
@@ -431,6 +433,9 @@ export default function InventoryPage() {
         setStockInModal((prev) => ({ ...prev, open: false }));
         setStockInIsPrepaid(false);
         fetchProducts(); // Refresh table
+        queryClient.invalidateQueries({ queryKey: ["batches"] });
+        queryClient.invalidateQueries({ queryKey: ["inventory-expiry"] });
+        queryClient.invalidateQueries({ queryKey: ["product-history"] });
       } else {
         const err = await res.json();
         toast.error(`خطأ: ${err.error || "فشل إدخال المخزون"}`);
@@ -444,16 +449,7 @@ export default function InventoryPage() {
   };
 
   const fetchProducts = async () => {
-    try {
-      const branchParam = selectedBranch?.id && selectedBranch.id !== "all"
-        ? `?branchId=${selectedBranch.id}` : "";
-      const res = await fetch(`/api/products${branchParam}`);
-      if (res.ok) setProducts(await res.json());
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    } finally {
-      setLoading(false);
-    }
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
   };
 
   const handleDelete = async (id: number) => {
@@ -474,8 +470,8 @@ export default function InventoryPage() {
       if (res.ok) {
         setDeletingId(null);
         setRemovingId(id);
-        setTimeout(() => {
-          setProducts((prev) => prev.filter((p) => p.id !== id));
+        setTimeout(async () => {
+          await queryClient.invalidateQueries({ queryKey: ["products"] });
           setRemovingId(null);
           toast.success("تم حذف المنتج بنجاح ✅");
         }, 480);
@@ -494,8 +490,8 @@ export default function InventoryPage() {
   const handleToggleQuickSale = async (product: Product) => {
     const newValue = !product.isQuickSale;
     // Optimistic update
-    setProducts((prev) =>
-      prev.map((p) =>
+    queryClient.setQueryData<Product[]>(["products", branchKey], (prev) =>
+      prev?.map((p) =>
         p.id === product.id ? { ...p, isQuickSale: newValue } : p,
       ),
     );
@@ -513,8 +509,8 @@ export default function InventoryPage() {
       );
     } catch {
       // Revert on error
-      setProducts((prev) =>
-        prev.map((p) =>
+      queryClient.setQueryData<Product[]>(["products", branchKey], (prev) =>
+        prev?.map((p) =>
           p.id === product.id ? { ...p, isQuickSale: !newValue } : p,
         ),
       );
@@ -1347,39 +1343,30 @@ export default function InventoryPage() {
         <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right data-table">
+              {/* ستة أعمدة بدل عشرة: القسم والمورد ضُمّا إلى خلية المنتج، والحد
+                  الأدنى إلى المخزون، والتكلفة إلى الأسعار. الحشوة px-3 بدل px-6
+                  (كانت وحدها تستهلك ~480px). الهدف: لا تمرير أفقي على شاشة عادية. */}
               <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-16">
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider w-10">
                     #
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    اسم المنتج
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    المنتج
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    القسم
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    المخزون
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    المورد
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    التكلفة والأسعار
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    المخزون الحالي
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    الحد الأدنى
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    التكلفة
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    الوحدات والأسعار
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
                     <span className="flex items-center justify-center gap-1">
                       <Zap size={13} className="text-blue-500" />
-                      بيع سريع
+                      سريع
                     </span>
                   </th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
+                  <th className="px-3 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
                     الإجراءات
                   </th>
                 </tr>
@@ -1388,7 +1375,7 @@ export default function InventoryPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={6}
                       className="p-12 text-center text-gray-400 animate-pulse"
                     >
                       جاري تحميل البيانات...
@@ -1396,7 +1383,7 @@ export default function InventoryPage() {
                   </tr>
                 ) : filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-12 text-center">
+                    <td colSpan={6} className="p-12 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <Package size={48} className="text-gray-200" />
                         <p>لا توجد منتجات مطابقة للبحث أو التصفية.</p>
@@ -1412,27 +1399,29 @@ export default function InventoryPage() {
                         key={product.id}
                         className={`group transition-colors ${isRowRemoving ? "row-removing" : isRowDeleting ? "row-deleting" : "hover:bg-blue-50/50"}`}
                       >
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-3 py-3 text-center align-top">
                           <span className="text-sm font-bold text-gray-600">
                             {idx + 1}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="font-semibold text-gray-800 text-sm block whitespace-nowrap">
+                        {/* المنتج + القسم + المورد في خلية واحدة (كانت ثلاثة أعمدة) */}
+                        <td className="px-3 py-3 align-top">
+                          <span className="font-semibold text-gray-800 text-sm block leading-snug">
                             {product.name}
                           </span>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                              {product.category?.name || "بدون قسم"}
+                            </span>
+                            {product.supplier?.name && (
+                              <span className="text-[11px] font-bold text-blue-600">
+                                {product.supplier.name}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-block text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-md whitespace-nowrap">
-                            {product.category?.name || "بدون قسم"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-bold text-blue-600">
-                            {product.supplier?.name || "-"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
+                        {/* المخزون + الحد الأدنى (كانا عمودين) */}
+                        <td className="px-3 py-3 align-top whitespace-nowrap">
                           {(() => {
                             const threshold =
                               product.minimumStock > 0
@@ -1442,7 +1431,7 @@ export default function InventoryPage() {
                             const isOut = product.baseStock === 0;
                             return (
                               <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-bold ${
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-bold ${
                                   isOut
                                     ? "bg-red-50 text-red-600 border border-red-200"
                                     : isLow
@@ -1457,23 +1446,26 @@ export default function InventoryPage() {
                               </span>
                             );
                           })()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-gray-500">
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            الحد الأدنى:{" "}
                             {product.minimumStock > 0
                               ? product.minimumStock
                               : "—"}
-                          </span>
+                          </p>
                         </td>
-                        <td className="px-6 py-4 text-gray-600">
-                          {formatCurrency(Number(product.costPrice))}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-wrap gap-2">
+                        {/* التكلفة + وحدات البيع وأسعارها (كانا عمودين) */}
+                        <td className="px-3 py-3 align-top">
+                          <p className="text-[11px] text-gray-400 mb-1 whitespace-nowrap">
+                            التكلفة:{" "}
+                            <span className="text-gray-600 font-medium">
+                              {formatCurrency(Number(product.costPrice))}
+                            </span>
+                          </p>
+                          <div className="flex flex-wrap gap-1">
                             {product.units.map((u, idx) => (
                               <span
                                 key={idx}
-                                className="bg-gray-100 text-gray-700 text-xs px-2 py-1.5 rounded-md border border-gray-200 font-medium"
+                                className="bg-gray-100 text-gray-700 text-[11px] px-1.5 py-0.5 rounded border border-gray-200 font-medium whitespace-nowrap"
                               >
                                 {u.name}:{" "}
                                 <span className="text-blue-600 font-bold">
@@ -1483,34 +1475,35 @@ export default function InventoryPage() {
                             ))}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        {/* زرّ مضغوط (36px) بدل مفتاح بعرض 96px — الحالة يحملها
+                            اللون والأيقونة، والنص انتقل إلى title/aria. */}
+                        <td className="px-3 py-3 text-center align-top">
                           <button
                             onClick={() => handleToggleQuickSale(product)}
+                            aria-pressed={!!product.isQuickSale}
                             title={
                               product.isQuickSale
-                                ? "انقر لإلغاء البيع السريع"
-                                : "انقر لتفعيل البيع السريع"
+                                ? "بيع سريع: مفعّل — انقر للإلغاء"
+                                : "بيع سريع: معطّل — انقر للتفعيل"
                             }
-                            className={`group relative inline-flex items-center justify-between w-24 px-2 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 ${
+                            className={`w-9 h-9 inline-flex items-center justify-center rounded-lg transition-all active:scale-90 ${
                               product.isQuickSale
                                 ? "bg-gradient-to-l from-blue-400 to-blue-500 text-white shadow-md shadow-blue-200"
-                                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                                : "bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-500"
                             }`}
                           >
                             <Zap
-                              size={13}
-                              className={`transition-all duration-300 ${product.isQuickSale ? "text-white fill-white drop-shadow" : "text-gray-300 group-hover:text-gray-400"}`}
-                            />
-                            <span className="flex-1 text-center">
-                              {product.isQuickSale ? "مفعّل" : "معطّل"}
-                            </span>
-                            <span
-                              className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${product.isQuickSale ? "bg-white/80" : "bg-gray-300 group-hover:bg-gray-400"}`}
+                              size={15}
+                              className={
+                                product.isQuickSale
+                                  ? "fill-white drop-shadow"
+                                  : ""
+                              }
                             />
                           </button>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="px-3 py-3 text-center align-top">
+                          <div className="flex items-center justify-center gap-1">
                             {isAdmin && (
                               <RowAction
                                 label="إدخال مخزون"

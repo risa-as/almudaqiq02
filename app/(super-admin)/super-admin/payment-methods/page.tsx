@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJsonOr } from '@/lib/query/fetcher'
 import {
   Plus, Pencil, Trash2, Check, X, Loader2, AlertTriangle,
   Wallet, Smartphone, CreditCard, HelpCircle, Eye, EyeOff,
@@ -31,8 +33,7 @@ const EMPTY_FORM = { type: 'ZAINCASH' as MethodType, name: '', accountNumber: ''
 
 export default function PaymentMethodsPage() {
   usePageTitle('طرق الدفع');
-  const [methods,  setMethods]  = useState<PaymentMethod[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const queryClient = useQueryClient()
 
   // Create modal
   const [showCreate,   setShowCreate]   = useState(false)
@@ -51,15 +52,15 @@ export default function PaymentMethodsPage() {
   const [deleting,     setDeleting]     = useState(false)
   const [deleteError,  setDeleteError]  = useState('')
 
-  const load = () => {
-    setLoading(true)
-    fetch('/api/super-admin/payment-methods')
-      .then(r => r.json())
-      .then(d => Array.isArray(d) ? setMethods(d) : [])
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
+  const methodsQuery = useQuery({
+    queryKey: ['sa-payment-methods'],
+    queryFn: async () => {
+      const d = await fetchJsonOr<PaymentMethod[]>('/api/super-admin/payment-methods', [])
+      return Array.isArray(d) ? d : []
+    },
+  })
+  const methods = methodsQuery.data ?? []
+  const loading = methodsQuery.isPending
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -74,7 +75,7 @@ export default function PaymentMethodsPage() {
       if (!res.ok) { setCreateError(data.error?.message ?? 'فشل الإنشاء'); return }
       setShowCreate(false)
       setCreateForm(EMPTY_FORM)
-      load()
+      await queryClient.invalidateQueries({ queryKey: ['sa-payment-methods'] })
     } catch { setCreateError('تعذر الاتصال بالخادم') }
     finally { setCreating(false) }
   }
@@ -92,7 +93,7 @@ export default function PaymentMethodsPage() {
       const data = await res.json()
       if (!res.ok) { setSaveError(data.error?.message ?? 'فشل الحفظ'); return }
       setEditTarget(null)
-      load()
+      await queryClient.invalidateQueries({ queryKey: ['sa-payment-methods'] })
     } catch { setSaveError('تعذر الاتصال بالخادم') }
     finally { setSaving(false) }
   }
@@ -102,7 +103,7 @@ export default function PaymentMethodsPage() {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !m.isActive }),
     })
-    load()
+    await queryClient.invalidateQueries({ queryKey: ['sa-payment-methods'] })
   }
 
   async function handleDelete() {
@@ -113,7 +114,7 @@ export default function PaymentMethodsPage() {
       const res = await fetch(`/api/super-admin/payment-methods/${deleteTarget.id}`, { method: 'DELETE' })
       if (!res.ok) { const d = await res.json(); setDeleteError(d.error ?? 'فشل الحذف'); return }
       setDeleteTarget(null)
-      load()
+      await queryClient.invalidateQueries({ queryKey: ['sa-payment-methods'] })
     } catch { setDeleteError('تعذر الاتصال بالخادم') }
     finally { setDeleting(false) }
   }

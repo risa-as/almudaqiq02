@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import Link from 'next/link';
 import {
     CalendarX2, AlertTriangle, ShieldAlert, Clock, Package,
@@ -51,10 +53,6 @@ type SortKey = 'daysLeft' | 'quantity' | 'totalValue' | 'productName' | 'expiryD
 export default function ExpiryManagementPage() {
   usePageTitle('تواريخ الانتهاء');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [batches,  setBatches]  = useState<ExpiryBatch[]>([]);
-    const [stats,    setStats]    = useState<Stats | null>(null);
-    const [cats,     setCats]     = useState<{ id: string; name: string }[]>([]);
-    const [loading,  setLoading]  = useState(true);
     const [horizon,    setHorizon]    = useState('30');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo,   setCustomTo]   = useState('');
@@ -63,30 +61,35 @@ export default function ExpiryManagementPage() {
     const [sort,       setSort]       = useState<SortKey>('daysLeft');
     const [asc,        setAsc]        = useState(true);
 
-    const fetchData = useCallback(() => {
-        if (branchLoading) return;
-        if (horizon === 'custom' && (!customFrom || !customTo)) return;
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (horizon === 'custom') {
-            params.set('fromDate', customFrom);
-            params.set('toDate', customTo);
-        } else {
-            params.set('days', horizon);
-        }
-        if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-        fetch(`/api/inventory/expiry?${params}`)
-            .then(r => r.json())
-            .then(d => {
-                setBatches(d.batches ?? []);
-                setStats(d.stats ?? null);
-                setCats(d.categories ?? []);
-            })
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, [branchLoading, horizon, customFrom, customTo, selectedBranch]);
+    const bId = selectedBranch?.id ?? 'all';
+    const params = new URLSearchParams();
+    if (horizon === 'custom') {
+        params.set('fromDate', customFrom);
+        params.set('toDate', customTo);
+    } else {
+        params.set('days', horizon);
+    }
+    if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    const expiryQuery = useQuery({
+        queryKey: [
+            'inventory-expiry', bId, horizon,
+            horizon === 'custom' ? customFrom : '',
+            horizon === 'custom' ? customTo : '',
+        ],
+        queryFn: () => fetchJsonOr<{ batches: ExpiryBatch[]; stats: Stats | null; categories: { id: string; name: string }[] }>(
+            `/api/inventory/expiry?${params}`,
+            { batches: [], stats: null, categories: [] },
+        ),
+        enabled: !branchLoading && !(horizon === 'custom' && (!customFrom || !customTo)),
+        placeholderData: (prev) => prev,
+    });
+    const batches = expiryQuery.data?.batches ?? [];
+    const stats = expiryQuery.data?.stats ?? null;
+    const cats = expiryQuery.data?.categories ?? [];
+    const loading = expiryQuery.isPending;
+
+    const fetchData = () => { expiryQuery.refetch(); };
 
     const filtered = useMemo(() => {
         let r = batches.filter(b => {

@@ -1,6 +1,7 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Trash2, Zap, Lightbulb, History, X } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { ChatMessage } from '@/components/ai-assistant/ChatMessage'
@@ -117,12 +118,17 @@ export default function AssistantPage() {
   const [showQuestions, setShowQuestions] = useState(false)
   const [questionsTab, setQuestionsTab] = useState<string>(TABS[0].id)
   const [showHistory, setShowHistory] = useState(false)
-  const [conversations, setConversations] = useState<ConversationSummary[]>([])
 
-  async function toggleHistory() {
-    const next = !showHistory
-    setShowHistory(next)
-    if (next) setConversations(await listConversations())
+  const queryClient = useQueryClient()
+  const conversationsQuery = useQuery<ConversationSummary[]>({
+    queryKey: ['ai-conversations'],
+    queryFn: () => listConversations(),
+    enabled: showHistory,
+  })
+  const conversations = conversationsQuery.data ?? []
+
+  function toggleHistory() {
+    setShowHistory(v => !v)
   }
 
   async function handleResume(id: string) {
@@ -132,7 +138,7 @@ export default function AssistantPage() {
 
   async function handleDeleteConversation(id: string) {
     await deleteConversation(id)
-    setConversations(prev => prev.filter(c => c.id !== id))
+    queryClient.invalidateQueries({ queryKey: ['ai-conversations'] })
   }
 
   const questionsActiveCat = [...TABS, GENERAL].find(c => c.id === questionsTab) ?? TABS[0]

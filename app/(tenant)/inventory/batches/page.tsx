@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import { Package, Search, Calendar, Filter, Database, FileSpreadsheet, AlertTriangle, CheckCircle2, Clock, Pencil, X, Save, Loader2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import { formatCurrency } from '@/lib/format';
@@ -37,8 +39,7 @@ export default function BatchesManagementPage() {
   usePageTitle('إدارة الدُفعات');
     const router = useRouter();
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [batches, setBatches] = useState<BatchItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -49,26 +50,15 @@ export default function BatchesManagementPage() {
     const [editForm, setEditForm] = useState<EditForm>({ batchNumber: '', expiryDate: '', quantity: 0, costPrice: 0 });
     const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (branchLoading) return;
-        fetchBatches();
-    }, [selectedBranch, branchLoading]);
-
-    const fetchBatches = async () => {
-        try {
-            setLoading(true);
-            const branchQuery = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : '';
-            const res = await fetch(`/api/inventory/batches${branchQuery}`);
-            if (res.ok) {
-                const data = await res.json();
-                setBatches(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch batches:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const bId = selectedBranch?.id ?? 'all';
+    const branchQuery = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : '';
+    const batchesQuery = useQuery({
+        queryKey: ['batches', bId],
+        queryFn: () => fetchJsonOr<BatchItem[]>(`/api/inventory/batches${branchQuery}`, []),
+        enabled: !branchLoading,
+    });
+    const batches = batchesQuery.data ?? [];
+    const loading = batchesQuery.isPending;
 
     const getBatchStatus = (batch: BatchItem) => {
         const today = new Date();
@@ -303,8 +293,9 @@ export default function BatchesManagementPage() {
             });
 
             if (res.ok) {
-                const updated = await res.json();
-                setBatches(prev => prev.map(b => b.id === updated.id ? updated : b));
+                await queryClient.invalidateQueries({ queryKey: ['batches'] });
+                queryClient.invalidateQueries({ queryKey: ['products'] });
+                queryClient.invalidateQueries({ queryKey: ['inventory-expiry'] });
                 setEditingBatch(null);
                 toast.success('تم تعديل الدفعة بنجاح');
             } else {

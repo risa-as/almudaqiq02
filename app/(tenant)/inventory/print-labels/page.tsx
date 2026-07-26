@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import { Printer, Search, Tag, X, Plus, Minus, Package, Ruler, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/format';
@@ -38,16 +40,19 @@ type SizeKey = keyof typeof LABEL_SIZES;
 export default function PrintLabelsPage() {
   usePageTitle('طباعة الملصقات');
     const router = useRouter();
-    const [products, setProducts]           = useState<Product[]>([]);
-    const [loading, setLoading]             = useState(true);
     const [search, setSearch]               = useState('');
     const [selectedLabels, setSelectedLabels] = useState<LabelToPrint[]>([]);
     const [labelSize, setLabelSize]         = useState<SizeKey>('STANDARD');
     const [bwipReady, setBwipReady]         = useState(false);
 
-    useEffect(() => {
-        fetch('/api/products').then(r => r.json()).then(d => setProducts(d)).catch(console.error).finally(() => setLoading(false));
+    const productsQuery = useQuery({
+        queryKey: ['products', 'all'],
+        queryFn: () => fetchJsonOr<Product[]>('/api/products', []),
+    });
+    const products = Array.isArray(productsQuery.data) ? productsQuery.data : [];
+    const loading = productsQuery.isPending;
 
+    useEffect(() => {
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/bwip-js/3.0.5/bwip-js-min.js';
         script.async = true;

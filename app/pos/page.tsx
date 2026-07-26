@@ -1,7 +1,9 @@
 "use client";
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJsonOr } from "@/lib/query/fetcher";
 import { useRouter } from "next/navigation";
 import {
   ShoppingCart,
@@ -92,7 +94,6 @@ export default function POSPage() {
   const { theme, toggleTheme } = useTheme();
   const { confirm, dialog } = useConfirm();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -110,9 +111,6 @@ export default function POSPage() {
 
   const [filterCategory, setFilterCategory] = useState<number | string | null>(
     null,
-  );
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
-    [],
   );
 
   // Enterprise POS features
@@ -174,30 +172,73 @@ export default function POSPage() {
   // Time State for Top Bar
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
-  // Payment loading state
-  const [isPaying, setIsPaying] = useState(false);
+  // Payment loading state — holds *which* method is being charged, so only that
+  // button shows the spinner. A plain boolean made all three spin at once.
+  const [payingMethod, setPayingMethod] = useState<
+    "CASH" | "CARD" | "CREDIT" | null
+  >(null);
+  // كل الأزرار تُعطَّل أثناء أي دفع (منع إرسال فاتورتين)، والمؤشّر على المضغوط وحده
+  const isPaying = payingMethod !== null;
 
-  // Store settings — fetched once so ReceiptPrint never flashes a default name
-  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(
-    null,
-  );
+  // إظهار/إخفاء كارد عرض المنتجات (اختيار المستخدم في حالة السكون).
+  const [showProducts, setShowProducts] = useState(true);
+
+  /**
+   * ظهور كارد المنتجات — قيمة مشتقّة لا حالة مستقلّة.
+   *
+   * أي بحث فعّال أو قسم مختار يُظهر الكارد مهما كان اختيار المستخدم، لأن الهدف من
+   * البحث/القسم هو رؤية النتيجة. اشتقاقها ضروري: نص البحث يُحدَّث من ثلاثة مسارات
+   * (الحقل + حقنتان من مستمع الباركود العام الذي يبتلع كل حرف بـ preventDefault)،
+   * فربطُ الإظهار بمُحدِّثات متفرّقة كان يُسقط مسارات كاملة — منها أزرار الأقسام.
+   */
+  const productsVisible =
+    showProducts || searchQuery.trim().length >= 2 || filterCategory !== null;
+
+  /**
+   * الكروت المعروضة فعليًا — نتائج الخادم مُرشَّحة بنص البحث الحالي.
+   *
+   * بدونها يومض الكتالوج كاملًا: نتيجة الخادم تتأخّر 300ms (debounce)، فيظل
+   * searchResults حاملًا القائمة الكاملة من حالة السكون بينما الكارد قد ظهر
+   * بالفعل عند الحرف الثاني. الترشيح المحلي يضيّق النتيجة فورًا مع كل حرف.
+   *
+   * الباركود مشمول في الترشيح: بحث الخادم قد يطابق بالباركود لا بالاسم، فترشيحٌ
+   * بالاسم وحده كان سيُخفي المنتج المطابق تمامًا.
+   */
+  const visibleProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return searchResults;
+    return searchResults.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.units?.some((u) => String(u.barcode ?? "").includes(q)),
+    );
+  }, [searchResults, searchQuery]);
+
+  // Store settings — fetched once so ReceiptPrint never flashes a default name.
+  // مكاشة عبر React Query بمفتاح ["settings"] المشترك مع صفحة الإعدادات،
+  // فيتحدّث تلقائيًا عند حفظ الإعدادات هناك (invalidate) وعند إعادة التحميل العميق.
   const autoPrintRef = React.useRef(false);
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: () =>
+      fetchJsonOr<Record<string, any> | null>("/api/settings", null),
+  });
+  const settingsData = settingsQuery.data;
+  const storeSettings: StoreSettings | null = useMemo(
+    () =>
+      settingsData
+        ? {
+            storeName: settingsData.storeName || "",
+            storePhone: settingsData.storePhone || "",
+            storeAddress: settingsData.storeAddress || "",
+            footerMessage: settingsData.footerMessage || "",
+          }
+        : null,
+    [settingsData],
+  );
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data) {
-          setStoreSettings({
-            storeName: data.storeName || "",
-            storePhone: data.storePhone || "",
-            storeAddress: data.storeAddress || "",
-            footerMessage: data.footerMessage || "",
-          });
-          autoPrintRef.current = data.autoPrint ?? false;
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (settingsData) autoPrintRef.current = settingsData.autoPrint ?? false;
+  }, [settingsData]);
 
   // Inline price editing in cart
   const [editingPriceIdx, setEditingPriceIdx] = useState<number | null>(null);
@@ -271,6 +312,7 @@ export default function POSPage() {
       ? `&branchId=${selectedBranch.id}`
       : "";
 
+  // الورديّة النشطة تبقى fetch مباشرًا — حالة تشغيلية يجب أن تكون طازجة دائمًا
   useEffect(() => {
     if (branchLoading) return;
     fetch(`/api/shifts${branchQuery}`)
@@ -280,19 +322,31 @@ export default function POSPage() {
         setShiftLoading(false);
       })
       .catch(() => setShiftLoading(false));
-
-    fetch(`/api/offers?active=true${branchQueryAmp}`)
-      .then((res) => res.json())
-      .then((data) => setOffers(Array.isArray(data) ? data : []))
-      .catch(console.error);
-
-    fetch(`/api/categories${branchQuery}`)
-      .then((res) => res.json())
-      .then((data) =>
-        setCategories(Array.isArray(data) ? data : (data.categories ?? [])),
-      )
-      .catch(console.error);
   }, [selectedBranch?.id, branchLoading]);
+
+  // العروض النشطة والتصنيفات — كتالوجات للقراءة فقط في POS، مكاشة عبر React Query.
+  // تعديلات صفحتي العروض/التصنيفات تبطل المفاتيح ["offers"] / ["categories"].
+  const posBid = selectedBranch?.id ?? "all";
+  const offersQuery = useQuery({
+    queryKey: ["offers", "active", posBid],
+    queryFn: () =>
+      fetchJsonOr<Offer[]>(`/api/offers?active=true${branchQueryAmp}`, []),
+    enabled: !branchLoading,
+  });
+  const offers: Offer[] = Array.isArray(offersQuery.data)
+    ? offersQuery.data
+    : [];
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories", posBid],
+    queryFn: () => fetchJsonOr<any>(`/api/categories${branchQuery}`, []),
+    enabled: !branchLoading,
+  });
+  const categories: { id: number; name: string }[] = Array.isArray(
+    categoriesQuery.data,
+  )
+    ? categoriesQuery.data
+    : (categoriesQuery.data?.categories ?? []);
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -417,7 +471,7 @@ export default function POSPage() {
     const fetchProducts = async () => {
       try {
         let url = `/api/products${bq}`;
-        const isFullFetch = searchQuery.length < 2;
+        const isFullFetch = searchQuery.trim().length === 0;
         if (!isFullFetch) {
           url = `/api/products/search?q=${encodeURIComponent(searchQuery)}${bqa}`;
         }
@@ -450,6 +504,10 @@ export default function POSPage() {
         console.error(err);
       }
     };
+
+    // حرف واحد: حالة عبور أثناء الكتابة — لا يُطلب الكتالوج كاملًا (كان يُجلب
+    // ويُعرض بأكمله عند كل حرف أول)، والترشيح المحلي يتكفّل بالعرض حتى الحرف الثاني.
+    if (searchQuery.trim().length === 1) return;
 
     const timeout = setTimeout(fetchProducts, 300);
     return () => clearTimeout(timeout);
@@ -488,7 +546,9 @@ export default function POSPage() {
         qtyToAdd,
         unitStock,
       );
-      setSearchQuery("");
+      // بعد المسح: نضع اسم المنتج في البحث بدل تفريغه، فيعرض الكارد المنتجَ
+      // الممسوح (تأكيد بصري لما دخل السلة)؛ وظهور الكارد مشتقّ من نص البحث.
+      setSearchQuery(product.name);
     };
 
     // 1. Instant local lookup — no network needed
@@ -782,9 +842,6 @@ export default function POSPage() {
     );
   };
 
-  const [customers, setCustomers] = useState<
-    { id: string; name: string; branchId: string | null }[]
-  >([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     null,
   );
@@ -793,40 +850,33 @@ export default function POSPage() {
   >("CASH");
 
   // Fetch Customers — strictly scoped to the selected branch.
-  // Guards:
-  //  • Wait until the branch context finished loading (avoids a null-branch fetch
-  //    that returns ALL tenant customers).
-  //  • Only fetch for a specific branch; "all"/none → empty list (POS is per-branch).
-  //  • `ignore` flag discards stale responses so an earlier unfiltered request can
-  //    never overwrite the correct branch-scoped result (race condition fix).
+  // Guards (نفس الضمانات السابقة، الآن عبر React Query):
+  //  • enabled ينتظر تحميل سياق الفرع ويمنع جلب فرع غير محدد ("all"/none → قائمة فارغة).
+  //  • مفتاح الكاش يتضمن الفرع، فلا يمكن لاستجابة فرع سابق أن تكتب فوق فرع آخر
+  //    (يعوّض إصلاح سباق الطلبات القديم بعلم ignore).
+  //  • مشترك مع صفحة العملاء عبر البادئة ["customers"] فتُبطله تعديلاتها.
+  const posCustomersBranchId =
+    !branchLoading && selectedBranch?.id && selectedBranch.id !== "all"
+      ? selectedBranch.id
+      : null;
+  const customersQuery = useQuery({
+    queryKey: ["customers", posCustomersBranchId],
+    queryFn: () =>
+      fetchJsonOr<{ id: string; name: string; branchId: string | null }[]>(
+        `/api/customers?branchId=${posCustomersBranchId}`,
+        [],
+      ),
+    enabled: posCustomersBranchId !== null,
+  });
+  const customers =
+    posCustomersBranchId !== null && Array.isArray(customersQuery.data)
+      ? customersQuery.data
+      : [];
+
+  // إعادة تعيين العميل المختار عند تغيّر الفرع (نفس السلوك السابق)
   useEffect(() => {
     if (branchLoading) return;
-
-    const branchId =
-      selectedBranch?.id && selectedBranch.id !== "all"
-        ? selectedBranch.id
-        : null;
-
     setSelectedCustomerId(null);
-
-    if (!branchId) {
-      setCustomers([]);
-      return;
-    }
-
-    let ignore = false;
-    fetch(`/api/customers?branchId=${branchId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!ignore) setCustomers(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => {
-        if (!ignore) console.error(err);
-      });
-
-    return () => {
-      ignore = true;
-    };
   }, [selectedBranch?.id, branchLoading]);
 
   // Reset to CASH when customer is deselected
@@ -852,7 +902,7 @@ export default function POSPage() {
     }
 
     setPaymentMethod(m);
-    setIsPaying(true);
+    setPayingMethod(m);
 
     try {
       const paidAmount =
@@ -938,7 +988,7 @@ export default function POSPage() {
     } catch (err: any) {
       toast.error(`❌ فشل الدفع!\nالسبب: ${err.message}`);
     } finally {
-      setIsPaying(false);
+      setPayingMethod(null);
     }
   };
 
@@ -1761,6 +1811,28 @@ export default function POSPage() {
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
             متصل
           </span>
+          {/* يبقى في الهيدر دائمًا — هو السبيل الوحيد لإعادة إظهار الكارد بعد إخفائه.
+              الإخفاء يمسح البحث والقسم أيضًا، وإلا لبقي الكارد ظاهرًا (لأن ظهوره
+              مشتقّ منهما) فيبدو الزرّ وكأنه لا يعمل. */}
+          <button
+            onClick={() => {
+              if (productsVisible) {
+                setShowProducts(false);
+                setSearchQuery("");
+                setFilterCategory(null);
+              } else {
+                setShowProducts(true);
+              }
+            }}
+            title={productsVisible ? "إخفاء عرض المنتجات" : "إظهار عرض المنتجات"}
+            className={`p-1.5 r-container transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 ${
+              productsVisible
+                ? "text-blue-600"
+                : "text-slate-400 hover:text-blue-600"
+            }`}
+          >
+            <Grid size={15} />
+          </button>
           <button
             onClick={toggleTheme}
             title={
@@ -1784,7 +1856,7 @@ export default function POSPage() {
         <div className="flex flex-1 overflow-hidden">
           {/* LEFT: Product Browser */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-100 dark:bg-slate-900">
-            {/* Search + Category Bar */}
+            {/* Search + Category Bar — يبقى دائمًا (بحث + باركود + الأقسام) */}
             <div className="border-b border-slate-200 dark:border-slate-700 px-3 py-2 shrink-0 space-y-2 bg-white dark:bg-slate-800">
               <div className="relative">
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -1843,11 +1915,12 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Product Grid */}
+            {/* Product Grid — الكارد وحده هو ما يُخفى؛ شريط البحث والأقسام يبقى */}
+            {productsVisible && (
             <div className="flex-1 overflow-y-auto p-3">
-              {searchResults.length > 0 ? (
+              {visibleProducts.length > 0 ? (
                 <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5">
-                  {searchResults.map((product) => {
+                  {visibleProducts.map((product) => {
                     const defaultUnit = product.units?.[0] ?? null;
                     const convFactor = defaultUnit?.conversionFactor || 1;
                     const displayStock = Math.floor(
@@ -2010,6 +2083,7 @@ export default function POSPage() {
                 </div>
               )}
             </div>
+          )}
           </div>
 
           {/* RIGHT: Cart & Checkout */}
@@ -2325,41 +2399,48 @@ export default function POSPage() {
                     method: "CREDIT" as const,
                     label: "آجل",
                     icon: <StickyNote size={18} />,
-                    base: "bg-blue-500 border-blue-500 hover:bg-blue-600 hover:shadow-blue-200",
+                    // برتقالي — نفس لون «آجل» في ملخّص الوردية أعلى الصفحة
+                    base: "bg-orange-500 border-orange-500 hover:bg-orange-600 hover:shadow-orange-200",
                   },
-                ].map(({ method, label, icon, base }) => (
-                  <button
-                    key={method}
-                    disabled={cart.length === 0 || isPaying}
-                    onClick={() => handlePay(method)}
-                    className={`relative flex flex-col items-center justify-center gap-1 py-3.5 r-container font-black text-sm border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white hover:-translate-y-0.5 active:translate-y-0 shadow-sm hover:shadow-md ${base}`}
-                  >
-                    {isPaying ? (
-                      <svg
-                        className="animate-spin w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8v8z"
-                        />
-                      </svg>
-                    ) : (
-                      icon
-                    )}
-                    {isPaying ? "جاري..." : label}
-                  </button>
-                ))}
+                ].map(({ method, label, icon, base }) => {
+                  // المؤشّر على الزر المضغوط وحده؛ الباقي معطّل بلا دوران
+                  const busy = payingMethod === method;
+                  return (
+                    <button
+                      key={method}
+                      disabled={cart.length === 0 || isPaying}
+                      onClick={() => handlePay(method)}
+                      // صفّ أفقي (الأيقونة بجانب النص) وحشوة أقل ⇒ ارتفاع ~44px بدل ~74px.
+                      // بالتكديس العمودي المحتوى وحده ~46px فلا يمكن بلوغ 40% مهما قلّت الحشوة.
+                      className={`relative flex flex-row items-center justify-center gap-2 py-2.5 r-container font-black text-sm border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white hover:-translate-y-0.5 active:translate-y-0 shadow-sm hover:shadow-md ${base}`}
+                    >
+                      {busy ? (
+                        <svg
+                          className="animate-spin w-5 h-5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8z"
+                          />
+                        </svg>
+                      ) : (
+                        icon
+                      )}
+                      {busy ? "جاري..." : label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

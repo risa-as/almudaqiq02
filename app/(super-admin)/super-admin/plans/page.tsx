@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { Plus, Pencil, Check, X, Crown, Loader2, Users, GitBranch, AlertTriangle, Sparkles, Trash2 } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 import { FEATURES, TIER_META, parseFeatures, type FeatureMap } from '@/lib/features'
@@ -47,10 +49,9 @@ const PLAN_COLORS = [
 
 export default function PlansPage() {
   usePageTitle('خطط الاشتراك');
-  const [plans, setPlans]         = useState<Plan[]>([])
+  const queryClient = useQueryClient()
   const [editing, setEditing]     = useState<string | null>(null)
   const [form, setForm]           = useState<Partial<Plan>>({})
-  const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
 
   // Delete confirmation state
@@ -78,16 +79,13 @@ export default function PlansPage() {
     features: {},
   })
 
-  const load = () => {
-    setLoading(true)
-    fetch('/api/super-admin/plans')
-      .then(r => r.json())
-      .then((rows: Array<Plan & { features: string }>) =>
-        setPlans(rows.map(r => ({ ...r, features: parseFeatures(r.features as unknown as string) }))))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
+  const plansQuery = useQuery({
+    queryKey: ['sa-plans'],
+    queryFn: () => fetchJson<Array<Plan & { features: string }>>('/api/super-admin/plans'),
+    select: (rows) => rows.map(r => ({ ...r, features: parseFeatures(r.features as unknown as string) })),
+  })
+  const plans   = plansQuery.data ?? []
+  const loading = plansQuery.isPending
 
   async function save(id: string) {
     setSaving(true)
@@ -98,7 +96,7 @@ export default function PlansPage() {
     })
     setEditing(null)
     setSaving(false)
-    load()
+    await queryClient.invalidateQueries({ queryKey: ['sa-plans'] })
   }
 
   async function handleDelete() {
@@ -112,7 +110,7 @@ export default function PlansPage() {
         setDeleteError(data.error || 'فشل الحذف')
       } else {
         setDeleteTarget(null)
-        load()
+        await queryClient.invalidateQueries({ queryKey: ['sa-plans'] })
       }
     } catch {
       setDeleteError('تعذر الاتصال بالخادم')
@@ -137,7 +135,7 @@ export default function PlansPage() {
       } else {
         setShowCreate(false)
         setNewPlan({ name: '', maxBranches: 5, maxUsers: 5, monthlyPrice: 0, yearlyPrice: 0, features: {} })
-        load()
+        await queryClient.invalidateQueries({ queryKey: ['sa-plans'] })
       }
     } catch {
       setCreateError('تعذر الاتصال بالخادم')

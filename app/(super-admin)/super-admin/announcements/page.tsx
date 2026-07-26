@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJsonOr } from '@/lib/query/fetcher'
 import { Megaphone, Plus, Send, Loader2, Users, Info, AlertTriangle, Wrench } from 'lucide-react'
 
 import toast from 'react-hot-toast';
@@ -23,8 +25,7 @@ const TYPE_CONFIG = {
 
 export default function AnnouncementsPage() {
   usePageTitle('الإعلانات');
-  const [announcements, setAnnouncements] = useState<Announcement[]>([])
-  const [loading, setLoading]             = useState(true)
+  const queryClient = useQueryClient()
   const [sending, setSending]             = useState(false)
 
   const [title,     setTitle]     = useState('')
@@ -32,17 +33,12 @@ export default function AnnouncementsPage() {
   const [type,      setType]      = useState<'INFO' | 'WARNING' | 'MAINTENANCE'>('INFO')
   const [expiresAt, setExpiresAt] = useState('')
 
-  async function load() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/super-admin/announcements')
-      if (res.ok) setAnnouncements(await res.json())
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [])
+  const announcementsQuery = useQuery({
+    queryKey: ['sa-announcements'],
+    queryFn: () => fetchJsonOr<Announcement[]>('/api/super-admin/announcements', []),
+  })
+  const announcements = announcementsQuery.data ?? []
+  const loading       = announcementsQuery.isPending
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -59,7 +55,7 @@ export default function AnnouncementsPage() {
       })
       if (res.ok) {
         setTitle(''); setBody(''); setExpiresAt('')
-        load()
+        await queryClient.invalidateQueries({ queryKey: ['sa-announcements'] })
       } else {
         const d = await res.json()
         toast.error(d.error || 'فشل الإرسال');

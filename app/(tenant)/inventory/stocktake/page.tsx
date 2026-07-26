@@ -1,12 +1,15 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson, fetchJsonOr } from '@/lib/query/fetcher'
 import toast from 'react-hot-toast'
 import {
   ClipboardList, Plus, Search, Save, CheckCircle2, XCircle,
-  ArrowRight, Loader2, AlertTriangle,
+  ArrowRight, Loader2, AlertTriangle, ChevronLeft, PackageSearch,
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { useBranch } from '@/contexts/BranchContext'
+import { useConfirm } from '@/hooks/useConfirm'
 import { usePageTitle } from '@/hooks/usePageTitle'
 
 interface SessionSummary {
@@ -40,52 +43,67 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 
 export default function StocktakePage() {
   usePageTitle('جرد المخزون')
-  const { selectedBranch } = useBranch()
+  const { selectedBranch, loading: branchLoading } = useBranch()
+  const queryClient = useQueryClient()
+  // حوار التأكيد الموحّد للنظام بدل window.confirm الأصلي للمتصفّح
+  const { confirm, dialog } = useConfirm()
 
-  const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
   // Detail view state
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<{ status: string; items: SessionItem[] } | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
   const [counts, setCounts] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
+  /** فلتر «غير المعدود فقط» — الوسيلة العملية لمعرفة ما تبقّى في جلسة طويلة */
+  const [onlyUncounted, setOnlyUncounted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [completing, setCompleting] = useState(false)
 
-  const loadSessions = useCallback(async () => {
-    setLoading(true)
-    try {
-      const qs = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : ''
-      const res = await fetch(`/api/stocktake${qs}`)
-      const data = await res.json()
-      if (res.ok) setSessions(data.sessions ?? [])
-    } catch { /* ignore */ } finally {
-      setLoading(false)
+  const bId = selectedBranch?.id ?? 'all'
+  const qs = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : ''
+  const sessionsQuery = useQuery({
+    queryKey: ['stocktake', bId],
+    queryFn: () => fetchJsonOr<{ sessions: SessionSummary[] }>(`/api/stocktake${qs}`, { sessions: [] }),
+    enabled: !branchLoading,
+  })
+  const sessions = sessionsQuery.data?.sessions ?? []
+  const loading = sessionsQuery.isPending
+
+  const loadSessions = () => queryClient.invalidateQueries({ queryKey: ['stocktake'] })
+
+  const detailQuery = useQuery({
+    queryKey: ['stocktake-detail', activeId],
+    queryFn: () => fetchJson<{ status: string; items: SessionItem[] }>(`/api/stocktake/${activeId}`),
+    enabled: !!activeId,
+  })
+  const detailData = activeId ? detailQuery.data : undefined
+  // مُذكَّر: كان كائنًا جديدًا في كل رسم، فتُعاد حسبة filteredItems و stats دائمًا
+  const detail = useMemo(
+    () => (detailData ? { status: detailData.status, items: detailData.items } : null),
+    [detailData],
+  )
+  const detailLoading = detailQuery.isPending
+
+  // Seed the editable counts whenever fresh detail data arrives
+  useEffect(() => {
+    if (!detailData) return
+    const initial: Record<string, string> = {}
+    for (const item of detailData.items) {
+      initial[item.id] = item.countedQty === null ? '' : String(item.countedQty)
     }
-  }, [selectedBranch?.id])
+    setCounts(initial)
+  }, [detailData])
 
-  useEffect(() => { loadSessions() }, [loadSessions])
+  // Preserve old openSession error handling: toast + back to the list
+  useEffect(() => {
+    if (!activeId || !detailQuery.isError || detailQuery.isFetching) return
+    toast.error(detailQuery.error instanceof Error && detailQuery.error.message ? detailQuery.error.message : 'تعذر فتح الجلسة')
+    setActiveId(null)
+  }, [activeId, detailQuery.isError, detailQuery.isFetching, detailQuery.error])
 
-  async function openSession(id: string) {
-    setActiveId(id)
-    setDetailLoading(true)
+  function openSession(id: string) {
     setSearch('')
-    try {
-      const res = await fetch(`/api/stocktake/${id}`)
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error ?? 'تعذر فتح الجلسة'); setActiveId(null); return }
-      setDetail({ status: data.status, items: data.items })
-      const initial: Record<string, string> = {}
-      for (const item of data.items as SessionItem[]) {
-        initial[item.id] = item.countedQty === null ? '' : String(item.countedQty)
-      }
-      setCounts(initial)
-    } finally {
-      setDetailLoading(false)
-    }
+    setActiveId(id)
   }
 
   async function createSession() {
@@ -126,14 +144,8 @@ export default function StocktakePage() {
       })
       if (!res.ok) { toast.error('فشل حفظ الكميات'); return false }
       if (!silent) toast.success('تم حفظ الكميات')
-      setDetail(d => d ? {
-        ...d,
-        items: d.items.map(i => {
-          const raw = counts[i.id] ?? ''
-          const counted = raw === '' ? null : Math.max(0, Math.round(Number(raw)))
-          return { ...i, countedQty: counted, difference: counted === null ? null : counted - i.expectedQty }
-        }),
-      } : d)
+      queryClient.invalidateQueries({ queryKey: ['stocktake-detail', activeId] })
+      queryClient.invalidateQueries({ queryKey: ['stocktake'] })
       return true
     } finally {
       setSaving(false)
@@ -147,7 +159,14 @@ export default function StocktakePage() {
       if (raw === '') return false
       return Number(raw) !== i.expectedQty
     }).length ?? 0
-    if (!window.confirm(`سيتم اعتماد الجرد وتعديل المخزون الفعلي (${diffCount} صنف بفروقات). هل أنت متأكد؟`)) return
+    const ok = await confirm({
+      title: 'اعتماد الجرد',
+      message: `سيتم تعديل المخزون الفعلي حسب الكميات المعدودة (${diffCount} صنف بفروقات)، وتُوثَّق العملية في سجل التدقيق. لا يمكن التراجع.`,
+      variant: 'warning',
+      confirmLabel: 'اعتماد وتطبيق الفروقات',
+      cancelLabel: 'تراجع',
+    })
+    if (!ok) return
     setCompleting(true)
     try {
       const saved = await saveCounts(true)
@@ -160,8 +179,13 @@ export default function StocktakePage() {
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'فشل اعتماد الجرد'); return }
       toast.success(`تم اعتماد الجرد — عُدّل ${data.adjustments} صنف`)
-      setActiveId(null); setDetail(null)
+      setActiveId(null)
       loadSessions()
+      queryClient.invalidateQueries({ queryKey: ['stocktake-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['batches'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory-expiry'] })
+      queryClient.invalidateQueries({ queryKey: ['product-history'] })
     } finally {
       setCompleting(false)
     }
@@ -169,7 +193,14 @@ export default function StocktakePage() {
 
   async function cancelSession() {
     if (!activeId) return
-    if (!window.confirm('سيتم إلغاء جلسة الجرد دون أي تعديل على المخزون. متابعة؟')) return
+    const ok = await confirm({
+      title: 'إلغاء جلسة الجرد',
+      message: 'ستُهمل كل الكميات المسجّلة في هذه الجلسة ولن يتغيّر المخزون. لا يمكن التراجع عن الإلغاء.',
+      variant: 'danger',
+      confirmLabel: 'إلغاء الجلسة',
+      cancelLabel: 'تراجع',
+    })
+    if (!ok) return
     const res = await fetch(`/api/stocktake/${activeId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -177,16 +208,19 @@ export default function StocktakePage() {
     })
     if (res.ok) {
       toast.success('أُلغيت جلسة الجرد')
-      setActiveId(null); setDetail(null)
+      setActiveId(null)
       loadSessions()
+      queryClient.invalidateQueries({ queryKey: ['stocktake-detail'] })
     } else toast.error('فشل الإلغاء')
   }
 
   const filteredItems = useMemo(() => {
     if (!detail) return []
     const q = search.trim()
-    return q ? detail.items.filter(i => i.productName.includes(q)) : detail.items
-  }, [detail, search])
+    let list = q ? detail.items.filter(i => i.productName.includes(q)) : detail.items
+    if (onlyUncounted) list = list.filter(i => (counts[i.id] ?? '') === '')
+    return list
+  }, [detail, search, onlyUncounted, counts])
 
   const stats = useMemo(() => {
     if (!detail) return { counted: 0, diffs: 0, total: 0 }
@@ -204,6 +238,8 @@ export default function StocktakePage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4" dir="rtl">
+      {/* بدونه لا يُعرض حوار التأكيد إطلاقًا (useConfirm يعيد العنصر ليُركَّب هنا) */}
+      {dialog}
       <PageHeader
         title="جرد المخزون"
         subtitle="عدّ فعلي للمخزون ومطابقته مع المسجّل واعتماد الفروقات"
@@ -211,7 +247,7 @@ export default function StocktakePage() {
         gradient="linear-gradient(135deg, #094B9F, #063A8A)"
         actions={
           activeId ? (
-            <button onClick={() => { setActiveId(null); setDetail(null); loadSessions() }}
+            <button onClick={() => { setActiveId(null); loadSessions() }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
               style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -240,43 +276,71 @@ export default function StocktakePage() {
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>ابدأ جرداً جديداً لمطابقة المخزون الفعلي مع المسجّل</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: 'var(--bg-hover, rgba(148,163,184,0.06))', color: 'var(--text-muted)' }}>
-                  <th className="text-right px-4 py-3 text-xs font-bold">الفرع</th>
-                  <th className="text-right px-4 py-3 text-xs font-bold">التاريخ</th>
-                  <th className="text-center px-4 py-3 text-xs font-bold">الأصناف</th>
-                  <th className="text-center px-4 py-3 text-xs font-bold">المعدود</th>
-                  <th className="text-center px-4 py-3 text-xs font-bold">فروقات</th>
-                  <th className="text-center px-4 py-3 text-xs font-bold">الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map(s => {
-                  const meta = STATUS_META[s.status] ?? STATUS_META.DRAFT
-                  return (
-                    <tr key={s.id} onClick={() => openSession(s.id)}
-                      className="cursor-pointer transition-colors hover:bg-blue-50/40"
-                      style={{ borderTop: '1px solid var(--border-color)' }}>
-                      <td className="px-4 py-3 font-bold" style={{ color: 'var(--text-primary)' }}>{s.branchName}</td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {new Date(s.createdAt).toLocaleDateString('ar')}
-                      </td>
-                      <td className="px-4 py-3 text-center">{s.totalItems}</td>
-                      <td className="px-4 py-3 text-center">{s.countedItems}</td>
-                      <td className="px-4 py-3 text-center">
-                        {s.diffItems > 0
-                          ? <span className="font-bold text-amber-600">{s.diffItems}</span>
-                          : <span style={{ color: 'var(--text-muted)' }}>0</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold border ${meta.cls}`}>{meta.label}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: 'var(--bg-hover, rgba(148,163,184,0.06))', color: 'var(--text-muted)' }}>
+                    <th className="text-right px-4 py-3 text-xs font-bold">الفرع والتاريخ</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold w-52">التقدّم</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold">فروقات</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold">الحالة</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map(s => {
+                    const meta = STATUS_META[s.status] ?? STATUS_META.DRAFT
+                    // شريط تقدّم بدل رقمين منفصلين — نسبة الإنجاز تُقرأ بلمحة
+                    const pct = s.totalItems > 0
+                      ? Math.round((s.countedItems / s.totalItems) * 100)
+                      : 0
+                    const done = pct === 100
+                    return (
+                      <tr key={s.id} onClick={() => openSession(s.id)}
+                        className="group cursor-pointer transition-colors hover:bg-blue-50/40"
+                        style={{ borderTop: '1px solid var(--border-color)' }}>
+                        <td className="px-4 py-3">
+                          <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.branchName}</p>
+                          {/* الوقت مع التاريخ: جلسات اليوم نفسه كانت تبدو متطابقة */}
+                          <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            {new Date(s.createdAt).toLocaleString('ar', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden"
+                              style={{ background: 'var(--bg-hover, rgba(148,163,184,0.18))' }}>
+                              <div className={`h-full rounded-full transition-all ${done ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-[11px] font-bold tabular-nums shrink-0"
+                              style={{ color: 'var(--text-muted)' }}>
+                              {s.countedItems}/{s.totalItems}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {s.diffItems > 0
+                            ? <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-amber-50 text-amber-600 border border-amber-200">{s.diffItems}</span>
+                            : <span style={{ color: 'var(--text-muted)' }}>0</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold border ${meta.cls}`}>{meta.label}</span>
+                        </td>
+                        {/* إشارة أن الصفّ قابل للفتح — لم يكن هناك ما يدلّ على ذلك */}
+                        <td className="px-2 py-3 text-center">
+                          <ChevronLeft className="w-4 h-4 opacity-30 transition-opacity group-hover:opacity-70"
+                            style={{ color: 'var(--text-muted)' }} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -293,17 +357,36 @@ export default function StocktakePage() {
             {/* Stats + actions */}
             <div className="flex flex-wrap items-center gap-3">
               {[
-                { label: 'إجمالي الأصناف', value: stats.total },
-                { label: 'تم عدّه', value: stats.counted },
-                { label: 'فروقات', value: stats.diffs, warn: stats.diffs > 0 },
-              ].map(s => (
-                <div key={s.label} className="rounded-2xl px-4 py-2.5"
+                { label: 'إجمالي الأصناف', value: stats.total, Icon: ClipboardList, tone: 'text-slate-400', warn: false },
+                { label: 'تم عدّه', value: stats.counted, Icon: CheckCircle2, tone: 'text-emerald-500', warn: false },
+                { label: 'فروقات', value: stats.diffs, Icon: AlertTriangle, tone: stats.diffs > 0 ? 'text-amber-500' : 'text-slate-300', warn: stats.diffs > 0 },
+              ].map(({ label, value, Icon, tone, warn }) => (
+                <div key={label} className="flex items-center gap-2.5 rounded-2xl px-4 py-2.5"
                   style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-                  <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
-                  <p className={`text-lg font-black ${s.warn ? 'text-amber-500' : ''}`}
-                    style={s.warn ? {} : { color: 'var(--text-primary)' }}>{s.value}</p>
+                  <Icon className={`w-4 h-4 shrink-0 ${tone}`} />
+                  <div>
+                    <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                    <p className={`text-lg font-black leading-tight ${warn ? 'text-amber-500' : ''}`}
+                      style={warn ? {} : { color: 'var(--text-primary)' }}>{value}</p>
+                  </div>
                 </div>
               ))}
+
+              {/* شريط الإنجاز — «تم عدّه من الإجمالي» كنسبة بدل رقمين متجاورين */}
+              <div className="flex items-center gap-2 rounded-2xl px-4 py-3 min-w-[180px] flex-1 sm:flex-none sm:w-56"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden"
+                  style={{ background: 'var(--bg-hover, rgba(148,163,184,0.18))' }}>
+                  <div
+                    className={`h-full rounded-full transition-all ${stats.total > 0 && stats.counted === stats.total ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                    style={{ width: `${stats.total > 0 ? Math.round((stats.counted / stats.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-black tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+                  {stats.total > 0 ? Math.round((stats.counted / stats.total) * 100) : 0}%
+                </span>
+              </div>
+
               <div className="flex-1" />
               {isDraft && (
                 <div className="flex items-center gap-2">
@@ -337,23 +420,46 @@ export default function StocktakePage() {
               </div>
             )}
 
-            {/* Search */}
-            <div className="relative">
-              <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="ابحث عن منتج..."
-                className="w-full rounded-2xl py-2.5 pr-10 pl-4 text-sm outline-none"
-                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
-              />
+            {/* Search + filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="ابحث عن منتج..."
+                  className="w-full rounded-2xl py-2.5 pr-10 pl-4 text-sm outline-none"
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                />
+              </div>
+              {/* في جلسة بمئات الأصناف، معرفة ما تبقّى كانت تتطلّب تمريرًا يدويًا */}
+              {isDraft && (
+                <button
+                  onClick={() => setOnlyUncounted(v => !v)}
+                  aria-pressed={onlyUncounted}
+                  className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 ${
+                    onlyUncounted
+                      ? 'bg-blue-600 text-white border border-blue-600'
+                      : 'hover:opacity-80'
+                  }`}
+                  style={onlyUncounted ? {} : { background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}
+                >
+                  <PackageSearch className="w-3.5 h-3.5" />
+                  غير المعدود فقط
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] tabular-nums ${onlyUncounted ? 'bg-white/20' : 'bg-slate-500/10'}`}>
+                    {stats.total - stats.counted}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Items table */}
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
               <div className="max-h-[55vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0" style={{ background: 'var(--bg-card)' }}>
+                  {/* حدّ سفلي للرأس اللاصق — كانت الصفوف تمرّ تحته بلا فاصل */}
+                  <thead className="sticky top-0 z-10"
+                    style={{ background: 'var(--bg-card)', boxShadow: '0 1px 0 var(--border-color)' }}>
                     <tr style={{ color: 'var(--text-muted)' }}>
                       <th className="text-right px-4 py-3 text-xs font-bold">المنتج</th>
                       <th className="text-center px-4 py-3 text-xs font-bold">المسجّل</th>
@@ -362,13 +468,27 @@ export default function StocktakePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredItems.map(item => {
+                    {filteredItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-12 text-center">
+                          <PackageSearch className="w-9 h-9 mx-auto mb-2 opacity-25" style={{ color: 'var(--text-muted)' }} />
+                          <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+                            {onlyUncounted ? 'تم عدّ كل الأصناف المطابقة' : 'لا توجد أصناف مطابقة للبحث'}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : filteredItems.map(item => {
                       const raw = counts[item.id] ?? ''
                       const diff = raw === '' ? null : Number(raw) - item.expectedQty
+                      const counted = raw !== ''
                       return (
-                        <tr key={item.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                        <tr key={item.id}
+                          // الصفّ غير المعدود يبقى محايدًا، والمعدود يخفت قليلًا،
+                          // وذو الفرق يُوسَم بشريط جانبي ملوّن ⇒ الفروقات تُلتقط بالمسح البصري
+                          className={`transition-colors ${counted ? 'bg-slate-500/[0.03]' : ''} ${diff !== null && diff !== 0 ? 'shadow-[inset_3px_0_0_0_currentColor] text-amber-400' : ''}`}
+                          style={{ borderTop: '1px solid var(--border-color)' }}>
                           <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{item.productName}</td>
-                          <td className="px-4 py-2.5 text-center" style={{ color: 'var(--text-muted)' }}>{item.expectedQty}</td>
+                          <td className="px-4 py-2.5 text-center tabular-nums" style={{ color: 'var(--text-muted)' }}>{item.expectedQty}</td>
                           <td className="px-4 py-2.5 text-center">
                             {isDraft ? (
                               <input
@@ -376,21 +496,32 @@ export default function StocktakePage() {
                                 min={0}
                                 value={raw}
                                 onChange={e => setCounts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                className="w-24 text-center rounded-lg py-1.5 text-sm outline-none"
-                                style={{ background: 'var(--bg-hover, rgba(148,163,184,0.08))', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                                className={`w-24 text-center rounded-lg py-1.5 text-sm font-bold outline-none transition-colors focus:border-blue-400 ${counted ? '' : 'border-dashed'}`}
+                                style={{
+                                  background: 'var(--bg-hover, rgba(148,163,184,0.08))',
+                                  border: '1px solid var(--border-color)',
+                                  color: 'var(--text-primary)',
+                                }}
                                 placeholder="—"
                               />
                             ) : (
-                              <span style={{ color: 'var(--text-primary)' }}>{item.countedQty ?? '—'}</span>
+                              <span className="tabular-nums" style={{ color: 'var(--text-primary)' }}>{item.countedQty ?? '—'}</span>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-center font-bold">
+                          <td className="px-4 py-2.5 text-center">
                             {diff === null ? (
                               <span style={{ color: 'var(--text-muted)' }}>—</span>
                             ) : diff === 0 ? (
-                              <span className="text-emerald-500">مطابق</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3" />
+                                مطابق
+                              </span>
                             ) : (
-                              <span className={diff > 0 ? 'text-blue-500' : 'text-red-500'}>
+                              <span className={`inline-block text-[11px] font-black px-2 py-0.5 rounded-full border tabular-nums ${
+                                diff > 0
+                                  ? 'bg-blue-50 text-blue-600 border-blue-200'
+                                  : 'bg-red-50 text-red-600 border-red-200'
+                              }`}>
                                 {diff > 0 ? `+${diff}` : diff}
                               </span>
                             )}

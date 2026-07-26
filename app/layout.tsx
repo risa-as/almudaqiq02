@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 export const metadata: Metadata = {
   title: "نظام المدقق",
@@ -41,7 +42,7 @@ export default function RootLayout({
         <Toaster position="top-center" toastOptions={{
           style: { fontFamily: 'inherit', fontWeight: 'bold' }
         }} />
-        {children}
+        <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
   );

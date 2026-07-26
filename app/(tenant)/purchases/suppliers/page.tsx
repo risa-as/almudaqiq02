@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Users, Phone, MapPin, Plus, Search, FileText, Printer, FileSpreadsheet, Edit, Trash2, DollarSign, RefreshCw, Package, Loader2, Wallet, AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
@@ -71,10 +73,8 @@ export default function SuppliersPage() {
     const router = useRouter();
     const { selectedBranch, loading: branchLoading } = useBranch();
     const { confirm, dialog } = useConfirm();
+    const queryClient = useQueryClient();
 
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-    const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
-    const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -103,8 +103,6 @@ export default function SuppliersPage() {
     // Return Modal (new, inventory-linked)
     const [showReturnModal, setShowReturnModal] = useState(false);
     const [returningSupplier, setReturningSupplier] = useState<Supplier | null>(null);
-    const [supplierBatches, setSupplierBatches] = useState<BatchItem[]>([]);
-    const [batchesLoading, setBatchesLoading] = useState(false);
     const [selectedBatchId, setSelectedBatchId] = useState('');
     const [returnQty, setReturnQty] = useState('');
     const [returnDescription, setReturnDescription] = useState('');
@@ -122,53 +120,41 @@ export default function SuppliersPage() {
     const [removingId, setRemovingId] = useState<string | null>(null);   // row playing the exit animation
     const [debtFilter, setDebtFilter] = useState<'ALL' | 'DEBT' | 'CLEAR'>('ALL');
 
-    useEffect(() => {
-        if (branchLoading) return;
-        fetchSuppliers();
-        // Depend on the stable branch id (string), not the selectedBranch object.
-        // BranchContext replaces that object with a fresh reference for the same
-        // branch (cache → API), which previously re-fired this effect ~3s later
-        // and re-loaded the page. The id is identical across both, so no refetch.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedBranch?.id, branchLoading]);
+    const bId = selectedBranch?.id ?? 'all';
+    const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
 
-    useEffect(() => {
+    const suppliersQuery = useQuery({
+        queryKey: ['suppliers', bId],
+        queryFn: () => fetchJson<Supplier[]>(`/api/suppliers${branchQuery}`),
+        enabled: !branchLoading,
+    });
+    const suppliers = suppliersQuery.data ?? [];
+    const loading = suppliersQuery.isPending;
+
+    const filteredSuppliers = useMemo(() => {
         const lowerSearch = searchTerm.toLowerCase();
-        setFilteredSuppliers(
-            suppliers.filter(s => {
-                const matchesSearch =
-                    s.name.toLowerCase().includes(lowerSearch) ||
-                    s.phone?.includes(lowerSearch) ||
-                    s.id.includes(searchTerm);
-                const bal = Number(s.balance);
-                const matchesDebt =
-                    debtFilter === 'ALL' ? true :
-                    debtFilter === 'DEBT' ? bal > 0 :
-                    bal <= 0;
-                return matchesSearch && matchesDebt;
-            })
-        );
+        return suppliers.filter(s => {
+            const matchesSearch =
+                s.name.toLowerCase().includes(lowerSearch) ||
+                s.phone?.includes(lowerSearch) ||
+                s.id.includes(searchTerm);
+            const bal = Number(s.balance);
+            const matchesDebt =
+                debtFilter === 'ALL' ? true :
+                debtFilter === 'DEBT' ? bal > 0 :
+                bal <= 0;
+            return matchesSearch && matchesDebt;
+        });
     }, [searchTerm, suppliers, debtFilter]);
 
-    // Latest-request guard: a slow fetch for a previous branch must never overwrite
-    // the result of a newer fetch (race condition on branch switch).
-    const fetchSeqRef = useRef(0);
-    const fetchSuppliers = async () => {
-        const seq = ++fetchSeqRef.current;
-        try {
-            setLoading(true);
-            const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
-            const res = await fetch(`/api/suppliers${branchQuery}`, { cache: 'no-store' });
-            if (res.ok) {
-                const data = await res.json();
-                if (seq === fetchSeqRef.current) {
-                    setSuppliers(data);
-                    setFilteredSuppliers(data);
-                }
-            }
-        } catch (err) { console.error(err); }
-        finally { if (seq === fetchSeqRef.current) setLoading(false); }
-    };
+    const batchBranchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `&branchId=${selectedBranch.id}` : '';
+    const batchesQuery = useQuery({
+        queryKey: ['supplier-batches', returningSupplier?.id, bId],
+        queryFn: () => fetchJson<BatchItem[]>(`/api/inventory/batches?supplierId=${returningSupplier!.id}${batchBranchQuery}`),
+        enabled: showReturnModal && !!returningSupplier,
+    });
+    const supplierBatches = (batchesQuery.data ?? []).filter((b: BatchItem) => b.quantity > 0);
+    const batchesLoading = batchesQuery.isPending;
 
     const handleSaveSupplier = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -193,7 +179,8 @@ export default function SuppliersPage() {
             if (res.ok) {
                 setShowModal(false);
                 resetForm();
-                fetchSuppliers();
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-ledger'] });
                 toast.success(editingId ? 'تم تحديث بيانات المورد' : 'تم إضافة المورد بنجاح');
             } else {
                 const d = await res.json();
@@ -251,30 +238,19 @@ export default function SuppliersPage() {
             if (res.ok) {
                 toast.success('تم تسجيل الدين بنجاح وتحديث رصيد المورد');
                 setShowDebtModal(false);
-                fetchSuppliers();
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-ledger'] });
             } else { toast.error(data.error || 'فشل تسجيل الدين'); }
         } catch { toast.error('حدث خطأ بالاتصال'); }
         finally { setIsDebtSaving(false); }
     };
 
-    const openReturnModal = async (supplier: Supplier) => {
+    const openReturnModal = (supplier: Supplier) => {
         setReturningSupplier(supplier);
         setSelectedBatchId('');
         setReturnQty('');
         setReturnDescription('');
         setShowReturnModal(true);
-
-        // Fetch batches for this supplier
-        try {
-            setBatchesLoading(true);
-            const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `&branchId=${selectedBranch.id}` : '';
-            const res = await fetch(`/api/inventory/batches?supplierId=${supplier.id}${branchQuery}`);
-            if (res.ok) {
-                const data = await res.json();
-                setSupplierBatches(data.filter((b: BatchItem) => b.quantity > 0));
-            }
-        } catch { toast.error('تعذر تحميل بيانات المخزون'); }
-        finally { setBatchesLoading(false); }
     };
 
     const handlePayment = async (e: React.FormEvent) => {
@@ -291,7 +267,8 @@ export default function SuppliersPage() {
             if (res.ok) {
                 toast.success('تم تسجيل الدفعة بنجاح وتحديث الرصيد');
                 setShowPayModal(false);
-                fetchSuppliers();
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-ledger'] });
             } else { toast.error(data.error || 'فشل تسجيل العملية'); }
         } catch { toast.error('حدث خطأ بالاتصال'); }
         finally { setIsPaySaving(false); }
@@ -314,7 +291,8 @@ export default function SuppliersPage() {
                 setShowAdjustModal(false);
                 setInitialBalance(String(confirmedBalance));
                 setAdjustingSupplier(prev => prev ? { ...prev, balance: confirmedBalance } : null);
-                fetchSuppliers();
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-ledger'] });
             } else { toast.error(data.error || 'فشل تسوية الرصيد'); }
         } catch { toast.error('حدث خطأ بالاتصال'); }
         finally { setIsAdjusting(false); }
@@ -348,7 +326,10 @@ export default function SuppliersPage() {
             if (res.ok) {
                 toast.success('تم تسجيل المرتجع وخصم المخزون بنجاح ✓');
                 setShowReturnModal(false);
-                fetchSuppliers();
+                queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-ledger'] });
+                queryClient.invalidateQueries({ queryKey: ['supplier-batches'] });
+                queryClient.invalidateQueries({ queryKey: ['batches'] });
             } else { toast.error(data.error || 'فشل تسجيل المرتجع'); }
         } catch { toast.error('حدث خطأ بالاتصال'); }
         finally { setIsReturning(false); }
@@ -365,13 +346,12 @@ export default function SuppliersPage() {
             const res = await fetch(`/api/suppliers/${supplierId}`, { method: 'DELETE' });
             const data = await res.json();
             if (res.ok) {
-                // Play the slide-out/fade exit animation, then drop the row locally
-                // (smoother than a full refetch) and surface the toast on completion.
+                // Play the slide-out/fade exit animation, then drop the row
+                // (via cache invalidation) and surface the toast on completion.
                 setDeletingId(null);
                 setRemovingId(supplierId);
-                setTimeout(() => {
-                    setSuppliers(prev => prev.filter(s => s.id !== supplierId));
-                    setFilteredSuppliers(prev => prev.filter(s => s.id !== supplierId));
+                setTimeout(async () => {
+                    await queryClient.invalidateQueries({ queryKey: ['suppliers'] });
                     setRemovingId(null);
                     toast.success('تم حذف المورد بنجاح');
                 }, 480);   // matches the CSS animation duration

@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useRef, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJsonOr } from "@/lib/query/fetcher";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Box,
@@ -44,17 +46,31 @@ export default function NewProductPage() {
   const [expiryDate, setExpiryDate] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [categories, setCategories] = useState<
-    { id: number; name: string; parentId: number | null }[]
-  >([]);
+  const queryClient = useQueryClient();
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () =>
+      fetchJsonOr<{ id: number; name: string; parentId: number | null }[]>(
+        "/api/categories",
+        [],
+      ),
+  });
+  const categories = Array.isArray(categoriesQuery.data)
+    ? categoriesQuery.data
+    : [];
   const [categoryId, setCategoryId] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
   const [categoryOpen, setCategoryOpen] = useState(false);
   const categoryRef = useRef<HTMLDivElement>(null);
 
-  const [suppliers, setSuppliers] = useState<{ id: number; name: string }[]>(
-    [],
-  );
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () =>
+      fetchJsonOr<{ id: number; name: string }[]>("/api/suppliers", []),
+  });
+  const suppliers = Array.isArray(suppliersQuery.data)
+    ? suppliersQuery.data
+    : [];
   const [supplierId, setSupplierId] = useState("");
   const [isPrepaid, setIsPrepaid] = useState(false);
 
@@ -78,17 +94,6 @@ export default function NewProductPage() {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/categories")
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setCategories(d))
-      .catch(() => {});
-    fetch("/api/suppliers")
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setSuppliers(d))
-      .catch(() => {});
   }, []);
 
   const addUnit = () =>
@@ -140,6 +145,9 @@ export default function NewProductPage() {
       });
       if (!res.ok) throw new Error("فشل إنشاء المنتج");
       toast.success("تم إنشاء المنتج بنجاح!");
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-expiry"] });
       router.push("/inventory");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "حدث خطأ");

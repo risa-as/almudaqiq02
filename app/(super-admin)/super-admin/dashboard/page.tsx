@@ -1,7 +1,8 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { Building2, Users, AlertTriangle, TrendingUp, CalendarDays, Key } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 import { CardSkeleton } from '@/components/loading/Skeletons'
@@ -39,15 +40,12 @@ function StatCard({ title, value, sub, icon: Icon, colorClass, bgClass }: {
 
 export default function SuperAdminDashboard() {
   usePageTitle('لوحة تحكم المشرف');
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch('/api/super-admin/stats')
-      .then(r => r.json())
-      .then(setStats)
-      .finally(() => setLoading(false))
-  }, [])
+  const statsQuery = useQuery({
+    queryKey: ['sa-dashboard'],
+    queryFn: () => fetchJson<Stats>('/api/super-admin/stats'),
+  })
+  const stats = statsQuery.data ?? null
+  const loading = statsQuery.isPending
 
   if (loading) {
     return (

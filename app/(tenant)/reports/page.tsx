@@ -1,7 +1,9 @@
 "use client";
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/query/fetcher";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -120,22 +122,18 @@ function GrowthChip({ pct }: { pct: number | null }) {
 export default function ReportsDashboard() {
   usePageTitle('التقارير');
   const { selectedBranch, loading: branchLoading } = useBranch();
-  const [data, setData] = useState<DashData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (branchLoading) return;
-    setLoading(true);
-    const q =
-      selectedBranch?.id && selectedBranch.id !== "all"
-        ? `?branchId=${selectedBranch.id}`
-        : "";
-    fetch(`/api/reports/dashboard${q}`)
-      .then((r) => r.json())
-      .then((d) => setData(d))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [selectedBranch, branchLoading]);
+  const bId = selectedBranch?.id ?? "all";
+  const q =
+    selectedBranch?.id && selectedBranch.id !== "all"
+      ? `?branchId=${selectedBranch.id}`
+      : "";
+  const dashQuery = useQuery({
+    queryKey: ["report-dashboard", bId],
+    queryFn: () => fetchJson<DashData>(`/api/reports/dashboard${q}`),
+    enabled: !branchLoading,
+  });
+  const data = dashQuery.data ?? null;
+  const loading = branchLoading || dashQuery.isPending;
 
   if (loading)
     return (

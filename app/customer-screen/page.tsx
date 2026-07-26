@@ -189,7 +189,7 @@ export default function PriceCheckerPage() {
                 <div className="flex items-center gap-4">
                     <img
                         src="/logo.png" alt="logo"
-                        className="h-12 object-contain opacity-90"
+                        className="h-12 object-contain opacity-90 rounded-[10px]"
                         onError={e => e.currentTarget.style.display = 'none'}
                     />
                     <div>
@@ -381,7 +381,7 @@ export default function PriceCheckerPage() {
                         إعادة تعيين خلال {countdown} ثانية
                     </p>
                 )}
-                <p className="text-white/20 text-xs font-medium">Albayan ERP</p>
+                <p className="text-white/20 text-xs font-medium">Almudaqiq ERP</p>
             </div>
         </div>
     );

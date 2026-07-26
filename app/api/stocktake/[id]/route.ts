@@ -32,6 +32,28 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     orderBy: { productName: 'asc' },
   })
 
+  // ── Category + unit price for the count sheet ──────────────────────────────
+  // StocktakeItem only snapshots productName/expectedQty, so the grouping
+  // category and the price come from the live Product. A product deleted since
+  // the snapshot (or one with no units) yields null/0 rather than dropping the
+  // row — the snapshot is what keeps the session auditable.
+  const products = await prisma.product.findMany({
+    where: { id: { in: items.map(i => i.productId) }, tenantId: auth.tenantId },
+    select: {
+      id: true,
+      category: { select: { name: true } },
+      units: { select: { price: true, conversionFactor: true } },
+    },
+  })
+  const infoMap = new Map(products.map(p => {
+    // expectedQty is in base units → the smallest unit's price is the match
+    const baseUnit = p.units.reduce<(typeof p.units)[number] | null>(
+      (best, u) => (!best || u.conversionFactor < best.conversionFactor ? u : best),
+      null,
+    )
+    return [p.id, { categoryName: p.category?.name ?? null, unitPrice: Number(baseUnit?.price ?? 0) }]
+  }))
+
   return NextResponse.json({
     id:          session.id,
     branchId:    session.branchId,
@@ -40,13 +62,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     createdAt:   session.createdAt,
     completedAt: session.completedAt,
     items: items.map(i => ({
-      id:          i.id,
-      productId:   i.productId,
-      productName: i.productName,
-      expectedQty: i.expectedQty,
-      countedQty:  i.countedQty,
-      note:        i.note,
-      difference:  i.countedQty === null ? null : i.countedQty - i.expectedQty,
+      id:           i.id,
+      productId:    i.productId,
+      productName:  i.productName,
+      expectedQty:  i.expectedQty,
+      countedQty:   i.countedQty,
+      note:         i.note,
+      difference:   i.countedQty === null ? null : i.countedQty - i.expectedQty,
+      categoryName: infoMap.get(i.productId)?.categoryName ?? null,
+      unitPrice:    infoMap.get(i.productId)?.unitPrice ?? 0,
     })),
   })
 }

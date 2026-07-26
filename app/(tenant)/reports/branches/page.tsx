@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import {
   GitCompare, TrendingUp, TrendingDown, DollarSign,
   ShoppingBag, Trophy, Lock, RotateCcw,
@@ -41,21 +43,18 @@ function MiniPayBar({ cash, card, credit }: { cash: number; card: number; credit
 export default function BranchComparisonPage() {
   usePageTitle('تقرير الفروع');
   const { isOwner } = useBranch()
-  const [data,      setData]      = useState<ApiData | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [initialized, setInitialized] = useState(false);
   const [startDate, setStartDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate,   setEndDate]   = useState(() => new Date().toISOString().split('T')[0])
   const [metric,    setMetric]    = useState<'netRevenue'|'netProfit'|'saleCount'|'avgTicket'>('netRevenue')
 
-  useEffect(() => {
-    setLoading(true)
-    fetch(`/api/reports/branches/comparison?startDate=${startDate}&endDate=${endDate}`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(console.error)
-      .finally(() => { setLoading(false); setInitialized(true); })
-  }, [startDate, endDate])
+  const comparisonQuery = useQuery({
+    queryKey: ['report-branches', startDate, endDate],
+    queryFn: () => fetchJson<ApiData>(`/api/reports/branches/comparison?startDate=${startDate}&endDate=${endDate}`),
+    placeholderData: (prev) => prev,
+  })
+  const data = comparisonQuery.data ?? null
+  const loading = comparisonQuery.isFetching
+  const initialized = !comparisonQuery.isPending
 
   const handleDateChange = (s: string, e: string) => { setStartDate(s); setEndDate(e); }
 

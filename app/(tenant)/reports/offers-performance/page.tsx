@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import {
     Tag, TrendingUp, DollarSign, Percent, Zap, Search,
     Download, XCircle, Clock, CheckCircle2, PauseCircle, CalendarClock,
@@ -61,23 +63,25 @@ function StatusBadge({ status }: { status: OfferRow['status'] }) {
 export default function OffersPerformancePage() {
     usePageTitle('أداء العروض');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [data,        setData]        = useState<{ summary: Summary; offers: OfferRow[] } | null>(null);
-    const [loading,     setLoading]     = useState(true);
-    const [initialized, setInitialized] = useState(false);
     const [search,      setSearch]      = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const [startDate,   setStartDate]   = useState(() => daysAgo(29));
     const [endDate,     setEndDate]     = useState(() => today());
 
-    useEffect(() => {
-        if (branchLoading) return;
-        setLoading(true);
-        const params = new URLSearchParams({ startDate, endDate });
-        if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-        fetch(`/api/reports/offers-performance?${params}`)
-            .then(r => r.json()).then(setData).catch(console.error)
-            .finally(() => { setLoading(false); setInitialized(true); });
-    }, [selectedBranch, branchLoading, startDate, endDate]);
+    const bId = selectedBranch?.id ?? 'all';
+    const offersQuery = useQuery({
+        queryKey: ['report-offers-performance', bId, startDate, endDate],
+        queryFn: () => {
+            const params = new URLSearchParams({ startDate, endDate });
+            if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
+            return fetchJson<{ summary: Summary; offers: OfferRow[] }>(`/api/reports/offers-performance?${params}`);
+        },
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const data = offersQuery.data ?? null;
+    const loading = offersQuery.isFetching;
+    const initialized = !(branchLoading || offersQuery.isPending);
 
     const handleDateChange = (s: string, e: string) => { setStartDate(s); setEndDate(e); };
 

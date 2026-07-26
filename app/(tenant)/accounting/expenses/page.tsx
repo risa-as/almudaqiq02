@@ -2,12 +2,13 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { useConfirm } from '@/hooks/useConfirm';
-import { Plus, Trash2, DollarSign, TrendingDown, Edit, Search, Download, Loader2, X, Hash, Layers, Calendar } from 'lucide-react';
+import { Plus, Trash2, Wallet, Receipt, TrendingDown, Edit, Search, Download, Loader2, X, Hash, Layers, Calendar, type LucideIcon } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 import { exportToCSV } from '@/lib/exportExcel';
 import PageHeader from '@/components/ui/PageHeader';
-import StatCard from '@/components/ui/StatCard';
 import { useBranch } from '@/contexts/BranchContext';
 
 import toast from 'react-hot-toast';
@@ -33,12 +34,22 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 const colorFor = (cat: string) => CATEGORY_COLORS[cat] ?? '#64748b';
 
+// KPI tile shape — `valueColor` is optional, so the array needs an explicit type
+interface StatTile {
+    key: string;
+    label: string;
+    value: string | number;
+    icon: LucideIcon;
+    tint: string;
+    gradient: string;
+    valueColor?: string;
+    footer: React.ReactNode;
+}
+
 export default function ExpensesPage() {
     usePageTitle('المصاريف');
     const { confirm, dialog } = useConfirm();
-    const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
+    const queryClient = useQueryClient();
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [removingId, setRemovingId] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,6 +59,9 @@ export default function ExpensesPage() {
     // Filter State
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    // Applied date range — the range actually used for fetching (set on submit / period shortcut,
+    // NOT on every date keystroke, matching the old behavior)
+    const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
     const [searchText, setSearchText] = useState('');
     const [filterCategory, setFilterCategory] = useState('ALL');
 
@@ -59,7 +73,7 @@ export default function ExpensesPage() {
     const [description, setDescription] = useState('');
     const [expenseDate, setExpenseDate] = useState('');
 
-    // Fetch on mount + branch change only (NOT on every date keystroke)
+    // Reset dates on mount + branch change only (NOT on every date keystroke)
     useEffect(() => {
         if (branchLoading) return;
         const now = new Date();
@@ -67,30 +81,31 @@ export default function ExpensesPage() {
         const end = new Date().toISOString().split('T')[0];
         setStartDate(start);
         setEndDate(end);
-        fetchExpenses(start, end);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setApplied({ start, end });
     }, [selectedBranch, branchLoading]);
 
-    const fetchExpenses = async (start?: string, end?: string) => {
-        setLoading(true);
-        try {
-            const s = start || startDate;
-            const e = end || endDate;
-            const branchQuery = selectedBranch?.id ? `&branchId=${selectedBranch.id}` : '';
-            const res = await fetch(`/api/expenses?period=custom&startDate=${s}&endDate=${e}${branchQuery}`);
-            if (res.ok) setExpenses(await res.json());
-        } catch (error) {
-            console.error(error);
+    const bId = selectedBranch?.id ?? 'all';
+    const branchQuery = selectedBranch?.id ? `&branchId=${selectedBranch.id}` : '';
+    const expensesQuery = useQuery({
+        queryKey: ['expenses', bId, applied?.start, applied?.end],
+        queryFn: () => fetchJson<Expense[]>(`/api/expenses?period=custom&startDate=${applied!.start}&endDate=${applied!.end}${branchQuery}`),
+        enabled: !branchLoading && !!applied,
+        placeholderData: (prev) => prev,
+    });
+    const expenses = expensesQuery.data ?? [];
+    const loading = expensesQuery.isFetching;
+    const initialized = !expensesQuery.isPending;
+
+    useEffect(() => {
+        if (expensesQuery.isError) {
+            console.error(expensesQuery.error);
             toast.error('تعذر تحميل المصروفات');
-        } finally {
-            setLoading(false);
-            setInitialized(true);
         }
-    };
+    }, [expensesQuery.isError, expensesQuery.error]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        fetchExpenses();
+        setApplied({ start: startDate, end: endDate });
     };
 
     // Quick period shortcuts
@@ -110,7 +125,7 @@ export default function ExpensesPage() {
         const en = end.toISOString().split('T')[0];
         setStartDate(s);
         setEndDate(en);
-        fetchExpenses(s, en);
+        setApplied({ start: s, end: en });
     };
 
     const openModal = (expense?: Expense) => {
@@ -154,15 +169,13 @@ export default function ExpensesPage() {
             });
 
             if (res.ok) {
-                const savedItem = await res.json();
                 if (editId) {
-                    setExpenses(expenses.map(ex => ex.id === editId ? savedItem : ex));
                     toast.success('تم تعديل المصروف بنجاح ✅');
                 } else {
-                    setExpenses([savedItem, ...expenses]);
                     toast.success('تم تسجيل المصروف بنجاح ✅');
                 }
                 setIsModalOpen(false);
+                queryClient.invalidateQueries({ queryKey: ['expenses'] });
             } else {
                 const err = await res.json().catch(() => ({}));
                 toast.error(`فشل الحفظ: ${err.error || 'تحقق من البيانات'}`);
@@ -182,8 +195,8 @@ export default function ExpensesPage() {
             if (res.ok) {
                 setDeletingId(null);
                 setRemovingId(id);
-                setTimeout(() => {
-                    setExpenses(prev => prev.filter(e => e.id !== id));
+                setTimeout(async () => {
+                    await queryClient.invalidateQueries({ queryKey: ['expenses'] });
                     setRemovingId(null);
                     toast.success('تم حذف المصروف بنجاح');
                 }, 480);
@@ -212,19 +225,25 @@ export default function ExpensesPage() {
     const expenseCount = filteredExpenses.length;
     const avgExpense = expenseCount > 0 ? totalExpenses / expenseCount : 0;
 
-    // Category breakdown
+    // Category breakdown — total + count per category, ranked by spend
     const breakdown = useMemo(() => {
-        const map: Record<string, number> = {};
+        const map: Record<string, { total: number; count: number }> = {};
         for (const e of filteredExpenses) {
             const cat = e.category || 'أخرى';
-            map[cat] = (map[cat] || 0) + Number(e.amount);
+            if (!map[cat]) map[cat] = { total: 0, count: 0 };
+            map[cat].total += Number(e.amount);
+            map[cat].count += 1;
         }
         return Object.entries(map)
-            .map(([cat, total]) => ({ cat, total, pct: totalExpenses > 0 ? (total / totalExpenses) * 100 : 0 }))
+            .map(([cat, { total, count }]) => ({ cat, total, count, pct: totalExpenses > 0 ? (total / totalExpenses) * 100 : 0 }))
             .sort((a, b) => b.total - a.total);
     }, [filteredExpenses, totalExpenses]);
 
-    const topCategory = breakdown[0]?.cat ?? '—';
+    const topBreak = breakdown[0];
+    const topCategory = topBreak?.cat ?? '—';
+
+    // "2026-07-13" → "13/07" — compact range label for the total card
+    const shortDate = (iso?: string) => (iso ? iso.split('-').reverse().slice(0, 2).join('/') : '—');
 
     if (!initialized) return (
         <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-screen" style={{ background: 'var(--bg-page)' }} dir="rtl">
@@ -344,31 +363,106 @@ export default function ExpensesPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    label="إجمالي الفترة"
-                    value={formatCurrency(totalExpenses)}
-                    icon={DollarSign}
-                    gradient="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
-                    valueColor="var(--value-negative)"
-                />
-                <StatCard
-                    label="عدد المصروفات"
-                    value={expenseCount}
-                    icon={Hash}
-                    gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
-                />
-                <StatCard
-                    label="متوسط المصروف"
-                    value={formatCurrency(avgExpense)}
-                    icon={TrendingDown}
-                    gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
-                />
-                <StatCard
-                    label="أعلى تصنيف إنفاقاً"
-                    value={topCategory}
-                    icon={Layers}
-                    gradient="linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)"
-                />
+                {([
+                    {
+                        key: 'total',
+                        label: 'إجمالي الفترة',
+                        value: formatCurrency(totalExpenses),
+                        icon: Wallet,
+                        tint: '#ef4444',
+                        gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                        valueColor: 'var(--value-negative)',
+                        footer: (
+                            <>
+                                <Calendar size={12} style={{ color: 'var(--text-muted)' }} className="flex-shrink-0" />
+                                <span className="text-[11px] font-bold tabular-nums" style={{ color: 'var(--text-muted)' }} dir="ltr">
+                                    {shortDate(applied?.start)} — {shortDate(applied?.end)}
+                                </span>
+                            </>
+                        ),
+                    },
+                    {
+                        key: 'count',
+                        label: 'عدد المصروفات',
+                        value: expenseCount,
+                        icon: Hash,
+                        tint: '#094B9F',
+                        gradient: 'linear-gradient(135deg, #094B9F 0%, #063A8A 100%)',
+                        footer: <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>معاملة خلال الفترة</span>,
+                    },
+                    {
+                        key: 'avg',
+                        label: 'متوسط المصروف',
+                        value: formatCurrency(avgExpense),
+                        icon: TrendingDown,
+                        tint: '#f59e0b',
+                        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        footer: <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>لكل مصروف مسجّل</span>,
+                    },
+                    {
+                        key: 'top',
+                        label: 'أعلى تصنيف إنفاقاً',
+                        value: topCategory,
+                        icon: Layers,
+                        tint: '#8b5cf6',
+                        gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                        footer: topBreak ? (
+                            <>
+                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colorFor(topBreak.cat) }} />
+                                <span className="text-[11px] font-black tabular-nums" style={{ color: colorFor(topBreak.cat) }}>{topBreak.pct.toFixed(0)}%</span>
+                                <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>من إجمالي الإنفاق</span>
+                            </>
+                        ) : (
+                            <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>لا توجد بيانات</span>
+                        ),
+                    },
+                ] as StatTile[]).map(card => (
+                    <div
+                        key={card.key}
+                        className="relative overflow-hidden p-5 rounded-[var(--border-radius-card)] transition-all duration-200 hover:-translate-y-0.5"
+                        style={{
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-color)',
+                            boxShadow: 'var(--shadow-card)',
+                        }}
+                    >
+                        {/* Top accent — direction-neutral, safe under RTL */}
+                        <div className="absolute top-0 inset-x-0 h-[3px]" style={{ background: card.gradient }} />
+                        {/* Tinted watermark */}
+                        <div
+                            className="absolute -top-8 -left-8 w-28 h-28 rounded-full pointer-events-none"
+                            style={{ background: card.tint, opacity: 0.06 }}
+                        />
+
+                        <div className="relative flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>{card.label}</p>
+                                <p
+                                    className="text-2xl font-black leading-none tabular-nums truncate"
+                                    style={{ color: card.valueColor ?? 'var(--text-primary)' }}
+                                    title={String(card.value)}
+                                >
+                                    {card.value}
+                                </p>
+                            </div>
+                            <div
+                                className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 relative overflow-hidden"
+                                style={{ background: card.gradient, boxShadow: `0 4px 14px ${card.tint}59` }}
+                            >
+                                <div className="absolute inset-0 opacity-25" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.6) 0%, transparent 50%)' }} />
+                                <card.icon size={20} className="text-white relative z-10" />
+                            </div>
+                        </div>
+
+                        {/* Contextual footer */}
+                        <div
+                            className="relative flex items-center gap-1.5 mt-4 pt-3"
+                            style={{ borderTop: '1px dashed var(--border-color)' }}
+                        >
+                            {card.footer}
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* Filters bar */}
@@ -452,117 +546,235 @@ export default function ExpensesPage() {
 
             {/* Category Breakdown */}
             {breakdown.length > 0 && (
-                <div className="bg-[var(--bg-card)] p-6 rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)]">
-                    <h3 className="font-black text-base mb-5 flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}>
-                            <Layers size={14} className="text-white" />
-                        </div>
-                        توزيع المصروفات حسب التصنيف
-                    </h3>
-                    {/* Stacked bar */}
-                    <div className="flex gap-0.5 h-3 rounded-full overflow-hidden mb-4">
-                        {breakdown.map(b => (
+                <div
+                    className="rounded-[var(--border-radius-card)] overflow-hidden"
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}
+                >
+                    {/* Header — title + running total */}
+                    <div className="flex items-center justify-between gap-4 px-6 pt-5 pb-4">
+                        <h3 className="font-black text-base flex items-center gap-2.5 min-w-0" style={{ color: 'var(--text-primary)' }}>
                             <div
-                                key={b.cat}
-                                style={{ width: `${b.pct}%`, background: colorFor(b.cat), transition: 'width 0.5s ease' }}
-                                title={`${b.cat}: ${b.pct.toFixed(0)}%`}
-                            />
-                        ))}
-                    </div>
-                    {/* Legend rows */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {breakdown.map(b => (
-                            <div key={b.cat} className="flex items-center justify-between gap-2 p-2.5 rounded-xl" style={{ background: 'var(--bg-page)' }}>
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: colorFor(b.cat) }} />
-                                    <span className="text-xs font-bold truncate" style={{ color: 'var(--text-primary)' }}>{b.cat}</span>
-                                    <span className="text-[10px] font-bold flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{b.pct.toFixed(0)}%</span>
-                                </div>
-                                <span className="text-xs font-black flex-shrink-0" style={{ color: colorFor(b.cat) }}>{formatCurrency(b.total)}</span>
+                                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', boxShadow: '0 4px 14px rgba(239,68,68,0.35)' }}
+                            >
+                                <Layers size={16} className="text-white" />
                             </div>
-                        ))}
+                            <span className="truncate">توزيع المصروفات حسب التصنيف</span>
+                        </h3>
+                        <div className="text-left flex-shrink-0">
+                            <p className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الإجمالي</p>
+                            <p className="text-sm font-black tabular-nums" style={{ color: 'var(--value-negative)' }}>{formatCurrency(totalExpenses)}</p>
+                        </div>
+                    </div>
+
+                    {/* Segmented distribution bar */}
+                    <div className="px-6">
+                        <div className="flex gap-0.5 h-3 rounded overflow-hidden" style={{ background: 'var(--bg-page)' }}>
+                            {breakdown.map(b => (
+                                <div
+                                    key={b.cat}
+                                    className="transition-all duration-500 hover:brightness-110"
+                                    style={{ width: `${b.pct}%`, background: colorFor(b.cat) }}
+                                    title={`${b.cat} — ${b.pct.toFixed(1)}% · ${formatCurrency(b.total)}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Ranked legend */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 px-4 py-4">
+                        {breakdown.map((b, i) => {
+                            const c = colorFor(b.cat);
+                            return (
+                                <div key={b.cat} className="flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors hover:bg-[var(--bg-page)]">
+                                    {/* Rank */}
+                                    <span
+                                        className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-black flex-shrink-0 tabular-nums"
+                                        style={{ background: `${c}1f`, color: c }}
+                                    >
+                                        {i + 1}
+                                    </span>
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: c }} />
+                                                <span className="text-xs font-bold truncate" style={{ color: 'var(--text-primary)' }}>{b.cat}</span>
+                                                <span className="text-[10px] font-bold flex-shrink-0 tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                                                    · {b.count} مصروف
+                                                </span>
+                                            </div>
+                                            <span className="text-xs font-black tabular-nums flex-shrink-0" style={{ color: c }}>{formatCurrency(b.total)}</span>
+                                        </div>
+                                        {/* Share bar — fills from the right under RTL.
+                                            Track is category-tinted so it stays visible over the row's hover bg. */}
+                                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${c}1f` }}>
+                                            <div
+                                                className="h-full rounded-full transition-all duration-500"
+                                                style={{ width: `${b.pct}%`, background: c }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <span className="text-xs font-black tabular-nums flex-shrink-0 w-9 text-left" style={{ color: 'var(--text-secondary)' }}>
+                                        {b.pct.toFixed(0)}%
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
 
             {/* List */}
-            <div className="bg-[var(--bg-card)] rounded-[var(--border-radius-card)] shadow-card border border-[var(--border-color)] overflow-hidden">
-                {/* Counter */}
-                <div className="px-6 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
-                    <p className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
-                        {filteredExpenses.length === expenses.length
-                            ? `${expenses.length} مصروف`
-                            : `يعرض ${filteredExpenses.length} من ${expenses.length} مصروف`}
-                    </p>
-                    {(searchText || filterCategory !== 'ALL') && (
-                        <button
-                            onClick={() => { setSearchText(''); setFilterCategory('ALL'); }}
-                            className="text-xs font-bold text-red-500 hover:text-red-600 hover:underline transition-colors"
+            <div
+                className="rounded-[var(--border-radius-card)] overflow-hidden"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-card)' }}
+            >
+                {/* Toolbar — title, counter, total */}
+                <div
+                    className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap"
+                    style={{ borderBottom: '1px solid var(--border-color)' }}
+                >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#0f172a,#334155)' }}
                         >
-                            إزالة الفلاتر
-                        </button>
-                    )}
+                            <Receipt size={16} className="text-white" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="font-black text-sm leading-tight" style={{ color: 'var(--text-primary)' }}>سجل المصروفات</h3>
+                            <p className="text-[11px] font-bold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                {filteredExpenses.length === expenses.length
+                                    ? `${expenses.length} مصروف`
+                                    : `يعرض ${filteredExpenses.length} من ${expenses.length} مصروف`}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {(searchText || filterCategory !== 'ALL') && (
+                            <button
+                                onClick={() => { setSearchText(''); setFilterCategory('ALL'); }}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold text-red-500 hover:text-red-600 transition-colors"
+                                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                            >
+                                <X size={12} /> إزالة الفلاتر
+                            </button>
+                        )}
+                        <div
+                            className="text-left px-3 py-1.5 rounded"
+                            style={{ background: 'var(--bg-page)', border: '1px solid var(--border-color)' }}
+                        >
+                            <p className="text-[10px] font-bold leading-none mb-1" style={{ color: 'var(--text-muted)' }}>المجموع المعروض</p>
+                            <p className="text-xs font-black tabular-nums leading-none" style={{ color: 'var(--value-negative)' }}>
+                                {formatCurrency(totalExpenses)}
+                            </p>
+                        </div>
+                    </div>
                 </div>
+
                 <div className="overflow-x-auto">
                 <table className="w-full text-right data-table">
-                    <thead className="bg-gray-50/50 border-b border-[var(--border-color)]">
+                    <thead>
                         <tr>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">العنوان</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التصنيف</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">المبلغ</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">التاريخ</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">إجراءات</th>
+                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">المصروف</th>
+                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">التصنيف</th>
+                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">المبلغ</th>
+                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider">التاريخ</th>
+                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-center">إجراءات</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody>
                         {filteredExpenses.map((expense) => {
                             const isRowDeleting = deletingId === expense.id;
                             const isRowRemoving = removingId === expense.id;
                             const cat = expense.category || 'أخرى';
+                            const c = colorFor(cat);
                             return (
-                            <tr key={expense.id} className={`group transition-colors ${isRowRemoving ? 'row-removing' : isRowDeleting ? 'row-deleting' : 'hover:bg-blue-50/50'}`}>
-                                <td className="px-6 py-4 font-medium text-gray-800">
-                                    {expense.title}
-                                    {expense.description && <p className="text-xs text-gray-400 font-normal mt-1">{expense.description}</p>}
+                            <tr key={expense.id} className={`transition-colors ${isRowRemoving ? 'row-removing' : isRowDeleting ? 'row-deleting' : ''}`}>
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                        <div
+                                            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                            style={{ background: `${c}14`, color: c, border: `1px solid ${c}29` }}
+                                        >
+                                            <Receipt size={16} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>{expense.title}</p>
+                                            {expense.description && (
+                                                <p className="text-xs font-medium mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                                                    {expense.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <span
-                                        className="px-2 py-1 rounded-md text-xs font-bold border"
-                                        style={{ background: `${colorFor(cat)}14`, color: colorFor(cat), borderColor: `${colorFor(cat)}33` }}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap"
+                                        style={{ background: `${c}14`, color: c, border: `1px solid ${c}33` }}
                                     >
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c }} />
                                         {cat}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 font-bold text-red-600">
-                                    -{formatCurrency(Number(expense.amount))}
+                                <td className="px-6 py-4">
+                                    <span className="text-sm font-black tabular-nums whitespace-nowrap" style={{ color: 'var(--value-negative)' }}>
+                                        −{formatCurrency(Number(expense.amount))}
+                                    </span>
                                 </td>
-                                <td className="px-6 py-4 text-sm text-gray-500" dir="ltr">
-                                    {new Date(expense.date).toLocaleDateString('en-GB')}
+                                <td className="px-6 py-4">
+                                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                        <Calendar size={14} className="flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
+                                        <span className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-secondary)' }} dir="ltr">
+                                            {new Date(expense.date).toLocaleDateString('en-GB')}
+                                        </span>
+                                    </span>
                                 </td>
-                                <td className="px-6 py-4 text-center">
-                                    <div className="flex gap-2 justify-center">
+                                <td className="px-6 py-4">
+                                    <div className="flex gap-1.5 justify-center">
                                         <button
                                             onClick={() => openModal(expense)}
-                                            className="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                                            className="p-2 rounded text-blue-500 hover:text-white hover:bg-blue-500 transition-colors"
+                                            style={{ background: 'rgba(59,130,246,0.08)' }}
                                             title="تعديل"
                                         >
-                                            <Edit size={18} />
+                                            <Edit size={16} />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(expense.id)}
                                             disabled={isRowDeleting || isRowRemoving}
-                                            className={`p-2 rounded-lg transition-colors disabled:cursor-not-allowed ${isRowDeleting ? 'text-red-600 bg-red-50' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                            className={`p-2 rounded transition-colors disabled:cursor-not-allowed ${isRowDeleting ? 'text-white bg-red-500' : 'text-red-500 hover:text-white hover:bg-red-500'}`}
+                                            style={isRowDeleting ? undefined : { background: 'rgba(239,68,68,0.08)' }}
                                             title="حذف"
                                         >
-                                            {isRowDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                            {isRowDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                                         </button>
                                     </div>
                                 </td>
                             </tr>
                         );})}
                         {filteredExpenses.length === 0 && !loading && (
-                            <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400">
-                                {expenses.length === 0 ? 'لا توجد مصروفات مسجلة في هذه الفترة' : 'لا توجد مصروفات مطابقة للبحث أو الفلتر'}
+                            <tr><td colSpan={5} className="px-6 py-16">
+                                <div className="flex flex-col items-center justify-center gap-3 text-center">
+                                    <div
+                                        className="w-14 h-14 rounded-lg flex items-center justify-center"
+                                        style={{ background: 'var(--bg-page)', border: '1px dashed var(--border-color)' }}
+                                    >
+                                        <Receipt size={24} style={{ color: 'var(--text-muted)' }} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-black" style={{ color: 'var(--text-secondary)' }}>
+                                            {expenses.length === 0 ? 'لا توجد مصروفات مسجلة في هذه الفترة' : 'لا توجد مصروفات مطابقة للبحث أو الفلتر'}
+                                        </p>
+                                        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                                            {expenses.length === 0 ? 'ابدأ بتسجيل أول مصروف لهذه الفترة' : 'جرّب تعديل الفلاتر أو توسيع نطاق التاريخ'}
+                                        </p>
+                                    </div>
+                                </div>
                             </td></tr>
                         )}
                     </tbody>

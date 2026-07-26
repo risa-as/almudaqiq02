@@ -1,8 +1,10 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson, fetchJsonOr } from '@/lib/query/fetcher'
 import {
   Plus, Search, Building2, CheckCircle, XCircle, Clock,
   SearchX, AlertTriangle, DollarSign, Edit2, X, Save,
@@ -67,14 +69,10 @@ function endDateDisplay(t: Tenant) {
 export default function TenantsPage() {
   usePageTitle('المستأجرون');
   const router = useRouter()
-  const [tenants, setTenants] = useState<Tenant[]>([])
-  const [total,   setTotal]   = useState(0)
+  const queryClient = useQueryClient()
   const [search,  setSearch]  = useState('')
   const [status,  setStatus]  = useState('')
   const [page,    setPage]    = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [stats,   setStats]   = useState<Stats | null>(null)
-  const [plans,   setPlans]   = useState<Plan[]>([])
 
   // Edit modal
   const [editOpen,   setEditOpen]   = useState(false)
@@ -100,25 +98,30 @@ export default function TenantsPage() {
   const [payError,  setPayError]  = useState('')
 
   // ── Data loading ────────────────────────────────────────────────────────────
-  const loadTenants = useCallback(() => {
-    setLoading(true)
-    const p = new URLSearchParams({ page: String(page), limit: '20', search, ...(status ? { status } : {}) })
-    fetch(`/api/super-admin/tenants?${p}`)
-      .then(r => r.json())
-      .then(d => { setTenants(d.tenants); setTotal(d.total) })
-      .finally(() => setLoading(false))
-  }, [page, search, status])
+  const tenantsQuery = useQuery({
+    queryKey: ['sa-tenants', page, search, status],
+    queryFn: () => {
+      const p = new URLSearchParams({ page: String(page), limit: '20', search, ...(status ? { status } : {}) })
+      return fetchJson<{ tenants: Tenant[]; total: number }>(`/api/super-admin/tenants?${p}`)
+    },
+    placeholderData: (prev) => prev,
+  })
+  const tenants = tenantsQuery.data?.tenants ?? []
+  const total   = tenantsQuery.data?.total ?? 0
+  const loading = tenantsQuery.isPending
 
-  useEffect(() => { loadTenants() }, [loadTenants])
+  const statsQuery = useQuery({
+    queryKey: ['sa-tenants', 'stats'],
+    queryFn: () => fetchJsonOr<Stats | null>('/api/super-admin/subscriptions/stats', null),
+  })
+  const stats = statsQuery.data ?? null
 
-  useEffect(() => {
-    fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
-    fetch('/api/super-admin/plans')
-      .then(r => r.json())
-      .then((rows: Array<{ id: string; name: string; features: string }>) =>
-        setPlans(rows.map(p => ({ id: p.id, name: p.name, features: parseFeatures(p.features) }))))
-      .catch(() => {})
-  }, [])
+  const plansQuery = useQuery({
+    queryKey: ['sa-plans'],
+    queryFn: () => fetchJson<Array<{ id: string; name: string; features: string }>>('/api/super-admin/plans'),
+    select: (rows) => rows.map(p => ({ id: p.id, name: p.name, features: parseFeatures(p.features) })),
+  })
+  const plans: Plan[] = plansQuery.data ?? []
 
   // ── Delete Modal ────────────────────────────────────────────────────────────
   function openDelete(t: Tenant) {
@@ -151,8 +154,7 @@ export default function TenantsPage() {
         return
       }
       setDelOpen(false)
-      loadTenants()
-      fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
+      await queryClient.invalidateQueries({ queryKey: ['sa-tenants'] })
     } catch { setDelError('تعذر الاتصال بالخادم — تحقق من الاتصال بالإنترنت') }
     finally  { setDelSaving(false) }
   }
@@ -194,8 +196,7 @@ export default function TenantsPage() {
         return
       }
       setEditOpen(false)
-      loadTenants()
-      fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
+      await queryClient.invalidateQueries({ queryKey: ['sa-tenants'] })
     } catch { setEditError('تعذر الاتصال بالخادم') }
     finally  { setEditSaving(false) }
   }
@@ -225,8 +226,7 @@ export default function TenantsPage() {
       }
       setPayOpen(false)
       router.refresh()
-      loadTenants()
-      fetch('/api/super-admin/subscriptions/stats').then(r => r.json()).then(setStats).catch(() => {})
+      await queryClient.invalidateQueries({ queryKey: ['sa-tenants'] })
     } catch { setPayError('تعذر الاتصال بالخادم') }
     finally  { setPaySaving(false) }
   }

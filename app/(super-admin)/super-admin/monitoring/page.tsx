@@ -1,7 +1,8 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import { Activity, AlertCircle, Database, RefreshCw, History, TrendingUp, BarChart2, Zap } from 'lucide-react'
 import { CardSkeleton } from '@/components/loading/Skeletons'
 import { PulseLoader } from '@/components/loading/PulseLoader'
@@ -26,14 +27,12 @@ interface MonitorData {
 
 export default function MonitoringPage() {
   usePageTitle('المراقبة');
-  const [data, setData]       = useState<MonitorData | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const load = () => {
-    setLoading(true)
-    fetch('/api/super-admin/monitoring').then(r => r.json()).then(setData).finally(() => setLoading(false))
-  }
-  useEffect(() => { load() }, [])
+  const monitoringQuery = useQuery({
+    queryKey: ['sa-monitoring'],
+    queryFn: () => fetchJson<MonitorData>('/api/super-admin/monitoring'),
+  })
+  const data    = monitoringQuery.data ?? null
+  const loading = monitoringQuery.isFetching
 
   // DB health color
   const dbColor = data
@@ -61,7 +60,7 @@ export default function MonitoringPage() {
           </div>
         </div>
         <button
-          onClick={load}
+          onClick={() => monitoringQuery.refetch()}
           disabled={loading}
           className="flex items-center gap-2 bg-white border border-slate-200 text-sm font-bold text-slate-700 px-5 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
         >

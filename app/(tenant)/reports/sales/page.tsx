@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJson, fetchJsonOr } from "@/lib/query/fetcher";
 import Link from "next/link";
 import {
   Calendar, Filter, User, Download, TrendingUp,
@@ -37,42 +39,33 @@ export default function SalesReportPage() {
   const [endDate, setEndDate]     = useState(() => new Date().toISOString().split('T')[0]);
   const [userId, setUserId]       = useState("ALL");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
-  const [data, setData]           = useState<SalesData | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [initialized, setInitialized] = useState(false);
-  const [users, setUsers]         = useState<{ id: number; username: string }[]>([]);
   const [page, setPage]           = useState(1);
-
-  useEffect(() => { fetchUsers(); }, []);
-
-  useEffect(() => {
-    if (branchLoading) return;
-    fetchSales();
-  }, [startDate, endDate, userId, selectedBranch, branchLoading]);
 
   useEffect(() => { setPage(1); }, [startDate, endDate, userId, paymentFilter]);
 
-  const fetchUsers = async () => {
-    const res = await fetch("/api/users");
-    if (res.ok) setUsers(await res.json());
-  };
+  const bId = selectedBranch?.id ?? "all";
 
-  const fetchSales = async () => {
-    setLoading(true);
-    try {
+  const usersQuery = useQuery({
+    queryKey: ["users"],
+    queryFn: () => fetchJsonOr<{ id: number; username: string }[]>("/api/users", []),
+  });
+  const users = usersQuery.data ?? [];
+
+  const salesQuery = useQuery({
+    queryKey: ["report-sales", bId, startDate, endDate, userId],
+    queryFn: () => {
       const params = new URLSearchParams({ period: 'custom', userId, startDate, endDate });
       if (selectedBranch?.id && selectedBranch.id !== "all") {
         params.append("branchId", selectedBranch.id);
       }
-      const res = await fetch(`/api/reports/sales?${params}`);
-      if (res.ok) setData(await res.json());
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-      setInitialized(true);
-    }
-  };
+      return fetchJson<SalesData>(`/api/reports/sales?${params}`);
+    },
+    enabled: !branchLoading,
+    placeholderData: (prev) => prev,
+  });
+  const data = salesQuery.data ?? null;
+  const loading = salesQuery.isFetching;
+  const initialized = !(branchLoading || salesQuery.isPending);
 
   const handleDateChange = (s: string, e: string) => { setStartDate(s); setEndDate(e); };
 

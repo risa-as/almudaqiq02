@@ -1,7 +1,9 @@
 "use client";
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/query/fetcher";
 import {
   Users,
   Plus,
@@ -100,9 +102,8 @@ export default function CustomersPage() {
   const { isAdmin } = useUser();
   const { selectedBranch, loading: branchLoading } = useBranch();
   const { confirm, dialog } = useConfirm();
+  const queryClient = useQueryClient();
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -127,28 +128,16 @@ export default function CustomersPage() {
     creditLimit: "0",
   });
 
-  useEffect(() => {
-    if (branchLoading) return;
-    fetchCustomers();
-  }, [selectedBranch, branchLoading]);
+  const bId = selectedBranch?.id ?? "all";
+  const branchQuery = selectedBranch?.id ? `?branchId=${selectedBranch.id}` : "";
 
-  const fetchCustomers = async () => {
-    try {
-      setLoading(true);
-      const branchQuery = selectedBranch?.id
-        ? `?branchId=${selectedBranch.id}`
-        : "";
-      const res = await fetch(`/api/customers${branchQuery}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCustomers(data);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const customersQuery = useQuery({
+    queryKey: ["customers", bId],
+    queryFn: () => fetchJson<Customer[]>(`/api/customers${branchQuery}`),
+    enabled: !branchLoading,
+  });
+  const customers = customersQuery.data ?? [];
+  const loading = customersQuery.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,7 +159,8 @@ export default function CustomersPage() {
       });
 
       if (res.ok) {
-        fetchCustomers();
+        queryClient.invalidateQueries({ queryKey: ["customers"] });
+        queryClient.invalidateQueries({ queryKey: ["customer"] });
         setIsModalOpen(false);
         setEditId(null);
         setFormData({ name: "", phone: "", address: "", initialBalance: "0", creditLimit: "0" });
@@ -199,8 +189,8 @@ export default function CustomersPage() {
       if (res.ok) {
         setDeletingId(null);
         setRemovingId(id);
-        setTimeout(() => {
-          setCustomers((prev) => prev.filter((c) => c.id !== id));
+        setTimeout(async () => {
+          await queryClient.invalidateQueries({ queryKey: ["customers"] });
           setRemovingId(null);
           toast.success("تم حذف العميل بنجاح");
         }, 450);
@@ -279,7 +269,9 @@ export default function CustomersPage() {
 
       if (res.ok) {
         toast.success("تم تسجيل الدفعة بنجاح ✅");
-        fetchCustomers();
+        queryClient.invalidateQueries({ queryKey: ["customers"] });
+        queryClient.invalidateQueries({ queryKey: ["customer"] });
+        queryClient.invalidateQueries({ queryKey: ["customer-history"] });
         setIsPaymentModalOpen(false);
         setPaymentAmount("");
         setSelectedCustomerForPayment(null);
@@ -294,32 +286,20 @@ export default function CustomersPage() {
   };
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [customerHistory, setCustomerHistory] = useState<any[]>([]);
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] =
     useState<Customer | null>(null);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
-  const fetchHistory = async (customerId: number) => {
-    setHistoryLoading(true);
-    setExpandedTxId(null);
-    try {
-      const branchQuery = selectedBranch?.id
-        ? `?branchId=${selectedBranch.id}`
-        : "";
-      const res = await fetch(
-        `/api/customers/${customerId}/history${branchQuery}`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setCustomerHistory(data);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
+  const historyQuery = useQuery({
+    queryKey: ["customer-history", selectedCustomerForHistory?.id, bId],
+    queryFn: () =>
+      fetchJson<any[]>(
+        `/api/customers/${selectedCustomerForHistory!.id}/history${branchQuery}`,
+      ),
+    enabled: isHistoryModalOpen && !!selectedCustomerForHistory,
+  });
+  const historyLoading = historyQuery.isPending;
+  const customerHistory = historyQuery.data ?? [];
 
   if (loading)
     return (
@@ -677,7 +657,7 @@ export default function CustomersPage() {
                       onClick={() => {
                         setSelectedCustomerForHistory(customer);
                         setIsHistoryModalOpen(true);
-                        fetchHistory(customer.id);
+                        setExpandedTxId(null);
                       }}
                     />
                     {isAdmin && (

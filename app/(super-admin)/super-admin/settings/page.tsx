@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/query/fetcher";
 import {
   Shield,
   User,
@@ -108,8 +110,7 @@ function PasswordInput({
 
 export default function SuperAdminSettingsPage() {
   usePageTitle('الإعدادات');
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
   // Profile fields
@@ -121,17 +122,23 @@ export default function SuperAdminSettingsPage() {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
+  const profileQuery = useQuery({
+    queryKey: ["sa-settings"],
+    queryFn: () => fetchJson<Profile>("/api/super-admin/settings"),
+  });
+  const profile = profileQuery.data ?? null;
+  const loading = profileQuery.isPending;
+
   useEffect(() => {
-    fetch("/api/super-admin/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        setProfile(d);
-        setUsername(d.username ?? "");
-        setEmail(d.email ?? "");
-      })
-      .catch(() => toast.error("فشل تحميل البيانات"))
-      .finally(() => setLoading(false));
-  }, []);
+    if (profileQuery.data) {
+      setUsername(profileQuery.data.username ?? "");
+      setEmail(profileQuery.data.email ?? "");
+    }
+  }, [profileQuery.data]);
+
+  useEffect(() => {
+    if (profileQuery.isError) toast.error("فشل تحميل البيانات");
+  }, [profileQuery.isError]);
 
   async function saveProfile() {
     setSaving(true);
@@ -147,11 +154,7 @@ export default function SuperAdminSettingsPage() {
         return;
       }
       toast.success("تم حفظ المعلومات بنجاح");
-      setProfile((prev) =>
-        prev
-          ? { ...prev, username, email, updatedAt: new Date().toISOString() }
-          : prev,
-      );
+      await queryClient.invalidateQueries({ queryKey: ["sa-settings"] });
     } finally {
       setSaving(false);
     }

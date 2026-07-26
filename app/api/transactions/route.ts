@@ -18,22 +18,61 @@ export async function GET(request: NextRequest) {
     const branchId = searchParams.get('branchId');
     const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
 
+    // ── Invoice lookup (mobile «فواتيري» search box) ──────────────────────────
+    // q matches either the receipt number or the name of any product sold on the
+    // invoice, newest first — so a cashier can find the invoice a product was sold
+    // on without the receipt. The leading '#' users copy off the card is stripped.
+    // OPENING rows are excluded while searching: their receiptNumber falls back to
+    // the cuid below, which substring-matches arbitrary digits the user types.
+    const q = (searchParams.get('q') || '').trim().replace(/^#/, '');
+    const searchFilter: Prisma.TransactionWhereInput = q
+        ? {
+            type: { in: ['SALE', 'RETURN', 'REFUND'] },
+            OR: [
+                { receiptNumber: { contains: q, mode: 'insensitive' } },
+                { items: { some: { product: { name: { contains: q, mode: 'insensitive' } } } } },
+            ],
+        }
+        : {};
+
+    // mine=1 narrows to the caller's own transactions (never widens) — used by the
+    // cashier app so «فواتيري» keeps meaning *my* invoices when searching.
+    const mine = searchParams.get('mine') === '1';
+    const userFilter = (mine && auth.userId) ? { userId: auth.userId } : {};
+
     try {
         const transactions = await withRetry(() =>
             prisma.transaction.findMany({
-                where: { tenantId, ...branchFilter },
+                where: { tenantId, ...branchFilter, ...searchFilter, ...userFilter },
                 orderBy: { date: 'desc' },
                 take: limit,
                 include: {
                     user:     { select: { username: true } },
-                    customer: { select: { name: true } }
+                    customer: { select: { name: true } },
+                    // Only while searching: the line products, so the client can show
+                    // *why* an invoice matched. Skipped otherwise to keep the list cheap.
+                    items: q ? { select: { product: { select: { name: true } } } } : false,
                 }
             })
         );
+        // `items` is present only when searching (conditional include above), so the
+        // row shape is widened here rather than fighting Prisma's inferred union.
+        const rows = transactions as unknown as (Record<string, unknown> & {
+            id: string;
+            receiptNumber: string | null;
+            items?: { product: { name: string } | null }[];
+        })[];
         return NextResponse.json(
-            transactions.map(tx => ({
-                ...tx,
-                receiptNumber: tx.receiptNumber || String(tx.id)
+            rows.map(({ items, ...rest }) => ({
+                ...rest,
+                receiptNumber: rest.receiptNumber || String(rest.id),
+                ...(q
+                    ? {
+                        productNames: [...new Set(
+                            (items ?? []).map(i => i.product?.name).filter((n): n is string => !!n)
+                        )],
+                    }
+                    : {}),
             }))
         );
     } catch (error) {

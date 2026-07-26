@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import { useRouter } from 'next/navigation';
 import {
     Search, Package, Calendar, DollarSign, ArrowRight,
@@ -45,11 +47,12 @@ export default function StockInPage() {
     const [paidAmount, setPaidAmount]       = useState('');
     const [isPrepaid, setIsPrepaid]         = useState(false);
 
-    const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
-
-    useEffect(() => {
-        fetch('/api/suppliers').then(r => r.json()).then(setSuppliers).catch(console.error);
-    }, []);
+    const queryClient = useQueryClient();
+    const suppliersQuery = useQuery({
+        queryKey: ['suppliers'],
+        queryFn: () => fetchJsonOr<{ id: string; name: string }[]>('/api/suppliers', []),
+    });
+    const suppliers = suppliersQuery.data ?? [];
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -126,6 +129,10 @@ export default function StockInPage() {
             });
             if (!res.ok) throw new Error();
             toast.success('تمت إضافة المخزون بنجاح!');
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['batches'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory-expiry'] });
+            queryClient.invalidateQueries({ queryKey: ['product-history'] });
             router.push('/inventory');
         } catch {
             toast.error('فشل حفظ المخزون، تأكد من البيانات.');

@@ -1,7 +1,9 @@
 'use client'
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJsonOr } from '@/lib/query/fetcher'
 import { KeyRound, Plus, Loader2, CheckCircle2, Copy, Shield, Clock } from 'lucide-react'
 import { PulseLoader } from '@/components/loading/PulseLoader'
 
@@ -29,8 +31,7 @@ const DURATION_LABELS: Record<string, string> = {
 
 export default function LicensesPage() {
   usePageTitle('التراخيص');
-  const [licenses, setLicenses]             = useState<LicenseRecord[]>([])
-  const [loading, setLoading]               = useState(true)
+  const queryClient = useQueryClient()
   const [generating, setGenerating]         = useState(false)
   const [newKey, setNewKey]                 = useState<string | null>(null)
   const [copied, setCopied]                 = useState(false)
@@ -42,20 +43,12 @@ export default function LicensesPage() {
   const [machineId,     setMachineId]     = useState('')
   const [customDays,    setCustomDays]    = useState(30)
 
-  async function fetchLicenses() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/super-admin/licenses')
-      if (res.ok) {
-        const data = await res.json()
-        setLicenses(data.licenses)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchLicenses() }, [])
+  const licensesQuery = useQuery({
+    queryKey: ['sa-licenses'],
+    queryFn: () => fetchJsonOr<{ licenses: LicenseRecord[] }>('/api/super-admin/licenses', { licenses: [] }),
+  })
+  const licenses = licensesQuery.data?.licenses ?? []
+  const loading  = licensesQuery.isPending
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
@@ -78,7 +71,7 @@ export default function LicensesPage() {
       if (res.ok) {
         setNewKey(data.licenseKey)
         setClientName(''); setClientPhone(''); setClientAddress(''); setMachineId('')
-        fetchLicenses()
+        await queryClient.invalidateQueries({ queryKey: ['sa-licenses'] })
       } else {
         toast.error(data.error || 'فشل توليد الترخيص');
       }

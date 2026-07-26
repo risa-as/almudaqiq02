@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, use, useMemo } from 'react';
+import React, { useState, use, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJsonOr } from '@/lib/query/fetcher';
 import { useRouter } from 'next/navigation';
 import {
     History, ArrowDownToLine, ArrowUpFromLine,
@@ -33,30 +35,23 @@ export default function ProductHistoryPage({ params }: { params: Promise<{ id: s
     const { id } = use(params);
     const router = useRouter();
 
-    const [history, setHistory] = useState<any>(null);
-    const [product, setProduct] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState<'all' | 'SALE' | 'STOCK_IN'>('all');
     const [page, setPage] = useState(1);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [prodRes, histRes] = await Promise.all([
-                    fetch(`/api/products/${id}`),
-                    fetch(`/api/products/${id}/history`),
-                ]);
-                setProduct(await prodRes.json());
-                setHistory(await histRes.json());
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [id]);
+    const productQuery = useQuery({
+        queryKey: ['product', id],
+        queryFn: () => fetchJsonOr<any>(`/api/products/${id}`, null),
+        enabled: !!id,
+    });
+    const historyQuery = useQuery({
+        queryKey: ['product-history', id],
+        queryFn: () => fetchJsonOr<any>(`/api/products/${id}/history`, null),
+        enabled: !!id,
+    });
+    const product = productQuery.data ?? null;
+    const history = historyQuery.data ?? null;
+    const loading = productQuery.isPending || historyQuery.isPending;
 
     const events = useMemo<HistoryEvent[]>(() => {
         if (!history) return [];

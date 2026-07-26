@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useState, useEffect, use, useMemo } from 'react';
+import React, { use, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { useRouter } from 'next/navigation';
 import {
     ChevronRight, Wallet, ArrowDownToLine, ArrowUpFromLine,
@@ -45,31 +47,18 @@ export default function SupplierLedgerPage({ params }: { params: Promise<{ id: s
     const router = useRouter();
     const { selectedBranch, loading: branchLoading } = useBranch();
 
-    const [supplier, setSupplier] = useState<SupplierInfo | null>(null);
-    const [ledger, setLedger] = useState<LedgerEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [notFound, setNotFound] = useState(false);
+    const bId = selectedBranch?.id ?? 'all';
+    const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
 
-    useEffect(() => {
-        if (branchLoading) return;
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const branchQuery = selectedBranch?.id && selectedBranch.id !== 'all' ? `?branchId=${selectedBranch.id}` : '';
-                const res = await fetch(`/api/suppliers/${id}${branchQuery}`, { cache: 'no-store' });
-                if (!res.ok) { setNotFound(true); return; }
-                const data = await res.json();
-                setSupplier(data.supplier);
-                setLedger(data.ledger ?? []);
-            } catch (err) {
-                console.error(err);
-                setNotFound(true);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [id, selectedBranch, branchLoading]);
+    const ledgerQuery = useQuery({
+        queryKey: ['supplier-ledger', id, bId],
+        queryFn: () => fetchJson<{ supplier: SupplierInfo; ledger: LedgerEntry[] | null }>(`/api/suppliers/${id}${branchQuery}`),
+        enabled: !branchLoading && !!id,
+    });
+    const supplier = ledgerQuery.data?.supplier ?? null;
+    const ledger = ledgerQuery.data?.ledger ?? [];
+    const loading = ledgerQuery.isPending;
+    const notFound = ledgerQuery.isError;
 
     /* Running balance: API returns newest-first, so accumulate oldest→newest then flip back */
     const rows = useMemo(() => {

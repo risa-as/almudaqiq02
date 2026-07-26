@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { createPortal } from 'react-dom';
 import { formatCurrency } from '@/lib/format';
 import { useBranch } from '@/contexts/BranchContext';
@@ -187,15 +189,15 @@ function ScoreRing({ score }: { score: number }) {
 export default function SmartPurchasingPage() {
   usePageTitle('الشراء الذكي');
     const { selectedBranch, loading: branchLoading } = useBranch();
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [data, setData] = useState<SmartBuyData | null>(null);
     const [activeTab, setActiveTab] = useState<TabKey>('RESTOCK');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
     // Days-of-stock coverage window driving the suggested quantity (user-adjustable).
     const [coverageDays, setCoverageDays] = useState(15);
+    // Debounced copy driving the fetch — typing in the input doesn't fire a
+    // request on every keystroke.
+    const [debouncedCoverageDays, setDebouncedCoverageDays] = useState(15);
 
     // Restore the saved preference after mount (avoids SSR/hydration mismatch).
     useEffect(() => {
@@ -203,47 +205,43 @@ export default function SmartPurchasingPage() {
         if (Number.isFinite(saved) && saved >= 1 && saved <= 365) setCoverageDays(saved);
     }, []);
 
-    // Fetch on branch / coverage change — debounced so typing in the input
-    // doesn't fire a request on every keystroke.
+    // Persist + debounce the coverage window before it reaches the query key.
     useEffect(() => {
-        if (branchLoading) return;
         localStorage.setItem('smartBuyCoverageDays', String(coverageDays));
-        const t = setTimeout(() => fetchData(), 300);
+        const t = setTimeout(() => setDebouncedCoverageDays(coverageDays), 300);
         return () => clearTimeout(t);
-    }, [selectedBranch, branchLoading, coverageDays]);
+    }, [coverageDays]);
 
-    // Latest-request guard: a slow fetch for a previous branch must never overwrite
-    // the result of a newer fetch (race condition on branch switch).
-    const fetchSeqRef = useRef(0);
-    const fetchData = async (isRefresh = false) => {
-        const seq = ++fetchSeqRef.current;
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-            params.set('coverageDays', String(coverageDays));
-            const res = await fetch(`/api/purchases/smart-buy?${params}`);
-            const result = await res.json();
-            if (seq !== fetchSeqRef.current) return; // a newer request superseded this one
-            if (result.success) {
-                setData(result.data);
-                if (result.data.supplierDeals.length > 0) {
-                    setSelectedSupplierId(result.data.supplierDeals[0].supplierId);
-                }
-                if (result.data.supplierOrders.length > 0) {
-                    setExpandedOrder(result.data.supplierOrders[0].supplierId ?? '__unknown__');
-                }
-            }
-        } catch (error) {
-            console.error('Failed to fetch smart buy data:', error);
-        } finally {
-            if (seq === fetchSeqRef.current) {
-                setLoading(false);
-                setRefreshing(false);
-            }
+    const bId = selectedBranch?.id ?? 'all';
+    const searchParams = new URLSearchParams();
+    if (selectedBranch?.id && selectedBranch.id !== 'all') searchParams.set('branchId', selectedBranch.id);
+    searchParams.set('coverageDays', String(debouncedCoverageDays));
+
+    const smartBuyQuery = useQuery({
+        queryKey: ['smart-buy', bId, debouncedCoverageDays],
+        queryFn: async () => {
+            const result = await fetchJson<{ success: boolean; data: SmartBuyData }>(`/api/purchases/smart-buy?${searchParams}`);
+            if (!result.success) throw new Error('Failed to fetch smart buy data');
+            return result.data;
+        },
+        enabled: !branchLoading,
+        placeholderData: (prev) => prev,
+    });
+    const data = smartBuyQuery.data ?? null;
+    const loading = smartBuyQuery.isPending;
+    const refreshing = smartBuyQuery.isFetching && !smartBuyQuery.isPending;
+
+    // Seed the deal/order selection whenever fresh data arrives (matches the
+    // previous behaviour of setting them after every successful fetch).
+    useEffect(() => {
+        if (!smartBuyQuery.data) return;
+        if (smartBuyQuery.data.supplierDeals.length > 0) {
+            setSelectedSupplierId(smartBuyQuery.data.supplierDeals[0].supplierId);
         }
-    };
+        if (smartBuyQuery.data.supplierOrders.length > 0) {
+            setExpandedOrder(smartBuyQuery.data.supplierOrders[0].supplierId ?? '__unknown__');
+        }
+    }, [smartBuyQuery.data]);
 
     if (loading) return (
         <div className="space-y-8 animate-fade-in-up" dir="rtl">
@@ -423,7 +421,7 @@ export default function SmartPurchasingPage() {
                         ]}
                     />
                     <button
-                        onClick={() => fetchData(true)}
+                        onClick={() => smartBuyQuery.refetch()}
                         disabled={refreshing}
                         className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                     >

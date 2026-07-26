@@ -37,6 +37,39 @@ export async function POST(req: NextRequest) {
         if (!originalTx) {
             return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
         }
+        if (originalTx.type !== 'SALE') {
+            return NextResponse.json({ error: 'معرف الفاتورة الأصلية غير صحيح' }, { status: 400 });
+        }
+
+        // ── Guard against over-returning ──────────────────────────────────────
+        // Mirrors the refund route: sum what was sold per line and what was already
+        // sent back (REFUND/RETURN linked to this sale), then reject a request that
+        // exceeds the remainder. Without this the same line could be returned again
+        // and again, restocking and refunding it every time.
+        const [soldLines, priorReturns] = await Promise.all([
+            prisma.transactionItem.findMany({
+                where: { transactionId: originalTransactionId },
+                select: { productId: true, unitId: true, quantity: true },
+            }),
+            prisma.transactionItem.findMany({
+                where: { transaction: { originalTxId: originalTransactionId, type: { in: ['REFUND', 'RETURN'] } } },
+                select: { productId: true, unitId: true, quantity: true },
+            }),
+        ]);
+        const soldMap = new Map<string, number>();
+        for (const l of soldLines) soldMap.set(`${l.productId}|${l.unitId}`, (soldMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Number(l.quantity));
+        const returnedMap = new Map<string, number>();
+        for (const l of priorReturns) returnedMap.set(`${l.productId}|${l.unitId}`, (returnedMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Math.abs(Number(l.quantity)));
+
+        for (const it of items) {
+            const key = `${it.productId}|${it.unitId}`;
+            const remaining = (soldMap.get(key) ?? 0) - (returnedMap.get(key) ?? 0);
+            if (Number(it.quantity) > remaining) {
+                return NextResponse.json({
+                    error: `الكمية المطلوب إرجاعها تتجاوز المتاح (المتبقّي: ${Math.max(0, remaining)})`,
+                }, { status: 400 });
+            }
+        }
 
         // 2. Calculate Refund Amount
         let refundTotal = 0;
@@ -52,6 +85,10 @@ export async function POST(req: NextRequest) {
                     date: new Date(),
                     tenant: { connect: { id: tenantId } },
                     branch: { connect: { id: branchId } },
+                    // Links the return to the sale it came from. Without it the
+                    // over-return guard above (and the refund route's) can never see
+                    // a prior RETURN, so every line stayed returnable indefinitely.
+                    originalTxId: originalTransactionId,
                     ...(originalTx.userId ? { user: { connect: { id: originalTx.userId } } } : {}),
                     ...(originalTx.customerId ? { customer: { connect: { id: originalTx.customerId } } } : {})
                 }

@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson, fetchJsonOr } from '@/lib/query/fetcher';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Tag, Plus, Edit, Trash2, Search, XCircle, Percent, Gift, DollarSign, Calendar, Store, ToggleLeft, ToggleRight, Zap, Package, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
@@ -37,8 +39,7 @@ export default function OffersPage() {
   usePageTitle('العروض التسويقية');
     const { selectedBranch, loading: branchLoading } = useBranch();
     const { confirm, dialog } = useConfirm();
-    const [offers, setOffers]       = useState<Offer[]>([]);
-    const [loading, setLoading]     = useState(true);
+    const queryClient = useQueryClient();
     const [search, setSearch]       = useState('');
     const [filterType, setFilterType] = useState<'all' | 'active' | 'inactive'>('all');
 
@@ -49,31 +50,36 @@ export default function OffersPage() {
         buyQuantity: '', getQuantity: '', productId: '', categoryId: '',
         startDate: new Date().toISOString().split('T')[0], endDate: '', isActive: true
     });
-    const [products,     setProducts]     = useState<{ id: string; name: string }[]>([]);
-    const [categories,   setCategories]   = useState<{ id: string; name: string }[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [deletingId,   setDeletingId]   = useState<string | null>(null);
     const [removingId,   setRemovingId]   = useState<string | null>(null);
 
-    useEffect(() => {
-        if (branchLoading) return;
-        fetchOffers();
-        fetchProducts();
-        fetchCategories();
-    }, [selectedBranch, branchLoading]);
-
-    const fetchOffers = async () => {
-        setLoading(true);
-        try {
+    const bId = selectedBranch?.id ?? 'all';
+    const offersQuery = useQuery({
+        queryKey: ['offers', bId],
+        queryFn: () => {
             const params = new URLSearchParams();
             if (selectedBranch?.id && selectedBranch.id !== 'all') params.set('branchId', selectedBranch.id);
-            const res = await fetch(`/api/offers?${params}`);
-            if (res.ok) setOffers(await res.json());
-        } catch { } finally { setLoading(false); }
-    };
+            return fetchJson<Offer[]>(`/api/offers?${params}`);
+        },
+        enabled: !branchLoading,
+    });
+    const offers = offersQuery.data ?? [];
+    const loading = offersQuery.isPending;
 
-    const fetchProducts   = async () => { const r = await fetch('/api/products');   if (r.ok) setProducts(await r.json()); };
-    const fetchCategories = async () => { const r = await fetch('/api/categories'); if (r.ok) setCategories(await r.json()); };
+    const productsQuery = useQuery({
+        queryKey: ['products'],
+        queryFn: () => fetchJsonOr<{ id: string; name: string }[]>('/api/products', []),
+        enabled: !branchLoading,
+    });
+    const products = productsQuery.data ?? [];
+
+    const categoriesQuery = useQuery({
+        queryKey: ['categories'],
+        queryFn: () => fetchJsonOr<{ id: string; name: string }[]>('/api/categories', []),
+        enabled: !branchLoading,
+    });
+    const categories = categoriesQuery.data ?? [];
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -85,7 +91,7 @@ export default function OffersPage() {
             if (payload.type !== 'BUY_X_GET_Y') { payload.buyQuantity = null; payload.getQuantity = null; }
             if (!editId && selectedBranch?.id && selectedBranch.id !== 'all') payload.branchId = selectedBranch.id;
             const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (res.ok) { toast.success(editId ? 'تم تحديث العرض' : 'تم إضافة العرض'); fetchOffers(); setIsModalOpen(false); }
+            if (res.ok) { toast.success(editId ? 'تم تحديث العرض' : 'تم إضافة العرض'); queryClient.invalidateQueries({ queryKey: ['offers'] }); setIsModalOpen(false); }
             else toast.error('فشل حفظ العرض.');
         } catch { toast.error('حدث خطأ أثناء الحفظ.'); }
         finally { setIsSubmitting(false); }
@@ -99,8 +105,8 @@ export default function OffersPage() {
             if (res.ok) {
                 setDeletingId(null);
                 setRemovingId(id);
-                setTimeout(() => {
-                    setOffers(prev => prev.filter(o => o.id !== id));
+                setTimeout(async () => {
+                    await queryClient.invalidateQueries({ queryKey: ['offers'] });
                     setRemovingId(null);
                     toast.success('تم حذف العرض');
                 }, 450);

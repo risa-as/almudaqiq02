@@ -3,6 +3,8 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJson } from '@/lib/query/fetcher'
 import {
   ArrowRight, Building2, Save, Loader2, AlertTriangle,
   ShieldCheck, Mail, Lock, Hash, Calendar, CreditCard,
@@ -14,9 +16,9 @@ interface Plan { id: string; name: string; monthlyPrice: number }
 export default function NewTenantPage() {
   usePageTitle('إضافة مستأجر');
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
-  const [plans, setPlans]         = useState<Plan[]>([])
   const [createdEmail, setCreatedEmail] = useState('')   // shown after success
   const [copied, setCopied]       = useState(false)
 
@@ -29,15 +31,15 @@ export default function NewTenantPage() {
     aiDailyLimit:  50,
   })
 
+  const plansQuery = useQuery({
+    queryKey: ['sa-plans'],
+    queryFn: () => fetchJson<Plan[]>('/api/super-admin/plans'),
+  })
+  const plans = plansQuery.data ?? []
+
   useEffect(() => {
-    fetch('/api/super-admin/plans')
-      .then(r => r.json())
-      .then((data: Plan[]) => {
-        setPlans(data)
-        if (data.length > 0) setForm(f => ({ ...f, planName: data[0].name }))
-      })
-      .catch(() => {})
-  }, [])
+    if (plans.length > 0) setForm(f => (f.planName ? f : { ...f, planName: plans[0].name }))
+  }, [plans])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -59,6 +61,7 @@ export default function NewTenantPage() {
         return
       }
       setCreatedEmail(data.email)
+      await queryClient.invalidateQueries({ queryKey: ['sa-tenants'] })
     } catch {
       setError('تعذر الاتصال بالخادم')
     } finally {

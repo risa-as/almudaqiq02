@@ -2,6 +2,8 @@
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useState, useEffect, use } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson, fetchJsonOr } from '@/lib/query/fetcher';
 import { useRouter } from 'next/navigation';
 import {
     Box, Layers, DollarSign, Scan, Save, X, Loader2,
@@ -21,7 +23,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   usePageTitle('تعديل المنتج');
     const { id } = use(params);
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const [saving, setSaving] = useState(false);
 
     const [name, setName] = useState('');
@@ -30,57 +32,45 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     const [minimumStock, setMinimumStock] = useState(0);
     const [supplierId, setSupplierId] = useState('');
     const [categoryId, setCategoryId] = useState('');
-    const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
-    const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [units, setUnits] = useState<UnitInput[]>([]);
 
+    const productQuery = useQuery({
+        queryKey: ['product', id],
+        queryFn: () => fetchJson<any>(`/api/products/${id}`),
+        enabled: !!id,
+    });
+    const suppliersQuery = useQuery({
+        queryKey: ['suppliers'],
+        queryFn: () => fetchJsonOr<{ id: string; name: string }[]>('/api/suppliers', []),
+    });
+    const categoriesQuery = useQuery({
+        queryKey: ['categories'],
+        queryFn: () => fetchJsonOr<{ id: string; name: string }[]>('/api/categories', []),
+    });
+    const suppliers = suppliersQuery.data ?? [];
+    const categories = categoriesQuery.data ?? [];
+    const loading = productQuery.isPending;
+
+    // Seed the form state from the fetched product
     useEffect(() => {
-        fetchProduct();
-        fetchSuppliers();
-        fetchCategories();
-    }, [id]);
-
-    const fetchSuppliers = async () => {
-        try {
-            const res = await fetch('/api/suppliers');
-            if (res.ok) setSuppliers(await res.json());
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchCategories = async () => {
-        try {
-            const res = await fetch('/api/categories');
-            if (res.ok) setCategories(await res.json());
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchProduct = async () => {
-        try {
-            const res = await fetch(`/api/products/${id}`);
-            if (res.ok) {
-                const data = await res.json();
-                setName(data.name);
-                setDescription(data.description || '');
-                setBaseCost(Number(data.costPrice));
-                setMinimumStock(data.minimumStock ?? 0);
-                if (data.supplierId) setSupplierId(String(data.supplierId));
-                if (data.categoryId) setCategoryId(String(data.categoryId));
-                if (data.units) {
-                    setUnits(data.units.map((u: any) => ({
-                        id: u.id,
-                        name: u.name,
-                        conversion: u.conversionFactor,
-                        barcode: u.barcode || '',
-                        price: Number(u.price),
-                    })));
-                }
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
+        const data = productQuery.data;
+        if (!data) return;
+        setName(data.name);
+        setDescription(data.description || '');
+        setBaseCost(Number(data.costPrice));
+        setMinimumStock(data.minimumStock ?? 0);
+        if (data.supplierId) setSupplierId(String(data.supplierId));
+        if (data.categoryId) setCategoryId(String(data.categoryId));
+        if (data.units) {
+            setUnits(data.units.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                conversion: u.conversionFactor,
+                barcode: u.barcode || '',
+                price: Number(u.price),
+            })));
         }
-    };
+    }, [productQuery.data]);
 
     const addUnit = () =>
         setUnits(u => [...u, { name: 'وحدة جديدة', conversion: 1, barcode: '', price: 0 }]);
@@ -99,6 +89,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             });
             if (!res.ok) throw new Error('فشل التحديث');
             toast.success('تم تحديث المنتج بنجاح!');
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['product', id] });
+            queryClient.invalidateQueries({ queryKey: ['batches'] });
             router.push('/inventory');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'حدث خطأ');

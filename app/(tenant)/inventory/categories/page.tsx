@@ -1,7 +1,9 @@
 'use client';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchJson } from '@/lib/query/fetcher';
 import { useConfirm } from '@/hooks/useConfirm';
 import Link from 'next/link';
 import {
@@ -248,9 +250,9 @@ function CategoryNode({
 export default function CategoriesPage() {
   usePageTitle('الفئات');
   const { confirm, dialog } = useConfirm();
+  const queryClient = useQueryClient();
   const [categories, setCategories] = useState<Category[]>([]);
   const [tree, setTree] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -271,22 +273,34 @@ export default function CategoriesPage() {
 
   const showToast = (type: 'success' | 'error', message: string) => setToast({ type, message });
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      const res = await fetch('/api/categories');
-      if (res.ok) {
-        const data: Category[] = await res.json();
-        setCategories(data);
-        setTree(buildTree(data));
-      }
-    } catch {
-      showToast('error', 'فشل تحميل الأقسام');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const categoriesQuery = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => fetchJson<Category[]>('/api/categories'),
+  });
+  const loading = categoriesQuery.isPending;
 
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  // Seed the local (reorder-editable) copy whenever fresh data arrives
+  useEffect(() => {
+    if (categoriesQuery.data) {
+      setCategories(categoriesQuery.data);
+      setTree(buildTree(categoriesQuery.data));
+    }
+  }, [categoriesQuery.data]);
+
+  useEffect(() => {
+    if (categoriesQuery.isError) showToast('error', 'فشل تحميل الأقسام');
+  }, [categoriesQuery.isError]);
+
+  // Refresh helper used after mutations (and to discard local reorder edits):
+  // invalidates the cache, then re-seeds the local copy unconditionally.
+  const fetchCategories = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['categories'] });
+    const data = queryClient.getQueryData<Category[]>(['categories']);
+    if (data) {
+      setCategories(data);
+      setTree(buildTree(data));
+    }
+  };
 
   // ── Seed ──────────────────────────────────────────────────────────────────
   const handleSeed = async () => {
@@ -364,6 +378,7 @@ export default function CategoriesPage() {
         showToast('success', editCat ? 'تم تعديل القسم بنجاح' : 'تم إضافة القسم بنجاح');
         setIsModalOpen(false);
         await fetchCategories();
+        queryClient.invalidateQueries({ queryKey: ['products'] });
       } else {
         showToast('error', data.error ?? 'فشل الحفظ');
       }
@@ -387,6 +402,7 @@ export default function CategoriesPage() {
       if (res.ok) {
         showToast('success', 'تم حذف القسم');
         await fetchCategories();
+        queryClient.invalidateQueries({ queryKey: ['products'] });
       } else {
         const data = await res.json();
         showToast('error', data.error ?? 'فشل الحذف');

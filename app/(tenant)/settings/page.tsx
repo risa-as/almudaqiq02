@@ -41,6 +41,8 @@ import { useUser } from "@/hooks/useUser";
 import { ROLE_LABELS, canManage } from "@/lib/roles";
 import { useTourContext } from "@/contexts/TourContext";
 import { useBranch } from "@/contexts/BranchContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson, fetchJsonOr } from "@/lib/query/fetcher";
 import toast from "react-hot-toast";
 
 interface User {
@@ -195,6 +197,8 @@ export default function SettingsPage() {
       ? selectedBranch.id
       : null;
   const branchQuery = branchScope ? `?branchId=${branchScope}` : "";
+  const bId = branchScope ?? "all";
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"system" | "users" | "billing">(
     "system",
   );
@@ -207,19 +211,45 @@ export default function SettingsPage() {
   }, []);
 
   // AI Usage
-  const [aiUsage, setAiUsage] = useState<{
-    used: number;
-    limit: number;
-    remaining: number;
-  } | null>(null);
+  const aiUsageQuery = useQuery({
+    queryKey: ["ai-usage"],
+    queryFn: () =>
+      fetchJsonOr<{
+        used: number;
+        limit: number;
+        remaining: number;
+      } | null>("/api/ai/usage", null),
+  });
+  const aiUsage = aiUsageQuery.data ?? null;
 
   // Billing
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [loadingBilling, setLoadingBilling] = useState(false);
-  const [paymentMethods, setPaymentMethods] = useState<PlatformPaymentMethod[]>(
-    [],
-  );
+  const billingQuery = useQuery({
+    queryKey: ["billing"],
+    queryFn: () =>
+      fetchJson<{
+        subscription: Subscription | null;
+        payments?: PaymentRecord[];
+        error?: string;
+      }>("/api/billing", { cache: "no-store" }),
+  });
+  const paymentMethodsQuery = useQuery({
+    queryKey: ["payment-methods"],
+    queryFn: () =>
+      fetchJsonOr<PlatformPaymentMethod[]>("/api/payment-methods", []),
+  });
+  const subscription: Subscription | null =
+    billingQuery.data && !billingQuery.data.error
+      ? (billingQuery.data.subscription ?? null)
+      : null;
+  const payments: PaymentRecord[] =
+    billingQuery.data && !billingQuery.data.error
+      ? (billingQuery.data.payments ?? [])
+      : [];
+  const loadingBilling =
+    billingQuery.isPending || paymentMethodsQuery.isPending;
+  const paymentMethods = Array.isArray(paymentMethodsQuery.data)
+    ? paymentMethodsQuery.data
+    : [];
 
   // System settings
   const [autoPrint, setAutoPrint] = useState(false);
@@ -234,15 +264,33 @@ export default function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
-  const [backupLogs, setBackupLogs] = useState<
-    { id: string; createdAt: string; username: string; sizeKb: number | null }[]
-  >([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  const backupLogsQuery = useQuery({
+    queryKey: ["backup-logs", bId],
+    queryFn: () =>
+      fetchJsonOr<
+        {
+          id: string;
+          createdAt: string;
+          username: string;
+          sizeKb: number | null;
+        }[]
+      >(`/api/settings/backup${branchQuery}`, []),
+    enabled: !branchLoading,
+  });
+  const backupLogs = Array.isArray(backupLogsQuery.data)
+    ? backupLogsQuery.data
+    : [];
+  const loadingLogs = backupLogsQuery.isPending;
   const [wipingLocal, setWipingLocal] = useState(false);
 
   // Users
-  const [users, setUsers] = useState<User[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const usersQuery = useQuery({
+    queryKey: ["users", bId],
+    queryFn: () => fetchJson<User[]>(`/api/users${branchQuery}`),
+    enabled: !branchLoading,
+  });
+  const users = Array.isArray(usersQuery.data) ? usersQuery.data : [];
+  const loadingUsers = usersQuery.isPending;
   const [addForm, setAddForm] = useState({
     username: "",
     email: "",
@@ -277,73 +325,27 @@ export default function SettingsPage() {
       );
       setBackupIntervalHours(isNaN(h) ? 6 : h);
     }
-
-    loadBilling();
-    fetch("/api/ai/usage")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) setAiUsage(d);
-      })
-      .catch(() => {});
   }, []);
 
-  // Store settings + users + backup history are per-branch — (re)load them whenever
-  // the selected branch changes so each branch shows its own data.
-  function loadSettings() {
-    fetch(`/api/settings${branchQuery}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d && !d.error) {
-          setStoreName(d.storeName ?? "");
-          setStorePhone(d.storePhone ?? "");
-          setStoreAddress(d.storeAddress ?? "");
-          setFooterMessage(d.footerMessage ?? "");
-          setAutoPrint(d.autoPrint ?? false);
-          setCurrency(d.currency ?? "ريال");
-        }
-      });
-  }
+  // Store settings are per-branch — the query (re)fetches whenever the selected
+  // branch changes; seed the local form state from whichever branch's data loads.
+  const settingsQuery = useQuery({
+    queryKey: ["settings", bId],
+    queryFn: () => fetchJson<any>(`/api/settings${branchQuery}`),
+    enabled: !branchLoading,
+  });
 
   useEffect(() => {
-    if (branchLoading) return;
-    loadSettings();
-    loadUsers();
-    loadBackupLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchScope, branchLoading]);
-
-  function loadBackupLogs() {
-    setLoadingLogs(true);
-    fetch(`/api/settings/backup${branchQuery}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => (Array.isArray(d) ? setBackupLogs(d) : []))
-      .catch(() => {})
-      .finally(() => setLoadingLogs(false));
-  }
-
-  function loadBilling() {
-    setLoadingBilling(true);
-    Promise.all([
-      fetch("/api/billing", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/payment-methods").then((r) => (r.ok ? r.json() : [])),
-    ])
-      .then(([billing, methods]) => {
-        if (!billing.error) {
-          setSubscription(billing.subscription);
-          setPayments(billing.payments ?? []);
-        }
-        if (Array.isArray(methods)) setPaymentMethods(methods);
-      })
-      .finally(() => setLoadingBilling(false));
-  }
-
-  function loadUsers() {
-    setLoadingUsers(true);
-    fetch(`/api/users${branchQuery}`)
-      .then((r) => r.json())
-      .then((d) => (Array.isArray(d) ? setUsers(d) : null))
-      .finally(() => setLoadingUsers(false));
-  }
+    const d = settingsQuery.data;
+    if (d && !d.error) {
+      setStoreName(d.storeName ?? "");
+      setStorePhone(d.storePhone ?? "");
+      setStoreAddress(d.storeAddress ?? "");
+      setFooterMessage(d.footerMessage ?? "");
+      setAutoPrint(d.autoPrint ?? false);
+      setCurrency(d.currency ?? "ريال");
+    }
+  }, [settingsQuery.data]);
 
   async function handleSave() {
     setSavingSettings(true);
@@ -363,9 +365,12 @@ export default function SettingsPage() {
           branchId: branchScope,
         }),
       });
-      res.ok
-        ? toast.success("تم حفظ الإعدادات بنجاح")
-        : toast.error("فشل حفظ الإعدادات");
+      if (res.ok) {
+        toast.success("تم حفظ الإعدادات بنجاح");
+        queryClient.invalidateQueries({ queryKey: ["settings"] });
+      } else {
+        toast.error("فشل حفظ الإعدادات");
+      }
     } catch {
       toast.error("حدث خطأ أثناء الحفظ");
     } finally {
@@ -412,7 +417,7 @@ export default function SettingsPage() {
       a.click();
       URL.revokeObjectURL(url);
       toast.success("تم تنزيل النسخة الاحتياطية بنجاح");
-      loadBackupLogs();
+      queryClient.invalidateQueries({ queryKey: ["backup-logs"] });
     } catch {
       toast.error("فشل النسخ الاحتياطي");
     } finally {
@@ -459,7 +464,7 @@ export default function SettingsPage() {
         return;
       }
       toast.success(`تم الاسترجاع بنجاح — ${d.total ?? 0} سجل مستعاد`);
-      loadBackupLogs();
+      queryClient.invalidateQueries({ queryKey: ["backup-logs"] });
     } catch {
       toast.error("تعذّر الاتصال بالخادم");
     } finally {
@@ -508,7 +513,7 @@ export default function SettingsPage() {
       if (res.ok) {
         toast.success("تم إضافة المستخدم بنجاح");
         setAddForm({ username: "", email: "", password: "", role: "CASHIER" });
-        loadUsers();
+        queryClient.invalidateQueries({ queryKey: ["users"] });
       } else {
         toast.error(d.error ?? "فشلت العملية");
       }
@@ -550,7 +555,7 @@ export default function SettingsPage() {
       if (res.ok) {
         toast.success("تم تحديث المستخدم بنجاح");
         setEditingUser(null);
-        loadUsers();
+        queryClient.invalidateQueries({ queryKey: ["users"] });
       } else {
         toast.error(d.error ?? "فشلت العملية");
       }
@@ -576,7 +581,8 @@ export default function SettingsPage() {
       const res = await fetch(`/api/users?id=${u.id}`, { method: "DELETE" });
       const d = await res.json();
       res.ok
-        ? (toast.success("تم حذف المستخدم"), loadUsers())
+        ? (toast.success("تم حذف المستخدم"),
+          queryClient.invalidateQueries({ queryKey: ["users"] }))
         : toast.error(d.error ?? "فشل الحذف");
     } catch {
       toast.error("تعذر الاتصال بالخادم");

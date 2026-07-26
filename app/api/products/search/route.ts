@@ -9,11 +9,9 @@ export async function GET(request: NextRequest) {
     if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const q        = searchParams.get('q');
+    const q        = searchParams.get('q')?.trim() || '';
     const branchId = searchParams.get('branchId');
     const specificBranch = branchId && branchId !== 'all' ? branchId : null;
-
-    if (!q) return NextResponse.json([]);
 
     // Helper: compute actual batch stock for a list of product IDs
     const getBatchStock = async (productIds: string[]): Promise<Map<string, number>> => {
@@ -32,12 +30,14 @@ export async function GET(request: NextRequest) {
 
     try {
         // 1. Exact barcode match (highest priority)
-        const unitMatch = await prisma.productUnit.findFirst({
-            where: { barcode: q, product: { tenantId } },
-            include: {
-                product: { include: { units: true } },
-            },
-        });
+        const unitMatch = q
+            ? await prisma.productUnit.findFirst({
+                where: { barcode: q, product: { tenantId } },
+                include: {
+                    product: { include: { units: true } },
+                },
+            })
+            : null;
 
         if (unitMatch) {
             const stockMap = await getBatchStock([unitMatch.product.id]);
@@ -66,10 +66,12 @@ export async function GET(request: NextRequest) {
         const products = await prisma.product.findMany({
             where: {
                 tenantId,
-                name: { contains: q, mode: 'insensitive' },
+                ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
             },
             include: { units: true },
-            take: 10,
+            // نقطة البيع تعرض قائمة أولية محدودة؛ البحث يظل مقيّدًا إلى 10 نتائج.
+            orderBy: [{ isQuickSale: 'desc' }, { name: 'asc' }],
+            take: q ? 10 : 20,
         });
 
         const stockMap = await getBatchStock(products.map(p => p.id));
@@ -82,7 +84,7 @@ export async function GET(request: NextRequest) {
             baseStock: specificBranch
                 ? (stockMap.get(p.id) ?? 0)
                 : (stockMap.has(p.id) ? (stockMap.get(p.id) ?? 0) : p.baseStock),
-            units: p.units.map((u: any) => ({
+            units: p.units.map(u => ({
                 unitId:           u.id,
                 unitName:         u.name,
                 price:            Number(u.price),
