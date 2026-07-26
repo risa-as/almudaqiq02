@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidateTenantFeatures } from '@/lib/plan-features'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { withCloudDb } from '@/lib/cloud-guard'
@@ -27,6 +28,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const data = { ...rest, ...(features ? { features: JSON.stringify(features) } : {}) }
 
     const plan = await prisma.subscriptionPlan.update({ where: { id }, data })
+    invalidateTenantFeatures() // ميزات الخطة تغيّرت لكل مستأجريها
     return NextResponse.json(plan)
   })
 }
@@ -47,6 +49,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
       )
 
     await prisma.subscriptionPlan.delete({ where: { id } })
+    invalidateTenantFeatures()
     return NextResponse.json({ success: true })
   })
 }

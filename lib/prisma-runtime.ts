@@ -48,3 +48,15 @@ function resolveCtor(): PrismaClientConstructor {
 
 /** PrismaClient constructor for the active runtime. Use instead of importing directly. */
 export const PrismaClientCtor: PrismaClientConstructor = resolveCtor()
+
+/**
+ * خيار تحميل العلاقات في استعلام واحد (LATERAL JOIN) بدل استعلام لكل علاقة.
+ *
+ * على Neon تكلّف كل رحلة ~520ms، فـ findMany بثلاث علاقات كان ~1320ms وصار
+ * ~630ms. لكن relationJoins مدعوم في PostgreSQL/MySQL فقط — لا SQLite — ونفس
+ * كود المسارات يعمل داخل Electron على SQLite، لذا يُحذف الخيار هناك.
+ *
+ * الاستعمال: `...RELATION_JOIN` داخل وسائط findMany/findUnique.
+ */
+export const RELATION_JOIN: { relationLoadStrategy?: 'join' } =
+  IS_ELECTRON ? {} : { relationLoadStrategy: 'join' }

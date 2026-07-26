@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidateTenantFeatures } from '@/lib/plan-features'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { withCloudDb } from '@/lib/cloud-guard'
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
     const plan = await prisma.subscriptionPlan.create({
       data: { ...rest, features: features ? JSON.stringify(features) : '{}' },
     })
+    invalidateTenantFeatures() // خطة جديدة/معدّلة تخص عدة مستأجرين
     return NextResponse.json(plan, { status: 201 })
   })
 }

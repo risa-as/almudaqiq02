@@ -4,6 +4,7 @@ import { prisma } from '@/lib/multi-tenant/prisma'
 import { prisma as localPrisma } from '@/lib/prisma'
 import { verifyPassword } from '@/lib/auth'
 import { withCloudDb } from '@/lib/cloud-guard'
+import { invalidateTenantFeatures } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           ...(featureOverrides !== undefined ? { featureOverrides: JSON.stringify(featureOverrides) } : {}),
         },
       })
+      // خطة/تجاوزات هذا المستأجر تغيّرت — لا يبقى على خريطة ميزات قديمة
+      invalidateTenantFeatures(id)
     }
 
     // Enforce the new plan's branch cap on (down)grade: deactivate any active
@@ -139,6 +142,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       await tx.supplier.deleteMany(              { where: { tenantId: id } })
       await tx.category.deleteMany(              { where: { tenantId: id } })
       await tx.customer.deleteMany(              { where: { tenantId: id } })
+      invalidateTenantFeatures(id)
       await tx.tenantSubscription.deleteMany(    { where: { tenantId: id } })
       await tx.user.deleteMany(                  { where: { tenantId: id } })
       await tx.branch.deleteMany(                { where: { tenantId: id } })

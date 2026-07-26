@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 import { Prisma } from '@prisma/client';
 import { getTenantId, getAuthContext } from '@/lib/api-helpers';
 import { canManageStock } from '@/lib/auth';
@@ -26,6 +27,10 @@ export async function GET(request: NextRequest) {
                     supplier: true,
                 },
                 orderBy: { id: 'desc' },
+                // الافتراضي يُصدر استعلامًا منفصلًا لكل علاقة (منتجات + وحدات +
+                // أقسام + موردون). قياسًا على Neon: ~1320ms ← ~630ms برحلة واحدة،
+                // ومخرجاته مطابقة بايتًا ببايت. يُحذف تلقائيًا على SQLite/Electron.
+                ...RELATION_JOIN,
             }),
             // Aggregate stock from ProductBatch per product (branch-scoped or global)
             prisma.productBatch.groupBy({

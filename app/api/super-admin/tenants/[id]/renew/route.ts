@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { withCloudDb } from '@/lib/cloud-guard'
+import { invalidateTenantFeatures } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,8 @@ export async function POST(
         data: { tenantId: id, amount, months, planName: sub.plan.name, notes: notes ?? null },
       }),
     ])
+    // التجديد يُعيد الاشتراك إلى ACTIVE — الميزات المحفوظة قد تكون لحالة منتهية
+    invalidateTenantFeatures(id)
 
     const updated = await prisma.tenant.findUnique({
       where:   { id },

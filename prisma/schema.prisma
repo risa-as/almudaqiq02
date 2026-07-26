@@ -6,6 +6,10 @@
 generator client {
   provider   = "prisma-client-js"
   engineType = "library"
+  // relationJoins: يسمح بـ relationLoadStrategy:'join' فيُنفَّذ include
+  // كـ LATERAL JOIN في استعلام واحد بدل استعلام منفصل لكل علاقة.
+  // كل رحلة إلى Neon تكلّف ~520ms، فتقليل ثلاث رحلات إلى واحدة يوفّر ~1s.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
