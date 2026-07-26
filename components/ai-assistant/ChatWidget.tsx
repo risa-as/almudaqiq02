@@ -21,6 +21,8 @@ export function ChatWidget() {
   const { messages, input, setInput, isLoading, usage, sendMessage, retryLast, clearChat, messagesEndRef } = useChat({
     storageKey: 'ai_chat_history',
     branchId:   selectedBranch?.id,
+    // عدّاد الاستهلاك يُعرض داخل اللوحة فقط — لا نجلبه والودجة مطويّة
+    active:     isOpen,
   })
 
   const activeWidgetCat = [...WIDGET_TABS, WIDGET_GENERAL].find(c => c.id === activeWidgetTab) ?? WIDGET_TABS[0]

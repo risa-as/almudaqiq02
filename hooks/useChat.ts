@@ -25,6 +25,13 @@ export interface AiUsage {
 interface UseChatOptions {
   storageKey: string
   branchId?: string | null
+  /**
+   * هل واجهة المحادثة ظاهرة الآن؟ عداد الاستهلاك لا يُعرض إلا داخل اللوحة
+   * المفتوحة، فجلبه عند التركيب كان يُطلق طلبًا على كل صفحة في النظام يزاحم
+   * بيانات الصفحة نفسها على الاتصال. صفحة المساعد تمرّر true (الافتراضي)،
+   * والودجة العائمة تمرّر isOpen.
+   */
+  active?: boolean
 }
 
 interface CallResult {
@@ -49,7 +56,7 @@ export interface ConversationSummary {
   messagesCount: number
 }
 
-export function useChat({ storageKey, branchId }: UseChatOptions) {
+export function useChat({ storageKey, branchId, active = true }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput]       = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -79,13 +86,14 @@ export function useChat({ storageKey, branchId }: UseChatOptions) {
     try { sessionStorage.setItem(storageKey, JSON.stringify(messages)) } catch { /* ignore */ }
   }, [messages, storageKey])
 
-  // Fetch current usage on mount
+  // Fetch current usage once the chat is actually visible
   useEffect(() => {
+    if (!active) return
     fetch('/api/ai/usage')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setUsage(d) })
       .catch(() => {})
-  }, [])
+  }, [active])
 
   const buildHistory = useCallback((msgs: ChatMessage[]) =>
     msgs

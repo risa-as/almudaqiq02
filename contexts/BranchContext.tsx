@@ -67,7 +67,17 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     // مع طلب useUser وFeatureContext في طلب واحد بدل ثلاثة.
     Promise.all([
       queryClient.fetchQuery(authMeQueryOptions).catch(() => ({ user: null })),
-      fetch('/api/branches').then(r => r.json()).catch(() => []),
+      // عبر كاش React Query لا fetch مباشر: قياس Resource Timing على بناء
+      // الإنتاج أظهر طلبَي /api/branches متتاليين (المزوّد يُركَّب مرتين، وطلبات
+      // React Query تُدمج تلقائيًا بينما fetch الخام لا يُدمج). fetchQuery
+      // يجعل الطلب واحدًا ويشاركه مع صفحة الفروع.
+      queryClient
+        .fetchQuery({
+          queryKey: ['branches'],
+          queryFn: () => fetch('/api/branches').then(r => r.json()),
+          staleTime: 5 * 60 * 1000,
+        })
+        .catch(() => []),
     ]).then(([meData, branchData]) => {
       const role  = meData?.user?.role ?? ''
       const owner = role === 'ADMIN' || role === 'SUPER_ADMIN'
