@@ -76,6 +76,8 @@ const nextConfig: NextConfig = {
       { source: '/reports/financials',destination: '/accounting/financials', permanent: true },
       { source: '/reports/shifts',    destination: '/accounting/shifts',     permanent: true },
       { source: '/reports/bi',        destination: '/reports/analytics',     permanent: true },
+      // "مستحقات الموردين" أُزيلت لتكرارها مع صفحة الموردين الكاملة.
+      { source: '/reports/supplier-payables', destination: '/purchases/suppliers', permanent: true },
       { source: '/offers',            destination: '/marketing/offers',      permanent: true },
     ]
   },

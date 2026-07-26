@@ -67,6 +67,9 @@ export interface SalesReportTransaction {
   date: string
   paymentMethod?: string | null
   user?: { username: string | null } | null
+  /** الخادم يعيد كل حقول الفاتورة (بلا select) — تُستخدم لشارات «خصم»/«تعديل سعر». */
+  discount?: Money | null
+  priceEdited?: boolean | null
 }
 
 export interface SalesReport {
@@ -92,6 +95,47 @@ export function fetchSalesReport(
     query: range
       ? { period: 'custom', startDate: range.startDate, endDate: range.endDate, branchId: normalizeBranchId(selectedBranchId) }
       : { period, branchId: normalizeBranchId(selectedBranchId) },
+  })
+}
+
+// ── GET /api/transactions/[id] — تفاصيل فاتورة (للنقر من تقرير المبيعات) ───────
+export interface TransactionDetailItem {
+  id: string
+  productId: string
+  unitId: string
+  quantity: Money
+  price: Money
+  cost: Money
+  product: { name: string } | null
+  /** price = سعر الكتالوج للوحدة — يُقارن بسعر البيع لكشف تعديل السعر على السطر. */
+  unit: { name: string; price?: Money | null } | null
+}
+
+export interface TransactionDetail {
+  id: string
+  type: string // SALE | RETURN | REFUND
+  totalAmount: Money
+  date: string
+  notes: string | null
+  discount: Money
+  /** true إذا عُدّل سعر أي صنف عن سعر الكتالوج وقت البيع. */
+  priceEdited?: boolean | null
+  taxAmount: Money
+  paymentMethod: string // CASH | CREDIT | SPLIT
+  paidAmount: Money | null
+  receiptNumber: string | null
+  items: TransactionDetailItem[]
+  customer: { name: string; phone: string | null } | null
+  user: { username: string | null } | null
+}
+
+/** تفاصيل فاتورة واحدة — يمرَّر branchId لعزل الفروع (المدير قد يشاهد فرعًا محددًا). */
+export function fetchTransaction(
+  id: string,
+  selectedBranchId: string | null
+): Promise<TransactionDetail> {
+  return api<TransactionDetail>(`/api/transactions/${id}`, {
+    query: { branchId: normalizeBranchId(selectedBranchId) },
   })
 }
 
@@ -173,29 +217,9 @@ export function fetchOffersReport(
   })
 }
 
-// ── GET /api/reports/supplier-payables ───────────────────────────────────────
-export interface PayableSupplierRow {
-  id: string
-  name: string
-  phone: string | null
-  balance: number
-  lastEntryDate: string | null
-}
-
-export interface SupplierPayablesReport {
-  summary: {
-    totalPayables: number
-    supplierCount: number
-    topSupplier: { name: string; balance: number } | null
-  }
-  suppliers: PayableSupplierRow[]
-}
-
-export function fetchPayablesReport(selectedBranchId: string | null): Promise<SupplierPayablesReport> {
-  return api<SupplierPayablesReport>('/api/reports/supplier-payables', {
-    query: { branchId: normalizeBranchId(selectedBranchId) },
-  })
-}
+// ملاحظة: مستحقات الموردين لم تعد تعتمد على /api/reports/supplier-payables (أُزيل
+// من الويب)؛ شاشة الموردين (reports/payables.tsx) تجلب من /api/suppliers عبر
+// fetchAllSuppliers في suppliersAdmin.ts — نفس مصدر صفحة «الموردون» في الويب.
 
 // ── GET /api/reports/shifts — مراقبة الورديات للمدير ─────────────────────────
 // ملاحظة: GET /api/shifts يعيد وردية "المستدعي" النشطة فقط، لذا مراقبة الورديات
@@ -234,6 +258,8 @@ export interface LiveTransaction {
   type: 'SALE' | 'REFUND' | 'RETURN' | string
   totalAmount: Money
   discount?: Money | null
+  /** true إذا عُدّل سعر أي صنف عن سعر الكتالوج وقت البيع. */
+  priceEdited?: boolean | null
   paidAmount?: Money | null
   paymentMethod?: string | null
   date: string

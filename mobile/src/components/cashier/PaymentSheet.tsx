@@ -11,9 +11,10 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import { customersKey, fetchCustomers, type CustomerDto } from '@/api/endpoints/customers'
+import { createCustomer, customersKey, fetchCustomers, type CustomerDto } from '@/api/endpoints/customers'
+import { ApiError } from '@/api/client'
 import { useCartStore, type CartPaymentMethod } from '@/stores/cart'
 import { formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
@@ -40,6 +41,11 @@ const t = {
   submitting: 'جارٍ تسجيل الفاتورة…',
   verifying: 'جارٍ التحقق من فواتير الوردية…',
   noCustomers: 'لا يوجد عملاء مطابقون',
+  addCustomer: 'إضافة عميل جديد',
+  newCustomerName: 'اسم العميل',
+  newCustomerPhone: 'رقم الهاتف (اختياري)',
+  saveCustomer: 'حفظ واختيار العميل',
+  customerNameRequired: 'أدخل اسم العميل',
 }
 
 const DEBOUNCE_MS = 300
@@ -68,6 +74,7 @@ interface PaymentSheetProps {
  * وحد الدين). زر التأكيد محمي بحارس أحادي الإرسال في مخزن السلة.
  */
 export function PaymentSheet({ visible, onClose, total, branchId, error, verifying, onConfirm }: PaymentSheetProps) {
+  const queryClient = useQueryClient()
   const paymentMethod = useCartStore(s => s.paymentMethod)
   const setPaymentMethod = useCartStore(s => s.setPaymentMethod)
   const customerId = useCartStore(s => s.customerId)
@@ -78,19 +85,27 @@ export function PaymentSheet({ visible, onClose, total, branchId, error, verifyi
   const [received, setReceived] = useState('')
   const [customerQuery, setCustomerQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [addingCustomer, setAddingCustomer] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [customerFormError, setCustomerFormError] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(customerQuery.trim()), DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [customerQuery])
 
-  useEffect(() => {
-    if (!visible) {
-      setReceived('')
-      setCustomerQuery('')
-      setDebouncedQuery('')
-    }
-  }, [visible])
+  const closeSheet = () => {
+    if (submitting) return
+    setReceived('')
+    setCustomerQuery('')
+    setDebouncedQuery('')
+    setAddingCustomer(false)
+    setNewCustomerName('')
+    setNewCustomerPhone('')
+    setCustomerFormError(null)
+    onClose()
+  }
 
   const needCustomerPicker = paymentMethod === 'CREDIT' && !customerId
   const customers = useQuery({
@@ -99,6 +114,28 @@ export function PaymentSheet({ visible, onClose, total, branchId, error, verifyi
     enabled: visible && needCustomerPicker,
     staleTime: 60_000,
   })
+
+  const addCustomerMutation = useMutation({
+    mutationFn: () => createCustomer({ name: newCustomerName, phone: newCustomerPhone, branchId }),
+    onSuccess: customer => {
+      setCustomer(customer.id, customer.name)
+      setAddingCustomer(false)
+      setNewCustomerName('')
+      setNewCustomerPhone('')
+      setCustomerFormError(null)
+      queryClient.invalidateQueries({ queryKey: customersKey(debouncedQuery, branchId) })
+    },
+    onError: (err: unknown) => setCustomerFormError(err instanceof ApiError ? err.message : ar.common.unexpectedError),
+  })
+
+  const submitNewCustomer = () => {
+    if (!newCustomerName.trim()) {
+      setCustomerFormError(t.customerNameRequired)
+      return
+    }
+    setCustomerFormError(null)
+    addCustomerMutation.mutate()
+  }
 
   const receivedNum = Number(received)
   const change = paymentMethod === 'CASH' && received !== '' && Number.isFinite(receivedNum)
@@ -130,13 +167,13 @@ export function PaymentSheet({ visible, onClose, total, branchId, error, verifyi
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={closeSheet}>
       <View style={styles.backdrop}>
         <KeyboardAvoidingView style={styles.flexEnd} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.sheet}>
             <View style={styles.header}>
               <Text style={styles.title}>{t.title}</Text>
-              <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8} disabled={submitting}>
+              <Pressable style={styles.closeButton} onPress={closeSheet} hitSlop={8} disabled={submitting}>
                 <Ionicons name="close" size={22} color={colors.textSecondary} />
               </Pressable>
             </View>
@@ -202,29 +239,68 @@ export function PaymentSheet({ visible, onClose, total, branchId, error, verifyi
                   </View>
                 ) : (
                   <View style={styles.customerPicker}>
-                    <TextInput
-                      style={styles.input}
-                      value={customerQuery}
-                      onChangeText={setCustomerQuery}
-                      placeholder={t.customerSearch}
-                      placeholderTextColor={colors.textMuted}
-                      textAlign="right"
-                      editable={!submitting}
-                    />
-                    <View style={styles.customerList}>
-                      {customers.isPending && customers.isFetching ? (
-                        <ActivityIndicator color={colors.primary} style={styles.customerLoading} />
-                      ) : customers.data && customers.data.length > 0 ? (
-                        <FlatList
-                          data={customers.data}
-                          keyExtractor={item => item.id}
-                          renderItem={renderCustomer}
-                          keyboardShouldPersistTaps="handled"
+                    {addingCustomer ? (
+                      <View style={styles.newCustomerForm}>
+                        <TextInput
+                          style={styles.input}
+                          value={newCustomerName}
+                          onChangeText={setNewCustomerName}
+                          placeholder={t.newCustomerName}
+                          placeholderTextColor={colors.textMuted}
+                          textAlign="right"
+                          editable={!addCustomerMutation.isPending}
                         />
-                      ) : (
-                        <Text style={styles.noCustomers}>{t.noCustomers}</Text>
-                      )}
-                    </View>
+                        <TextInput
+                          style={styles.input}
+                          value={newCustomerPhone}
+                          onChangeText={setNewCustomerPhone}
+                          placeholder={t.newCustomerPhone}
+                          placeholderTextColor={colors.textMuted}
+                          textAlign="right"
+                          keyboardType="phone-pad"
+                          editable={!addCustomerMutation.isPending}
+                        />
+                        {customerFormError ? <Text style={styles.customerFormError}>{customerFormError}</Text> : null}
+                        <View style={styles.newCustomerActions}>
+                          <Pressable style={styles.cancelCustomerButton} onPress={() => setAddingCustomer(false)} disabled={addCustomerMutation.isPending}>
+                            <Text style={styles.cancelCustomerText}>{ar.common.cancel}</Text>
+                          </Pressable>
+                          <Pressable style={styles.saveCustomerButton} onPress={submitNewCustomer} disabled={addCustomerMutation.isPending}>
+                            {addCustomerMutation.isPending ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Text style={styles.saveCustomerText}>{t.saveCustomer}</Text>}
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <>
+                        <TextInput
+                          style={styles.input}
+                          value={customerQuery}
+                          onChangeText={setCustomerQuery}
+                          placeholder={t.customerSearch}
+                          placeholderTextColor={colors.textMuted}
+                          textAlign="right"
+                          editable={!submitting}
+                        />
+                        <Pressable style={styles.addCustomerButton} onPress={() => setAddingCustomer(true)} disabled={submitting}>
+                          <Ionicons name="person-add-outline" size={18} color={colors.primary} />
+                          <Text style={styles.addCustomerText}>{t.addCustomer}</Text>
+                        </Pressable>
+                        <View style={styles.customerList}>
+                          {customers.isPending && customers.isFetching ? (
+                            <ActivityIndicator color={colors.primary} style={styles.customerLoading} />
+                          ) : customers.data && customers.data.length > 0 ? (
+                            <FlatList
+                              data={customers.data}
+                              keyExtractor={item => item.id}
+                              renderItem={renderCustomer}
+                              keyboardShouldPersistTaps="handled"
+                            />
+                          ) : (
+                            <Text style={styles.noCustomers}>{t.noCustomers}</Text>
+                          )}
+                        </View>
+                      </>
+                    )}
                     <Text style={styles.needCustomerHint}>{t.needCustomer}</Text>
                   </View>
                 )}
@@ -346,6 +422,25 @@ const styles = StyleSheet.create({
   selectedCustomerName: { flex: 1, fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
   changeCustomerText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: '600' },
   customerPicker: { gap: spacing.sm },
+  addCustomerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.primarySoft,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+  },
+  addCustomerText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '800' },
+  newCustomerForm: { gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primarySoft, borderRadius: radius.lg, padding: spacing.md },
+  customerFormError: { color: colors.danger, fontSize: fontSize.xs, textAlign: 'right' },
+  newCustomerActions: { flexDirection: 'row', gap: spacing.sm },
+  cancelCustomerButton: { flex: 1, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.background },
+  cancelCustomerText: { color: colors.textSecondary, fontSize: fontSize.sm, fontWeight: '700' },
+  saveCustomerButton: { flex: 2, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.primary },
+  saveCustomerText: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: '800' },
   customerList: {
     maxHeight: 180,
     backgroundColor: colors.surface,

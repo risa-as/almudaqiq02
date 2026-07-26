@@ -38,6 +38,8 @@ interface CartState {
   addLine: (line: Omit<CartLine, 'qty'>, qty?: number) => AddLineResult
   setQty: (productId: string, unitId: string, qty: number) => void
   changeQty: (productId: string, unitId: string, delta: number) => boolean
+  /** تعديل سعر بيع البند يدويًا؛ يسجّل الخادم التعديل في الفاتورة والتدقيق. */
+  setUnitPrice: (productId: string, unitId: string, price: number) => void
   removeLine: (productId: string, unitId: string) => void
   setDiscount: (value: number) => void
   setCustomer: (id: string | null, name: string | null) => void
@@ -97,6 +99,15 @@ export const useCartStore = create<CartState>((set, get) => ({
       ),
     }))
     return true
+  },
+
+  setUnitPrice: (productId, unitId, price) => {
+    const safePrice = Number.isFinite(price) ? Math.max(0, price) : 0
+    set(state => ({
+      lines: state.lines.map(line =>
+        line.productId === productId && line.unitId === unitId ? { ...line, unitPrice: safePrice } : line,
+      ),
+    }))
   },
 
   removeLine: (productId, unitId) => {

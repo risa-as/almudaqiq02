@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { RoleGate } from '@/components/RoleGate'
+import { TabBarButton } from '@/components/TabBarButton'
 import { ar } from '@/i18n/ar'
 import { colors } from '@/theme'
 
@@ -13,6 +14,7 @@ export default function StockLayout() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textMuted,
           tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+          tabBarButton: props => <TabBarButton {...props} />,
         }}
       >
         <Tabs.Screen
@@ -30,13 +32,6 @@ export default function StockLayout() {
           }}
         />
         <Tabs.Screen
-          name="receive"
-          options={{
-            title: ar.tabs.receive,
-            tabBarIcon: ({ color, size }) => <Ionicons name="download" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
           name="more"
           options={{
             title: ar.tabs.more,
@@ -44,7 +39,7 @@ export default function StockLayout() {
           }}
         />
         {/* شاشات خارج شريط التبويب — يُوصل إليها من "المزيد" */}
-        <Tabs.Screen name="transfers" options={{ href: null }} />
+        <Tabs.Screen name="alerts" options={{ href: null }} />
         <Tabs.Screen name="suppliers" options={{ href: null }} />
       </Tabs>
     </RoleGate>

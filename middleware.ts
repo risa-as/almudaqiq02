@@ -63,16 +63,19 @@ const STOCK_KEEPER_ALLOWED = [
   '/api/inventory',
   '/api/stocktake',
   '/api/products',
+  // Needed to pick a category when adding a product — without it the category
+  // list 403s and silently renders empty, on the web /inventory/new page too.
+  '/api/categories',
   '/api/suppliers',
-  '/api/purchases',
   '/api/batches',
-  '/api/transfers',
   '/api/auth',
 ]
 
 // Sub-paths inside allowed prefixes that stock-keepers must NOT access
 const STOCK_KEEPER_BLOCKED = [
   '/purchases/suppliers/smart-buy',
+  // Branch transfers are not part of the stock-keeper role: the page was already
+  // blocked, and /api/transfers is no longer in the allow-list above either.
   '/transfers',
 ]
 

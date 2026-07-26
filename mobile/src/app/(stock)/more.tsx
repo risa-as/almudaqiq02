@@ -2,15 +2,18 @@ import { StyleSheet, Text, View, Pressable } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
-import { fetchExpiryReport, fetchInventoryAlerts, type ExpiryUrgency } from '@/api/endpoints/inventory'
+import { fetchExpiryReport, fetchInventoryAlerts } from '@/api/endpoints/inventory'
 import { AccountCard } from '@/components/AccountCard'
 import { Hero } from '@/components/Hero'
 import { Screen } from '@/components/Screen'
+import { ExpiringBatchRow, LowStockRow } from '@/components/stock/AlertRows'
 import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDate } from '@/utils/format'
 import { greetingFor } from '@/utils/greeting'
+import { ROW } from '@/utils/rtl'
+
 
 const S = {
   alerts: 'التنبيهات',
@@ -20,29 +23,25 @@ const S = {
   noNearExpiry: 'لا توجد دفعات قريبة الانتهاء',
   loading: 'جارٍ التحميل…',
   loadFailed: 'تعذر تحميل التنبيهات',
-  currentStock: 'الرصيد',
-  minStock: 'الحد الأدنى',
-  qty: 'الكمية',
-  expired: 'منتهية',
-  daysLeft: (d: number) => `متبقٍ ${d} يوم`,
   navigate: 'أقسام أخرى',
-  transfers: 'التحويلات بين الفروع',
   suppliers: 'الموردون',
+  allAlerts: 'كل التنبيهات',
+  viewAll: (n: number) => `عرض الكل (${n})`,
 }
 
 const MAX_ROWS = 8
 
-function urgencyColor(u: ExpiryUrgency): string {
-  switch (u) {
-    case 'expired':
-      return colors.danger
-    case 'critical':
-      return colors.danger
-    case 'warning':
-      return colors.warning
-    default:
-      return colors.textSecondary
-  }
+/** زرّ أسفل بطاقة التنبيه يفتح الشاشة الكاملة على القسم المطلوب. */
+function ViewAllButton({ count, tab }: { count: number; tab: 'low' | 'expiry' }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.viewAll, pressed && styles.viewAllPressed]}
+      onPress={() => router.push({ pathname: '/(stock)/alerts', params: { tab } })}
+    >
+      <Text style={styles.viewAllText}>{S.viewAll(count)}</Text>
+      <Ionicons name="chevron-back" size={15} color={colors.primary} />
+    </Pressable>
+  )
 }
 
 export default function StockMore() {
@@ -60,7 +59,10 @@ export default function StockMore() {
   })
 
   const lowStock = alertsQuery.data?.lowStock ?? []
-  const expiryRows = (expiryQuery.data?.batches ?? []).slice(0, MAX_ROWS)
+  // العدد الحقيقي من الخادم — قائمة المعاينة مقتطعة إلى 10 صفوف
+  const lowStockTotal = alertsQuery.data?.counts?.lowStock ?? lowStock.length
+  const expiryAll = expiryQuery.data?.batches ?? []
+  const expiryRows = expiryAll.slice(0, MAX_ROWS)
 
   return (
     <Screen
@@ -90,13 +92,14 @@ export default function StockMore() {
           <View style={[styles.iconWrap, { backgroundColor: colors.warningSoft }]}>
             <Ionicons name="trending-down" size={18} color={colors.warning} />
           </View>
-          <Text style={styles.cardTitle}>{S.lowStock}</Text>
-          {lowStock.length > 0 ? (
+          <Text style={styles.cardTitle} numberOfLines={1}>{S.lowStock}</Text>
+          {lowStockTotal > 0 ? (
             <View style={[styles.countBadge, { backgroundColor: colors.warningSoft }]}>
-              <Text style={[styles.countText, { color: colors.warning }]}>{lowStock.length}</Text>
+              <Text style={[styles.countText, { color: colors.warning }]}>{lowStockTotal}</Text>
             </View>
           ) : null}
         </View>
+
         {alertsQuery.isLoading ? (
           <Text style={styles.hint}>{S.loading}</Text>
         ) : alertsQuery.isError ? (
@@ -104,16 +107,14 @@ export default function StockMore() {
         ) : lowStock.length === 0 ? (
           <Text style={[styles.hint, { color: colors.success }]}>{S.noLowStock}</Text>
         ) : (
-          lowStock.slice(0, MAX_ROWS).map(p => (
-            <View key={p.id} style={styles.alertRow}>
-              <Text style={styles.alertName} numberOfLines={1}>{p.name}</Text>
-              <Text style={styles.alertMeta}>
-                {S.currentStock}: <Text style={{ color: colors.danger, fontWeight: '800' }}>{p.baseStock}</Text>
-                {'  •  '}
-                {S.minStock}: {p.minimumStock > 0 ? p.minimumStock : 10}
-              </Text>
+          <>
+            <View style={styles.list}>
+              {lowStock.slice(0, MAX_ROWS).map(p => (
+                <LowStockRow key={p.id} item={p} />
+              ))}
             </View>
-          ))
+            <ViewAllButton count={lowStockTotal} tab="low" />
+          </>
         )}
       </View>
 
@@ -123,13 +124,14 @@ export default function StockMore() {
           <View style={[styles.iconWrap, { backgroundColor: colors.dangerSoft }]}>
             <Ionicons name="time-outline" size={18} color={colors.danger} />
           </View>
-          <Text style={styles.cardTitle}>{S.nearExpiry}</Text>
-          {expiryQuery.data && expiryQuery.data.batches.length > 0 ? (
+          <Text style={styles.cardTitle} numberOfLines={1}>{S.nearExpiry}</Text>
+          {expiryAll.length > 0 ? (
             <View style={[styles.countBadge, { backgroundColor: colors.dangerSoft }]}>
-              <Text style={[styles.countText, { color: colors.danger }]}>{expiryQuery.data.batches.length}</Text>
+              <Text style={[styles.countText, { color: colors.danger }]}>{expiryAll.length}</Text>
             </View>
           ) : null}
         </View>
+
         {expiryQuery.isLoading ? (
           <Text style={styles.hint}>{S.loading}</Text>
         ) : expiryQuery.isError ? (
@@ -137,34 +139,35 @@ export default function StockMore() {
         ) : expiryRows.length === 0 ? (
           <Text style={[styles.hint, { color: colors.success }]}>{S.noNearExpiry}</Text>
         ) : (
-          expiryRows.map(b => (
-            <View key={b.id} style={styles.alertRow}>
-              <View style={styles.expiryTop}>
-                <Text style={styles.alertName} numberOfLines={1}>{b.productName}</Text>
-                <Text style={[styles.expiryDays, { color: urgencyColor(b.urgency) }]}>
-                  {b.daysLeft === null ? '—' : b.daysLeft < 0 ? S.expired : S.daysLeft(b.daysLeft)}
-                </Text>
-              </View>
-              <Text style={styles.alertMeta}>
-                {S.qty}: {b.quantity} • {formatDate(b.expiryDate)}
-              </Text>
+          <>
+            <View style={styles.list}>
+              {expiryRows.map(b => (
+                <ExpiringBatchRow key={b.id} item={b} />
+              ))}
             </View>
-          ))
+            <ViewAllButton count={expiryAll.length} tab="expiry" />
+          </>
         )}
       </View>
 
       {/* ── روابط الأقسام ── */}
       <Text style={styles.sectionTitle}>{S.navigate}</Text>
 
-      <Pressable style={styles.navRow} onPress={() => router.push('/(stock)/transfers')}>
-        <View style={[styles.iconWrap, { backgroundColor: colors.primarySoft }]}>
-          <Ionicons name="swap-horizontal" size={18} color={colors.primary} />
+      <Pressable
+        style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+        onPress={() => router.push('/(stock)/alerts')}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: colors.warningSoft }]}>
+          <Ionicons name="notifications" size={18} color={colors.warning} />
         </View>
-        <Text style={styles.navLabel}>{S.transfers}</Text>
+        <Text style={styles.navLabel}>{S.allAlerts}</Text>
         <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
       </Pressable>
 
-      <Pressable style={styles.navRow} onPress={() => router.push('/(stock)/suppliers')}>
+      <Pressable
+        style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+        onPress={() => router.push('/(stock)/suppliers')}
+      >
         <View style={[styles.iconWrap, { backgroundColor: colors.violetSoft }]}>
           <Ionicons name="people" size={18} color={colors.violet} />
         </View>
@@ -199,7 +202,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     ...shadow.card,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // الأيقونة يمينًا ← العنوان ← عدّاد يسارًا (row-reverse لترتيب عربي صحيح)
+  cardHeader: { flexDirection: ROW, alignItems: 'center', gap: spacing.sm },
   iconWrap: {
     width: 34,
     height: 34,
@@ -208,21 +212,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: { flex: 1, color: colors.text, fontSize: fontSize.sm, fontWeight: '700', textAlign: 'right' },
-  countBadge: { borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   countText: { fontSize: fontSize.xs, fontWeight: '800' },
   hint: { color: colors.textMuted, fontSize: fontSize.sm, textAlign: 'center', paddingVertical: spacing.sm },
-  alertRow: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    gap: 2,
+  list: { marginTop: spacing.xs },
+  // أنماط صفوف التنبيهات انتقلت إلى components/stock/AlertRows (مشتركة مع شاشة التنبيهات)
+  viewAll: {
+    flexDirection: ROW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
   },
-  alertName: { flex: 1, color: colors.text, fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
-  alertMeta: { color: colors.textSecondary, fontSize: fontSize.xs, textAlign: 'right' },
-  expiryTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  expiryDays: { fontSize: fontSize.xs, fontWeight: '800' },
+  viewAllPressed: { opacity: 0.7 },
+  viewAllText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: '800' },
+  // الأيقونة يمينًا ← التسمية ← سهم يسارًا (row-reverse)
   navRow: {
-    flexDirection: 'row',
+    flexDirection: ROW,
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.surface,
@@ -233,6 +249,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     ...shadow.card,
   },
+  navRowPressed: { backgroundColor: colors.background },
   navLabel: { flex: 1, color: colors.text, fontSize: fontSize.md, fontWeight: '600', textAlign: 'right' },
   accountWrap: { marginTop: spacing.md },
 })

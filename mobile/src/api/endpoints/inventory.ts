@@ -48,6 +48,53 @@ export function searchProducts(q: string, branchId?: string | null): Promise<Pro
   return api<ProductSearchResult[]>('/api/products/search', { query: { q, branchId: branchId ?? undefined } })
 }
 
+// ── التصنيفات وإنشاء منتج ─────────────────────────────────────────────────────
+
+/** الحقول المستخدمة فقط من GET /api/categories (الخادم يعيد صفًا كاملًا أوسع). */
+export interface CategoryOption {
+  id: string
+  name: string
+}
+
+export function fetchCategories(): Promise<CategoryOption[]> {
+  return api<CategoryOption[]>('/api/categories')
+}
+
+/**
+ * جسم POST /api/products — مطابق لما ترسله صفحة الويب «إضافة منتج».
+ * الفرع يؤخذ من التوكن على الخادم (لا يُقرأ من الجسم)، فتُنشأ الدفعة الابتدائية
+ * في فرع الموظف.
+ *
+ * تنبيه: اختيار مورّد مع كمية ابتدائية ينشئ قيد شراء في دفتر المورد؛ فإن لم يكن
+ * isPrepaid صحيحًا يزيد رصيد المورد (دَين) بقيمة الفاتورة — تمامًا كصفحة الويب.
+ */
+export interface NewProductPayload {
+  name: string
+  description?: string
+  baseCost: number
+  minimumStock: number
+  units: { name: string; conversion: number; barcode: string; price: number; initialQty: number }[]
+  categoryId?: string | null
+  supplierId?: string | null
+  expiryDate?: string | null
+  /** الكمية الابتدائية مدفوعة بالكامل مسبقًا ⇒ لا دين على المورد */
+  isPrepaid?: boolean
+}
+
+export function createProduct(payload: NewProductPayload): Promise<{ id: string; name: string }> {
+  return api('/api/products', {
+    method: 'POST',
+    body: {
+      ...payload,
+      description: payload.description ?? '',
+      categoryId: payload.categoryId || null,
+      supplierId: payload.supplierId || null,
+      expiryDate: payload.expiryDate || null,
+      isPrepaid: payload.supplierId ? !!payload.isPrepaid : false,
+    },
+  })
+}
+
 // ── حل الباركود ───────────────────────────────────────────────────────────────
 
 export interface BarcodeProduct {
@@ -127,11 +174,18 @@ export interface ExpiringBatchAlert {
 export interface InventoryAlerts {
   lowStock: LowStockAlert[]
   expiringBatches: ExpiringBatchAlert[]
+  /** الأعداد الحقيقية غير المقطوعة — لعرض عدّاد صادق فوق قائمة مختصرة */
+  counts?: { lowStock: number }
 }
 
-/** GET /api/inventory/alerts — أدنى 10 منتجات رصيدًا + 10 دفعات تنتهي خلال 30 يومًا. */
-export function fetchInventoryAlerts(branchId?: string | null): Promise<InventoryAlerts> {
-  return api<InventoryAlerts>('/api/inventory/alerts', { query: { branchId: branchId ?? undefined } })
+/**
+ * GET /api/inventory/alerts — افتراضيًا أدنى 10 منتجات رصيدًا (معاينة اللوحة).
+ * full=true يعيد قائمة «تحت الحد الأدنى» كاملة بلا اقتطاع.
+ */
+export function fetchInventoryAlerts(branchId?: string | null, full = false): Promise<InventoryAlerts> {
+  return api<InventoryAlerts>('/api/inventory/alerts', {
+    query: { branchId: branchId ?? undefined, full: full ? '1' : undefined },
+  })
 }
 
 // ── تقرير الصلاحية ────────────────────────────────────────────────────────────

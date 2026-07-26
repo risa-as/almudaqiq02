@@ -8,11 +8,13 @@ import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
 import { ALL_BRANCHES, ALL_BRANCHES_LABEL, useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
+import { ALIGN_RIGHT, ROW } from '@/utils/rtl'
 
 const t = {
   branchSwitcher: 'الفرع المعروض',
   sections: 'أقسام الإدارة',
+  sectionsHint: 'اختصارات لإدارة متجرك',
   inventory: 'نظرة المخزون',
   inventoryHint: 'المنخفض والقريب من الانتهاء',
   approvals: 'الموافقات',
@@ -23,25 +25,33 @@ const t = {
   assistantHint: 'اسأل عن بياناتك بالعربية',
 }
 
-interface NavRowProps {
+interface SectionDef {
+  key: string
   icon: keyof typeof Ionicons.glyphMap
   label: string
   hint: string
-  divider?: boolean
-  onPress: () => void
+  tint: string
+  soft: string
+  route: string
 }
 
-function NavRow({ icon, label, hint, divider, onPress }: NavRowProps) {
+/** بلاطة قسم إدارية ضمن الشبكة — أيقونة ملوّنة أعلى اليمين، عنوان ووصف تحتها. */
+function SectionTile({ def, onPress }: { def: SectionDef; onPress: () => void }) {
   return (
-    <Pressable style={[styles.navRow, divider && styles.rowDivider]} onPress={onPress}>
-      <View style={styles.navIcon}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
-      </View>
-      <View style={styles.navInfo}>
-        <Text style={styles.navLabel}>{label}</Text>
-        <Text style={styles.navHint}>{hint}</Text>
-      </View>
-      <Ionicons name="chevron-back" size={18} color={colors.textMuted} />
+    <Pressable style={styles.tileWrap} onPress={onPress}>
+      {({ pressed }) => (
+        <View style={[styles.tile, pressed && styles.tilePressed]}>
+          <View style={[styles.bubble, { backgroundColor: def.soft }]}>
+            <Ionicons name={def.icon} size={22} color={def.tint} />
+          </View>
+          <Text style={styles.tileLabel} numberOfLines={1}>
+            {def.label}
+          </Text>
+          <Text style={styles.tileHint} numberOfLines={2}>
+            {def.hint}
+          </Text>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -57,6 +67,47 @@ export default function AdminSettings() {
     branches.length > 1
       ? [{ id: ALL_BRANCHES, name: ALL_BRANCHES_LABEL }, ...branches]
       : branches
+
+  const sections: SectionDef[] = [
+    {
+      key: 'inventory',
+      icon: 'cube',
+      label: t.inventory,
+      hint: t.inventoryHint,
+      tint: colors.primary,
+      soft: colors.primarySoft,
+      route: '/(admin)/inventory',
+    },
+    {
+      key: 'approvals',
+      icon: 'checkmark-done',
+      label: t.approvals,
+      hint: t.approvalsHint,
+      tint: colors.success,
+      soft: colors.successSoft,
+      route: '/(admin)/approvals',
+    },
+    {
+      key: 'users',
+      icon: 'people',
+      label: t.users,
+      hint: t.usersHint,
+      tint: colors.violet,
+      soft: colors.violetSoft,
+      route: '/(admin)/users',
+    },
+  ]
+  if (aiEnabled) {
+    sections.push({
+      key: 'assistant',
+      icon: 'sparkles',
+      label: t.assistant,
+      hint: t.assistantHint,
+      tint: colors.warning,
+      soft: colors.warningSoft,
+      route: '/(admin)/assistant',
+    })
+  }
 
   return (
     <Screen title={ar.tabs.more} subtitle={tenantName ?? undefined}>
@@ -95,39 +146,14 @@ export default function AdminSettings() {
         </>
       ) : null}
 
-      {/* ── أقسام الإدارة خارج شريط التبويب ── */}
+      {/* ── أقسام الإدارة خارج شريط التبويب — شبكة بلاطات ── */}
       <SectionTitle>{t.sections}</SectionTitle>
-      <Card style={styles.navCard}>
-        <NavRow
-          icon="cube-outline"
-          label={t.inventory}
-          hint={t.inventoryHint}
-          onPress={() => router.push('/(admin)/inventory' as never)}
-        />
-        <NavRow
-          icon="checkmark-done-outline"
-          label={t.approvals}
-          hint={t.approvalsHint}
-          divider
-          onPress={() => router.push('/(admin)/approvals' as never)}
-        />
-        <NavRow
-          icon="people-outline"
-          label={t.users}
-          hint={t.usersHint}
-          divider
-          onPress={() => router.push('/(admin)/users' as never)}
-        />
-        {aiEnabled ? (
-          <NavRow
-            icon="sparkles-outline"
-            label={t.assistant}
-            hint={t.assistantHint}
-            divider
-            onPress={() => router.push('/(admin)/assistant' as never)}
-          />
-        ) : null}
-      </Card>
+      <Text style={styles.sectionsHint}>{t.sectionsHint}</Text>
+      <View style={styles.grid}>
+        {sections.map(s => (
+          <SectionTile key={s.key} def={s} onPress={() => router.push(s.route as never)} />
+        ))}
+      </View>
     </Screen>
   )
 }
@@ -144,22 +170,55 @@ const styles = StyleSheet.create({
   branchInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
   branchName: { fontSize: fontSize.md, color: colors.text, textAlign: 'right' },
   branchNameActive: { color: colors.primary, fontWeight: '700' },
-  navCard: { paddingVertical: spacing.xs },
-  navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
+
+  // ── شبكة أقسام الإدارة ──
+  sectionsHint: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    textAlign: 'right',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
   },
-  navIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.md,
-    backgroundColor: colors.primarySoft,
+  grid: {
+    flexDirection: ROW,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
+  },
+  tileWrap: { width: '48%' },
+  tile: {
+    minHeight: 138,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    alignItems: ALIGN_RIGHT,
+    gap: spacing.sm,
+    overflow: 'hidden',
+    ...shadow.card,
+  },
+  tilePressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
+  bubble: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navInfo: { flex: 1, gap: 2 },
-  navLabel: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, textAlign: 'right' },
-  navHint: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
+  tileLabel: {
+    alignSelf: 'stretch',
+    fontSize: fontSize.md,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'right',
+    marginTop: spacing.xs,
+  },
+  tileHint: {
+    alignSelf: 'stretch',
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    textAlign: 'right',
+    lineHeight: 16,
+  },
 })

@@ -1,20 +1,20 @@
 /**
- * Design tokens — mirrors the web 019 premium redesign (Indigo/Violet).
+ * Design tokens — mobile palette: marine blue (#155E85) primary family.
  * All screens must consume these instead of hard-coded values.
  * 2026-07: modern consumer-app pass — pill CTAs, softer cards, hero gradient.
  */
 
 export const colors = {
-  primary: '#4F46E5',        // indigo-600
-  primaryLight: '#6366F1',   // indigo-500
-  primaryDark: '#4338CA',    // indigo-700 — pressed states / gradient depth
-  primarySoft: '#EEF2FF',    // indigo-50
+  primary: '#155E85',        // أزرق بحري — اللون الأساسي للتطبيق
+  primaryLight: '#1B76A6',   // درجة أفتح
+  primaryDark: '#104A6A',    // درجة أغمق — حالات الضغط / عمق التدرج
+  primarySoft: '#E8F3F9',    // خلفية ناعمة بنفس العائلة
   violet: '#8B5CF6',
   violetSoft: '#F5F3FF',
 
-  /** تدرّج الهيدر البطولي (نيلي → بنفسجي) */
-  gradientFrom: '#4F46E5',   // indigo-600
-  gradientTo: '#7C3AED',     // violet-600
+  /** تدرّج الهيدر البطولي (أزرق بحري → سماوي عميق) */
+  gradientFrom: '#155E85',
+  gradientTo: '#0E7490',     // cyan-700
 
   background: '#F6F7FB',     // very light cool gray
   surface: '#FFFFFF',
@@ -95,7 +95,7 @@ export const shadow = {
   },
   /** ظل ملوّن خفيف لزر الإجراء الرئيسي */
   button: {
-    shadowColor: '#4F46E5',
+    shadowColor: '#155E85',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

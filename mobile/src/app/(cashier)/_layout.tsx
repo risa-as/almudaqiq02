@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { RoleGate } from '@/components/RoleGate'
+import { TabBarButton } from '@/components/TabBarButton'
 import { ar } from '@/i18n/ar'
 import { colors } from '@/theme'
 
@@ -13,6 +14,7 @@ export default function CashierLayout() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textMuted,
           tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+          tabBarButton: props => <TabBarButton {...props} />,
         }}
       >
         <Tabs.Screen

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { ApiError } from '@/api/client'
@@ -11,6 +11,7 @@ import {
   shiftKeys,
 } from '@/api/endpoints/shifts'
 import { fetchTransactions, shiftInvoicesKey } from '@/api/endpoints/transactions'
+import { appAlert } from '@/components/AppAlert'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingView } from '@/components/LoadingView'
 import { Screen } from '@/components/Screen'
@@ -19,6 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import { formatDateTime, formatMoney } from '@/utils/format'
 import { ar } from '@/i18n/ar'
 import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
+import { ALIGN_RIGHT, ROW } from '@/utils/rtl'
 
 // نصوص خاصة بشاشة الوردية
 const t = {
@@ -28,7 +30,9 @@ const t = {
   openingBalance: 'الرصيد الافتتاحي',
   openShift: 'فتح الوردية',
   opening: 'جارٍ فتح الوردية…',
+  shiftOpen: 'وردية مفتوحة الآن',
   openedAt: 'فُتحت في',
+  summary: 'ملخص الوردية',
   salesCount: 'عدد الفواتير',
   totalSales: 'إجمالي المبيعات',
   cashSales: 'مبيعات نقدية',
@@ -115,7 +119,7 @@ export default function ShiftScreen() {
       setFormError(null)
       const counted = Number(result.shift.closingAmount ?? 0)
       const expected = Number(result.expectedAmount)
-      Alert.alert(
+      appAlert.success(
         t.closedTitle,
         t.closedMessage(formatMoney(expected), formatMoney(counted), formatMoney(counted - expected)),
       )
@@ -144,10 +148,12 @@ export default function ShiftScreen() {
     }
     setFormError(null)
     const expected = summaryQuery.data?.expectedCash ?? 0
-    Alert.alert(t.confirmCloseTitle, t.confirmCloseMessage(formatMoney(expected), formatMoney(counted)), [
-      { text: ar.common.cancel, style: 'cancel' },
-      { text: ar.common.confirm, style: 'destructive', onPress: () => closeMutation.mutate(counted) },
-    ])
+    appAlert.confirm({
+      title: t.confirmCloseTitle,
+      message: t.confirmCloseMessage(formatMoney(expected), formatMoney(counted)),
+      destructive: true,
+      onConfirm: () => closeMutation.mutate(counted),
+    })
   }
 
   if (shiftQuery.isPending) {
@@ -182,16 +188,19 @@ export default function ShiftScreen() {
           <Text style={styles.cardHint}>{t.noShiftHint}</Text>
 
           <Text style={styles.inputLabel}>{t.openingBalance}</Text>
-          <TextInput
-            style={styles.input}
-            value={openingInput}
-            onChangeText={setOpeningInput}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            textAlign="right"
-            editable={!openMutation.isPending}
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              value={openingInput}
+              onChangeText={setOpeningInput}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              textAlign="right"
+              editable={!openMutation.isPending}
+            />
+            <Text style={styles.inputUnit}>{ar.common.currency}</Text>
+          </View>
 
           {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
 
@@ -200,6 +209,7 @@ export default function ShiftScreen() {
             onPress={submitOpen}
             disabled={openMutation.isPending}
           >
+            <Ionicons name="play-circle-outline" size={20} color={colors.onPrimary} />
             <Text style={styles.primaryButtonText}>{openMutation.isPending ? t.opening : t.openShift}</Text>
           </Pressable>
         </View>
@@ -225,11 +235,32 @@ export default function ShiftScreen() {
         invoicesQuery.refetch()
       }}
     >
-      <View style={styles.openBadge}>
-        <View style={styles.openDot} />
-        <Text style={styles.openBadgeText}>
-          {t.openedAt} {formatDateTime(activeShift.openedAt)}
-        </Text>
+      {/* ── بطاقة حالة الوردية ── */}
+      <View style={styles.statusCard}>
+        <View style={styles.statusTop}>
+          <View style={styles.openDot} />
+          <Text style={styles.statusTitle}>{t.shiftOpen}</Text>
+        </View>
+        <View style={styles.statusChips}>
+          <View style={styles.statusChip}>
+            <Ionicons name="time-outline" size={13} color={colors.success} />
+            <Text style={styles.statusChipText} numberOfLines={1}>
+              {t.openedAt} {formatDateTime(activeShift.openedAt)}
+            </Text>
+          </View>
+          <View style={styles.statusChip}>
+            <Ionicons name="wallet-outline" size={13} color={colors.success} />
+            <Text style={styles.statusChipText} numberOfLines={1}>
+              {t.openingBalance}: {formatMoney(activeShift.openingAmount)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── ملخص الوردية ── */}
+      <View style={styles.sectionHeader}>
+        <Ionicons name="stats-chart-outline" size={16} color={colors.textSecondary} />
+        <Text style={styles.sectionHeaderTitle}>{t.summary}</Text>
       </View>
 
       <View style={styles.statsRow}>
@@ -239,6 +270,7 @@ export default function ShiftScreen() {
           icon="trending-up"
           tint={colors.primary}
           tintSoft={colors.primarySoft}
+          unit={ar.common.currency}
         />
         <StatCard
           label={t.salesCount}
@@ -256,6 +288,7 @@ export default function ShiftScreen() {
           icon="cash-outline"
           tint={colors.success}
           tintSoft={colors.successSoft}
+          unit={ar.common.currency}
         />
         <StatCard
           label={t.cardSales}
@@ -263,6 +296,7 @@ export default function ShiftScreen() {
           icon="card-outline"
           tint={colors.info}
           tintSoft={colors.infoSoft}
+          unit={ar.common.currency}
         />
       </View>
 
@@ -273,6 +307,7 @@ export default function ShiftScreen() {
           icon="time-outline"
           tint={colors.warning}
           tintSoft={colors.warningSoft}
+          unit={ar.common.currency}
         />
         <StatCard
           label={t.cashRefunds}
@@ -280,17 +315,22 @@ export default function ShiftScreen() {
           icon="return-down-back-outline"
           tint={colors.danger}
           tintSoft={colors.dangerSoft}
+          unit={ar.common.currency}
         />
       </View>
 
+      {/* ── النقد المتوقع ── */}
       <View style={styles.expectedCard}>
+        <View style={styles.expectedIcon}>
+          <Ionicons name="wallet-outline" size={22} color={colors.primary} />
+        </View>
         <Text style={styles.expectedLabel}>{t.expectedCash}</Text>
-        <Text style={styles.expectedValue}>
-          {formatMoney(summary?.expectedCash ?? 0)} {ar.common.currency}
-        </Text>
-        <Text style={styles.expectedHint}>
-          {t.openingBalance}: {formatMoney(activeShift.openingAmount)}
-        </Text>
+        <View style={styles.expectedValueRow}>
+          <Text style={styles.expectedValue} numberOfLines={1} adjustsFontSizeToFit>
+            {formatMoney(summary?.expectedCash ?? 0)}
+          </Text>
+          <Text style={styles.expectedUnit}>{ar.common.currency}</Text>
+        </View>
       </View>
 
       {!closePanelOpen ? (
@@ -303,16 +343,19 @@ export default function ShiftScreen() {
           <Text style={styles.cardTitle}>{t.closeShift}</Text>
 
           <Text style={styles.inputLabel}>{t.countedCash}</Text>
-          <TextInput
-            style={styles.input}
-            value={countedInput}
-            onChangeText={setCountedInput}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            textAlign="right"
-            editable={!closeMutation.isPending}
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              value={countedInput}
+              onChangeText={setCountedInput}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              textAlign="right"
+              editable={!closeMutation.isPending}
+            />
+            <Text style={styles.inputUnit}>{ar.common.currency}</Text>
+          </View>
 
           <View style={styles.diffRow}>
             <Text style={styles.diffLabel}>{t.expectedCash}</Text>
@@ -392,40 +435,75 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   inputLabel: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right', marginTop: spacing.sm },
-  input: {
+  // الحقل والوحدة في إطار واحد: الرقم يمينًا و«د.ع» في الطرف الأيسر
+  inputWrap: {
+    flexDirection: ROW,
+    alignItems: 'center',
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
+  },
+  input: {
+    flex: 1,
     paddingVertical: spacing.md,
     fontSize: fontSize.lg,
     color: colors.text,
   },
+  inputUnit: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textMuted },
   errorText: { color: colors.danger, fontSize: fontSize.sm, textAlign: 'right', marginTop: spacing.xs },
   primaryButton: {
+    flexDirection: ROW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     height: control.buttonHeight,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: spacing.md,
     ...shadow.button,
   },
   primaryButtonText: { color: colors.onPrimary, fontSize: fontSize.md, fontWeight: '800' },
   buttonDisabled: { opacity: 0.6 },
-  openBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+
+  // ── بطاقة الحالة ──
+  statusCard: {
     backgroundColor: colors.successSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    padding: spacing.lg,
+    gap: spacing.md,
     marginBottom: spacing.md,
   },
+  statusTop: { flexDirection: ROW, alignItems: 'center', gap: spacing.sm },
   openDot: { width: 10, height: 10, borderRadius: radius.full, backgroundColor: colors.success },
-  openBadgeText: { flex: 1, color: colors.success, fontSize: fontSize.sm, fontWeight: '600', textAlign: 'right' },
-  statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  statusTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800', textAlign: 'right' },
+  statusChips: { flexDirection: ROW, flexWrap: 'wrap', gap: spacing.sm },
+  statusChip: {
+    flexDirection: ROW,
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 1,
+    flexShrink: 1,
+  },
+  statusChipText: { color: colors.success, fontSize: fontSize.xs, fontWeight: '700' },
+
+  sectionHeader: {
+    flexDirection: ROW,
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  sectionHeaderTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
+
+  statsRow: { flexDirection: ROW, gap: spacing.md, marginBottom: spacing.md },
+
+  // ── النقد المتوقع ──
   expectedCard: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,
@@ -434,11 +512,23 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
-  expectedLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
+  expectedIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  expectedLabel: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
+  expectedValueRow: { flexDirection: ROW, alignItems: 'baseline', gap: spacing.xs },
   expectedValue: { fontSize: fontSize.xxl, fontWeight: '800', color: colors.primary },
-  expectedHint: { fontSize: fontSize.xs, color: colors.textMuted },
+  expectedUnit: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+
+  // ── مسار الإغلاق ──
   closeStartButton: {
-    flexDirection: 'row',
+    flexDirection: ROW,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
@@ -457,12 +547,12 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   diffRow: {
-    flexDirection: 'row',
+    flexDirection: ROW,
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: spacing.sm,
   },
-  diffLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
+  diffLabel: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
   diffValue: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
   diffOk: { color: colors.success },
   diffSurplus: { color: colors.info },

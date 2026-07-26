@@ -10,6 +10,7 @@ export const ar = {
     retry: 'إعادة المحاولة',
     cancel: 'إلغاء',
     confirm: 'تأكيد',
+    ok: 'حسنًا',
     save: 'حفظ',
     close: 'إغلاق',
     search: 'بحث…',
@@ -28,9 +29,16 @@ export const ar = {
     title: 'تسجيل الدخول',
     subtitle: 'ادخل بيانات حسابك في النظام',
     identifier: 'البريد الإلكتروني أو اسم المستخدم',
+    identifierPlaceholder: 'name@company.com',
     password: 'كلمة المرور',
+    passwordPlaceholder: '••••••••',
     submit: 'دخول',
     submitting: 'جارٍ التحقق…',
+    incomplete: 'أدخل بيانات الدخول كاملة',
+    showPassword: 'إظهار كلمة المرور',
+    hidePassword: 'إخفاء كلمة المرور',
+    secureNote: 'اتصال آمن ومشفّر',
+    version: (v: string) => `الإصدار ${v}`,
   },
 
   tabs: {
@@ -47,7 +55,6 @@ export const ar = {
     // المخزون
     inventory: 'المخزون',
     stocktake: 'الجرد',
-    receive: 'الاستلام',
   },
 
   scanner: {

@@ -39,3 +39,53 @@ export function fetchExpenses(
         },
   })
 }
+
+/** حمولة إنشاء/تعديل مصروف — المبلغ رقمي، والحقول الاختيارية null عند تفريغها. */
+export interface ExpenseInput {
+  title: string
+  amount: number
+  category?: string | null
+  description?: string | null
+  /** YYYY-MM-DD — عند الغياب يستخدم الخادم تاريخ اليوم. */
+  date?: string | null
+  /** عند الغياب يستخدم الخادم فرع المستخدم الحالي. */
+  branchId?: string | null
+}
+
+/** POST /api/expenses — إنشاء مصروف جديد ويعيد الصف المنشأ. */
+export function createExpense(input: ExpenseInput): Promise<ExpenseRow> {
+  return api<ExpenseRow>('/api/expenses', {
+    method: 'POST',
+    body: {
+      title: input.title,
+      amount: input.amount,
+      category: input.category ?? null,
+      description: input.description ?? null,
+      date: input.date ?? undefined,
+      branchId: normalizeBranchId(input.branchId),
+    },
+  })
+}
+
+/** PUT /api/expenses — تعديل مصروف قائم (يُشترط id) ويعيد الصف المحدّث. */
+export function updateExpense(input: ExpenseInput & { id: string }): Promise<ExpenseRow> {
+  return api<ExpenseRow>('/api/expenses', {
+    method: 'PUT',
+    body: {
+      id: input.id,
+      title: input.title,
+      amount: input.amount,
+      category: input.category ?? null,
+      description: input.description ?? null,
+      date: input.date ?? undefined,
+    },
+  })
+}
+
+/** DELETE /api/expenses?id=<id> — حذف مصروف. */
+export function deleteExpense(id: string): Promise<{ success: boolean }> {
+  return api<{ success: boolean }>('/api/expenses', {
+    method: 'DELETE',
+    query: { id },
+  })
+}

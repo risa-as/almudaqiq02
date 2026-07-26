@@ -5,15 +5,21 @@ import { StatusBar } from 'expo-status-bar'
 import { useFonts } from 'expo-font'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from '@/api/queryClient'
+import { AlertHost } from '@/components/AppAlert'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { applyGlobalFont, fontAssets } from '@/theme/fonts'
 import { useAuthStore } from '@/stores/auth'
 
-// ── تفعيل RTL (يسري بالكامل بعد أول إعادة تشغيل للتطبيق) ─────────────────────
-I18nManager.allowRTL(true)
-if (!I18nManager.isRTL) {
+// ── اتجاه التخطيط: LTR ثابت، والترتيب العربي يدويّ ───────────────────────────
+// forceRTL(true) كان يرفع علم isRTL في جافاسكربت فورًا بينما يبقى رسم Yoga أفقيًا
+// LTR حتى إعادة التشغيل (وقد لا يُطبَّق إطلاقًا في Expo Go). فيكذب العلم على الأنماط:
+// يقول RTL والرسم LTR، فتنقلب الصفوف (المبلغ يمينًا والاسم يسارًا) بلا قاعدة ثابتة.
+// لذا نثبّت التخطيط على LTR ونرتّب الواجهة عربيًا صراحةً عبر ثوابت utils/rtl
+// (ROW / ALIGN_RIGHT) مع textAlign — نتيجة واحدة قبل إعادة التشغيل وبعدها.
+I18nManager.allowRTL(false)
+if (I18nManager.isRTL) {
   try {
-    I18nManager.forceRTL(true)
+    I18nManager.forceRTL(false)
   } catch {
     // بعض المنصات ترفض التغيير وقت التشغيل — يُطبق عند الإقلاع التالي
   }
@@ -62,6 +68,8 @@ export default function RootLayout() {
           <Stack.Screen name="(cashier)" />
           <Stack.Screen name="(stock)" />
         </Stack>
+        {/* مضيف التنبيهات الافتراضي — آخر عنصر ليرسم فوق الشاشات وشريط التبويب */}
+        <AlertHost />
       </View>
     </QueryClientProvider>
   )

@@ -1,5 +1,6 @@
 'use client'
 import { useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Upload, Download, X, CheckCircle, AlertTriangle, Loader2, FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface ImportResult {
@@ -72,7 +73,7 @@ export function ImportModal({ onClose, onImported }: Props) {
 
   function handleFile(f: File) {
     if (!f.name.match(/\.(xlsx|csv)$/i)) {
-      alert('يرجى رفع ملف Excel حديث (.xlsx) أو CSV — صيغة .xls القديمة غير مدعومة')
+      toast.error('يرجى رفع ملف Excel حديث (.xlsx) أو CSV — صيغة .xls القديمة غير مدعومة')
       return
     }
     setFile(f)
@@ -87,11 +88,11 @@ export function ImportModal({ onClose, onImported }: Props) {
       fd.append('file', file)
       const res  = await fetch('/api/inventory/import', { method: 'POST', body: fd })
       const data = await res.json()
-      if (!res.ok) { alert(data.error ?? 'حدث خطأ'); return }
+      if (!res.ok) { toast.error(data.error ?? 'حدث خطأ'); return }
       setResult(data)
       if (data.created > 0) onImported()
     } catch {
-      alert('تعذر الاتصال بالخادم')
+      toast.error('تعذر الاتصال بالخادم')
     } finally {
       setLoading(false)
     }

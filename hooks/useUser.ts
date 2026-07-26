@@ -1,32 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
+type Role = 'SUPER_ADMIN' | 'ADMIN' | 'BRANCH_MANAGER' | 'CASHIER' | 'STOCK_KEEPER';
+
+interface MeResponse {
+    user: { role?: Role | null; username?: string | null } | null;
+    isElectron?: boolean;
+}
+
+/**
+ * هوية المستخدم الحالي — مكاشة عبر React Query بمفتاح واحد ['auth','me']
+ * فلا يتكرر طلب /api/auth/me مع كل صفحة؛ إعادة التحميل العميق تجلبها من جديد.
+ */
 export function useUser() {
-    const [role,       setRole]       = useState<'SUPER_ADMIN' | 'ADMIN' | 'BRANCH_MANAGER' | 'CASHIER' | 'STOCK_KEEPER' | null>(null);
-    const [username,   setUsername]   = useState<string | null>(null);
-    const [loading,    setLoading]    = useState(true);
-    const [isElectron, setIsElectron] = useState(false);
+    const q = useQuery<MeResponse>({
+        queryKey: ['auth', 'me'],
+        queryFn: async () => {
+            const r = await fetch('/api/auth/me');
+            if (!r.ok) return { user: null, isElectron: false };
+            return r.json();
+        },
+    });
 
-    useEffect(() => {
-        fetch('/api/auth/me')
-            .then(r => r.ok ? r.json() : { user: null, isElectron: false })
-            .then(data => {
-                if (data?.user) {
-                    setRole(data.user.role || 'CASHIER');
-                    setUsername(data.user.username);
-                }
-                setIsElectron(data?.isElectron === true);
-            })
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, []);
+    const role: Role | null = q.data?.user ? (q.data.user.role ?? 'CASHIER') : null;
+    const username = q.data?.user?.username ?? null;
 
     return {
         role,
         username,
-        loading,
-        isElectron,
+        loading: q.isPending,
+        isElectron: q.data?.isElectron === true,
         isAdmin: role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'BRANCH_MANAGER',
     };
 }

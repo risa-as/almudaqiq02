@@ -1,9 +1,15 @@
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
-import { fetchOffersReport, type DateRange, type OfferStatus } from '@/api/endpoints/reports'
+import {
+  fetchOffersReport,
+  type DateRange,
+  type OfferPerformanceRow,
+  type OfferStatus,
+} from '@/api/endpoints/reports'
 import { Card, SectionTitle } from '@/components/admin/Card'
-import { DateRangeFilter } from '@/components/admin/DateRangeFilter'
+import { ReportRangeFilter } from '@/components/admin/ReportRangeFilter'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingView } from '@/components/LoadingView'
@@ -11,7 +17,7 @@ import { Screen } from '@/components/Screen'
 import { StatCard } from '@/components/StatCard'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
-import { colors, fontSize, radius, spacing } from '@/theme'
+import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDate, formatMoney } from '@/utils/format'
 
 const t = {
@@ -23,10 +29,13 @@ const t = {
   activeCount: 'عروض نشطة',
   list: 'العروض',
   noOffers: 'لا توجد عروض',
-  usage: 'استخدام',
+  usage: 'الاستخدام',
   revenue: 'الإيراد',
   discount: 'الخصم',
   shared: 'كل الفروع',
+  openEnded: 'مفتوح',
+  discountLabel: 'خصم',
+  bogo: 'اشترِ واحصل',
 }
 
 const STATUS_META: Record<OfferStatus, { label: string; tint: string; tintSoft: string }> = {
@@ -34,6 +43,29 @@ const STATUS_META: Record<OfferStatus, { label: string; tint: string; tintSoft: 
   SCHEDULED: { label: 'مجدول', tint: colors.info, tintSoft: colors.infoSoft },
   EXPIRED: { label: 'منتهٍ', tint: colors.textSecondary, tintSoft: colors.background },
   DISABLED: { label: 'موقوف', tint: colors.danger, tintSoft: colors.dangerSoft },
+}
+
+type IconName = keyof typeof Ionicons.glyphMap
+
+const TYPE_META: Record<string, { icon: IconName; tint: string; tintSoft: string }> = {
+  PERCENTAGE_DISCOUNT: { icon: 'pricetag-outline', tint: colors.primary, tintSoft: colors.primarySoft },
+  FIXED_DISCOUNT: { icon: 'cash-outline', tint: colors.success, tintSoft: colors.successSoft },
+  BUY_X_GET_Y: { icon: 'gift-outline', tint: colors.violet, tintSoft: colors.violetSoft },
+  DEFAULT: { icon: 'pricetags-outline', tint: colors.textSecondary, tintSoft: colors.background },
+}
+
+/** وصف مقروء لقيمة العرض حسب نوعه (نسبة / مبلغ ثابت / اشترِ واحصل). */
+function discountDescriptor(o: OfferPerformanceRow): string {
+  switch (o.type) {
+    case 'PERCENTAGE_DISCOUNT':
+      return `${t.discountLabel} ${Number(o.value)}%`
+    case 'FIXED_DISCOUNT':
+      return `${t.discountLabel} ${formatMoney(o.value)} ${ar.common.currency}`
+    case 'BUY_X_GET_Y':
+      return t.bogo
+    default:
+      return o.type
+  }
 }
 
 export default function OffersReportScreen() {
@@ -48,9 +80,9 @@ export default function OffersReportScreen() {
 
   return (
     <Screen title={t.title} subtitle={t.subtitle} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}>
-      {/* فترة مخصصة اختيارية — الافتراضي خادميًا: آخر 30 يومًا */}
+      {/* فلتر الفترة الموحّد — الافتراضي خادميًا: آخر 30 يومًا */}
       <View style={styles.rangeRow}>
-        <DateRangeFilter value={range} onChange={setRange} />
+        <ReportRangeFilter onRangeChange={setRange} />
       </View>
 
       {q.isPending ? (
@@ -80,7 +112,7 @@ export default function OffersReportScreen() {
               label={t.totalRevenue}
               value={formatMoney(q.data.summary.totalRevenue)}
               icon="cash-outline"
-              hint={ar.common.currency}
+              unit={ar.common.currency}
             />
             <StatCard
               label={t.totalDiscount}
@@ -88,68 +120,160 @@ export default function OffersReportScreen() {
               icon="remove-circle-outline"
               tint={colors.danger}
               tintSoft={colors.dangerSoft}
-              hint={ar.common.currency}
+              unit={ar.common.currency}
             />
           </View>
 
           <SectionTitle>{`${t.list} (${q.data.summary.offerCount})`}</SectionTitle>
-          <Card>
-            {q.data.offers.length === 0 ? (
+          {q.data.offers.length === 0 ? (
+            <Card>
               <EmptyState message={t.noOffers} icon="pricetags-outline" />
-            ) : (
-              q.data.offers.map((o, i) => {
-                const meta = STATUS_META[o.status]
-                return (
-                  <View key={o.id} style={[styles.row, i > 0 && styles.rowDivider]}>
-                    <View style={styles.rowInfo}>
-                      <View style={styles.rowTitleWrap}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>
-                          {o.name}
-                        </Text>
-                        <View style={[styles.statusBadge, { backgroundColor: meta.tintSoft }]}>
-                          <Text style={[styles.statusBadgeText, { color: meta.tint }]}>{meta.label}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.rowMeta}>
-                        {o.branchName ?? t.shared} • {formatDate(o.startDate)}
-                        {o.endDate ? ` ← ${formatDate(o.endDate)}` : ''}
-                      </Text>
-                      <Text style={styles.rowMeta}>
-                        {o.usageCount} {t.usage} • {t.discount}: {formatMoney(o.discount)}
-                      </Text>
-                    </View>
-                    <View style={styles.rowAmounts}>
-                      <Text style={styles.rowRevenue}>{formatMoney(o.revenue)}</Text>
-                      <Text style={styles.rowMeta}>{t.revenue}</Text>
-                    </View>
-                  </View>
-                )
-              })
-            )}
-          </Card>
+            </Card>
+          ) : (
+            <View style={styles.offerList}>
+              {q.data.offers.map(o => (
+                <OfferCard key={o.id} o={o} />
+              ))}
+            </View>
+          )}
         </>
       )}
     </Screen>
   )
 }
 
+/** بطاقة عرض واحد — رأس (نوع + اسم + حالة) ثم وصف الخصم ثم سطر الفرع/المدة ثم مقاييس. */
+function OfferCard({ o }: { o: OfferPerformanceRow }) {
+  const status = STATUS_META[o.status]
+  const type = TYPE_META[o.type] ?? TYPE_META.DEFAULT
+  const dateText = o.endDate
+    ? `${formatDate(o.startDate)} ← ${formatDate(o.endDate)}`
+    : `${formatDate(o.startDate)} • ${t.openEnded}`
+
+  return (
+    <View style={styles.offerCard}>
+      {/* رأس البطاقة */}
+      <View style={styles.offerHeader}>
+        <View style={[styles.typeBadge, { backgroundColor: type.tintSoft }]}>
+          <Ionicons name={type.icon} size={20} color={type.tint} />
+        </View>
+        <View style={styles.headText}>
+          <View style={styles.titleRow}>
+            <Text style={styles.offerName} numberOfLines={1}>
+              {o.name}
+            </Text>
+            <View style={[styles.statusBadge, { backgroundColor: status.tintSoft }]}>
+              <View style={[styles.statusDot, { backgroundColor: status.tint }]} />
+              <Text style={[styles.statusText, { color: status.tint }]}>{status.label}</Text>
+            </View>
+          </View>
+          <Text style={[styles.discountText, { color: type.tint }]} numberOfLines={1}>
+            {discountDescriptor(o)}
+          </Text>
+        </View>
+      </View>
+
+      {/* الفرع والمدة */}
+      <View style={styles.metaRow}>
+        <View style={styles.metaItem}>
+          <Ionicons name="storefront-outline" size={13} color={colors.textMuted} />
+          <Text style={styles.metaText} numberOfLines={1}>
+            {o.branchName ?? t.shared}
+          </Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+          <Text style={styles.metaText} numberOfLines={1}>
+            {dateText}
+          </Text>
+        </View>
+      </View>
+
+      {/* المقاييس */}
+      <View style={styles.metricsRow}>
+        <OfferMetric icon="repeat-outline" tint={colors.violet} value={String(o.usageCount)} label={t.usage} />
+        <View style={styles.metricDivider} />
+        <OfferMetric icon="cash-outline" tint={colors.success} value={formatMoney(o.revenue)} label={t.revenue} />
+        <View style={styles.metricDivider} />
+        <OfferMetric icon="pricetag-outline" tint={colors.warning} value={formatMoney(o.discount)} label={t.discount} />
+      </View>
+    </View>
+  )
+}
+
+function OfferMetric({
+  icon,
+  tint,
+  value,
+  label,
+}: {
+  icon: IconName
+  tint: string
+  value: string
+  label: string
+}) {
+  return (
+    <View style={styles.metric}>
+      <Ionicons name={icon} size={15} color={tint} />
+      <Text style={styles.metricValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
-  rangeRow: { flexDirection: 'row', justifyContent: 'flex-start', marginBottom: spacing.md },
+  rangeRow: { marginBottom: spacing.md },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  row: {
+  offerList: { gap: spacing.md },
+
+  // ── بطاقة العرض ──────────────────────────────────────────────────────────────
+  offerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadow.card,
+  },
+  offerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  typeBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headText: { flex: 1, gap: 3 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  offerName: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, textAlign: 'right' },
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    gap: spacing.md,
+    gap: 4,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
   },
-  rowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
-  rowInfo: { flex: 1, gap: 2 },
-  rowTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  rowTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right', flexShrink: 1 },
-  rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
-  rowAmounts: { alignItems: 'flex-end', gap: 2 },
-  rowRevenue: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
-  statusBadge: { borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  statusBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
+  statusDot: { width: 6, height: 6, borderRadius: radius.full },
+  statusText: { fontSize: fontSize.xs, fontWeight: '700' },
+  discountText: { fontSize: fontSize.sm, fontWeight: '700', textAlign: 'right' },
+
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
+  metaText: { fontSize: fontSize.xs, color: colors.textMuted, flexShrink: 1 },
+
+  metricsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+  },
+  metric: { flex: 1, alignItems: 'center', gap: 3, paddingHorizontal: spacing.xs },
+  metricDivider: { width: 1, backgroundColor: colors.border, marginVertical: 2 },
+  metricValue: { fontSize: fontSize.sm, fontWeight: '800', color: colors.text },
+  metricLabel: { fontSize: fontSize.xs, color: colors.textMuted },
 })

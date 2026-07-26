@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "سوبرماركت كلاود",
-    "slug": "supermarket-cloud-mobile",
+    "slug": "supermarket-cloud",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -20,10 +20,18 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "extra": {
-      "supportsRTL": true
+      "supportsRTL": true,
+      "router": {},
+      "eas": {
+        "projectId": "e9b46f4c-3cb9-4694-a2f8-171e3525a89b"
+      }
     },
     "plugins": [
       "expo-router",
@@ -43,6 +51,7 @@
         }
       ],
       "expo-font"
-    ]
+    ],
+    "owner": "risa02"
   }
 }

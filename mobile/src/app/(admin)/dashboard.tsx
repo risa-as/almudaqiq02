@@ -111,7 +111,7 @@ export default function AdminDashboard() {
           label={t.todaySales}
           value={formatMoney(dash.today.sales)}
           icon="cash-outline"
-          hint={ar.common.currency}
+          unit={ar.common.currency}
         />
         <StatCard
           label={t.todayProfit}
@@ -119,7 +119,7 @@ export default function AdminDashboard() {
           icon="trending-up"
           tint={colors.success}
           tintSoft={colors.successSoft}
-          hint={ar.common.currency}
+          unit={ar.common.currency}
         />
       </View>
       <View style={styles.statsRow}>
@@ -136,7 +136,7 @@ export default function AdminDashboard() {
           icon="return-down-back-outline"
           tint={colors.warning}
           tintSoft={colors.warningSoft}
-          hint={ar.common.currency}
+          unit={ar.common.currency}
         />
       </View>
 

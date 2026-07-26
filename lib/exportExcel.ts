@@ -1,6 +1,9 @@
+import toast from 'react-hot-toast';
+
 export function exportToCSV(data: any[], filename: string, columnHeaders?: Record<string, string>) {
     if (!data || !data.length) {
-        alert("لا توجد بيانات للتصدير");
+        // توست بدل alert الأصلي — يُستدعى من ستّ صفحات تصدير
+        toast.error("لا توجد بيانات للتصدير");
         return;
     }
 

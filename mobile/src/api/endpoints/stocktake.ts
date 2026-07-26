@@ -46,6 +46,10 @@ export interface StocktakeItem {
   countedQty: number | null
   note: string | null
   difference: number | null
+  /** قسم المنتج — null للمنتجات بلا قسم أو المحذوفة بعد لقطة الجلسة */
+  categoryName: string | null
+  /** سعر بيع الوحدة الأساسية (نفس وحدة expectedQty) */
+  unitPrice: number
 }
 
 export interface StocktakeDetail {

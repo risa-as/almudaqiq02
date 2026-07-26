@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { fetchLiveTransactions, fetchShiftsReport, type LiveTransaction } from '@/api/endpoints/reports'
 import { Card, SectionTitle } from '@/components/admin/Card'
+import { InvoiceCard } from '@/components/admin/InvoiceCard'
+import { InvoiceDetailModal } from '@/components/admin/InvoiceDetailModal'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingView } from '@/components/LoadingView'
@@ -10,7 +13,7 @@ import { Screen } from '@/components/Screen'
 import { ar } from '@/i18n/ar'
 import { useBranchSelection } from '@/stores/branch'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
-import { formatDateTime, formatMoney, formatTime } from '@/utils/format'
+import { formatMoney, formatTime } from '@/utils/format'
 
 const LIVE_REFETCH_MS = 30_000
 
@@ -28,51 +31,11 @@ const t = {
   openChip: 'مفتوحة',
 }
 
-const TX_TYPE_LABELS: Record<string, string> = {
-  SALE: 'بيع',
-  REFUND: 'استرداد',
-  RETURN: 'إرجاع',
-}
-
-const PAYMENT_LABELS: Record<string, string> = {
-  CASH: 'نقدي',
-  CARD: 'بطاقة',
-  CREDIT: 'آجل',
-  SPLIT: 'جزئي',
-}
-
-/**
- * بطاقة فاتورة نظيفة: سطر رئيسي (المبلغ ↔ الوقت) + سطر ثانوي باهت
- * (طريقة الدفع • رقم الفاتورة). شارة واحدة فقط وتظهر للإرجاع/الاسترداد حصرًا.
- */
-function TxRow({ tx }: { tx: LiveTransaction }) {
-  const isSale = tx.type === 'SALE'
-  const payment = PAYMENT_LABELS[tx.paymentMethod ?? ''] ?? tx.paymentMethod ?? '—'
-  return (
-    <View style={styles.txCard}>
-      <View style={styles.txPrimaryRow}>
-        <View style={styles.txAmountGroup}>
-          <Text style={[styles.txAmount, !isSale && styles.txAmountNegative]}>
-            {formatMoney(tx.totalAmount)} {ar.common.currency}
-          </Text>
-          {!isSale ? (
-            <View style={styles.typeChip}>
-              <Text style={styles.typeChipText}>{TX_TYPE_LABELS[tx.type] ?? tx.type}</Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.txTime}>{formatDateTime(tx.date)}</Text>
-      </View>
-      <Text style={styles.txMetaLine}>
-        {payment} • #{tx.receiptNumber}
-      </Text>
-    </View>
-  )
-}
-
 export default function AdminSales() {
   const { selectedBranchId } = useBranchSelection()
   const bid = selectedBranchId
+  // الفاتورة المفتوحة في نافذة التفاصيل — نمرّر الصف كاملًا فتظهر المعاينة فورًا
+  const [invoice, setInvoice] = useState<LiveTransaction | null>(null)
 
   // بث حي: إعادة جلب تلقائية كل 30 ثانية + سحب للتحديث
   const txQ = useQuery({
@@ -181,46 +144,25 @@ export default function AdminSales() {
       ) : (
         <View style={styles.cardList}>
           {transactions.map(tx => (
-            <TxRow key={tx.id} tx={tx} />
+            <InvoiceCard key={tx.id} tx={tx} onPress={() => setInvoice(tx)} />
           ))}
         </View>
       )}
       <Text style={styles.footnote}>{`يتم التحديث تلقائيًا كل 30 ثانية — العملة: ${ar.common.currency}`}</Text>
+
+      <InvoiceDetailModal
+        visible={invoice !== null}
+        transactionId={invoice?.id ?? null}
+        branchId={bid}
+        preview={invoice}
+        onClose={() => setInvoice(null)}
+      />
     </Screen>
   )
 }
 
 const styles = StyleSheet.create({
   cardList: { gap: spacing.sm },
-
-  // ── بطاقة الفاتورة: سطران فقط وحجما نص اثنان ──────────────────────────────
-  txCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    ...shadow.card,
-  },
-  txPrimaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  txAmountGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
-  txAmount: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text },
-  txAmountNegative: { color: colors.danger },
-  typeChip: {
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    backgroundColor: colors.dangerSoft,
-  },
-  typeChipText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.danger },
-  txTime: { fontSize: fontSize.sm, color: colors.textMuted },
-  txMetaLine: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'right' },
 
   // ── بطاقة الوردية المفتوحة: رأس (كاشير + حالة) ثم ثلاث خانات معنونة ────────
   shiftCard: {

@@ -37,6 +37,8 @@ export interface TransactionListItem {
   priceEdited?: boolean
   user?: { username: string | null } | null
   customer?: { name: string } | null
+  /** أسماء أصناف الفاتورة — يرسلها الخادم عند البحث فقط (ليظهر سبب المطابقة) */
+  productNames?: string[]
 }
 
 export interface TransactionItemDto {
@@ -48,6 +50,8 @@ export interface TransactionItemDto {
   cost: number | string
   product?: { name: string } | null
   unit?: { name: string } | null
+  /** ما أُرجع من هذا البند سابقًا (يرسله الخادم لفواتير البيع فقط) */
+  returnedQuantity?: number
 }
 
 export interface TransactionDetail extends Omit<TransactionListItem, 'customer'> {
@@ -76,9 +80,21 @@ export interface SalePayload {
   paymentMethod: 'CASH' | 'CARD' | 'CREDIT'
 }
 
-export function fetchTransactions(params?: { limit?: number; branchId?: string | null }): Promise<TransactionListItem[]> {
+export function fetchTransactions(params?: {
+  limit?: number
+  branchId?: string | null
+  /** بحث برقم الفاتورة أو باسم صنف مبيع داخلها (الأحدث أولاً) */
+  q?: string
+  /** قصر النتائج على فواتير المستخدم الحالي */
+  mine?: boolean
+}): Promise<TransactionListItem[]> {
   return api<TransactionListItem[]>('/api/transactions', {
-    query: { limit: params?.limit ?? 100, branchId: params?.branchId ?? undefined },
+    query: {
+      limit: params?.limit ?? 100,
+      branchId: params?.branchId ?? undefined,
+      q: params?.q || undefined,
+      mine: params?.mine ? '1' : undefined,
+    },
   })
 }
 
@@ -142,3 +158,7 @@ export const shiftInvoicesKey = (branchId?: string | null) =>
   ['shift-invoices', branchId ?? 'all'] as const
 
 export const invoiceDetailKey = (id: string) => ['invoice', id] as const
+
+/** مفتاح بحث الفواتير — يشترك في البادئة مع shiftInvoicesKey ليبطلهما إبطال واحد. */
+export const invoiceSearchKey = (q: string, branchId?: string | null) =>
+  ['shift-invoices', branchId ?? 'all', 'search', q] as const

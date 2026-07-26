@@ -14,6 +14,7 @@ import { ar } from '@/i18n/ar'
 import { useAuthStore } from '@/stores/auth'
 import { colors, control, fontSize, radius, shadow, spacing } from '@/theme'
 import { formatDateTime } from '@/utils/format'
+import { ROW } from '@/utils/rtl'
 
 const S = {
   startNew: 'بدء جرد جديد',
@@ -100,6 +101,9 @@ export default function StocktakeList() {
         ListEmptyComponent={<EmptyState icon="clipboard-outline" message={S.empty} />}
         renderItem={({ item }) => {
           const chip = chipFor(STOCKTAKE_STATUS, item.status)
+          const complete = item.totalItems > 0 && item.countedItems >= item.totalItems
+          const countTint = complete ? colors.success : colors.primary
+          const countSoft = complete ? colors.successSoft : colors.primarySoft
           return (
             <Pressable
               style={styles.card}
@@ -107,17 +111,35 @@ export default function StocktakeList() {
             >
               <View style={styles.cardHeader}>
                 <StatusChip {...chip} />
-                <Text style={styles.date}>{formatDateTime(item.createdAt)}</Text>
+                <View style={styles.dateWrap}>
+                  <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+                  <Text style={styles.date}>{formatDateTime(item.createdAt)}</Text>
+                </View>
               </View>
-              <Text style={styles.branch}>{item.branchName}</Text>
+
+              <View style={styles.branchRow}>
+                <View style={styles.branchIcon}>
+                  <Ionicons name="storefront-outline" size={14} color={colors.primary} />
+                </View>
+                <Text style={styles.branch} numberOfLines={1}>{item.branchName}</Text>
+              </View>
+
+              <View style={styles.divider} />
+
               <View style={styles.statsRow}>
-                <Text style={styles.stat}>
-                  {S.counted}: <Text style={styles.statValue}>{item.countedItems}</Text> / {item.totalItems}
-                </Text>
-                {item.diffItems > 0 ? (
-                  <Text style={[styles.stat, { color: colors.warning }]}>
-                    {S.diffs}: <Text style={[styles.statValue, { color: colors.warning }]}>{item.diffItems}</Text>
+                <View style={[styles.statPill, { backgroundColor: countSoft }]}>
+                  <Ionicons name="checkmark-done" size={14} color={countTint} />
+                  <Text style={styles.statLabel}>{S.counted}</Text>
+                  <Text style={[styles.statValue, { color: countTint }]}>
+                    {item.countedItems} / {item.totalItems}
                   </Text>
+                </View>
+                {item.diffItems > 0 ? (
+                  <View style={[styles.statPill, { backgroundColor: colors.warningSoft }]}>
+                    <Ionicons name="git-compare-outline" size={14} color={colors.warning} />
+                    <Text style={styles.statLabel}>{S.diffs}</Text>
+                    <Text style={[styles.statValue, { color: colors.warning }]}>{item.diffItems}</Text>
+                  </View>
                 ) : null}
               </View>
             </Pressable>
@@ -130,7 +152,7 @@ export default function StocktakeList() {
 
 const styles = StyleSheet.create({
   startButton: {
-    flexDirection: 'row',
+    flexDirection: ROW,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
@@ -143,7 +165,7 @@ const styles = StyleSheet.create({
   startText: { color: colors.onPrimary, fontWeight: '800', fontSize: fontSize.md },
   disabled: { opacity: 0.6 },
   errorBanner: {
-    flexDirection: 'row',
+    flexDirection: ROW,
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.dangerSoft,
@@ -152,7 +174,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
   },
-  errorText: { flex: 1, color: colors.danger, fontSize: fontSize.sm, textAlign: 'right' },
+  errorText: { flex: 1, color: colors.danger, fontSize: fontSize.sm, textAlign: 'right', writingDirection: 'rtl' },
   listContent: { paddingBottom: spacing.xxl, gap: spacing.sm },
   card: {
     backgroundColor: colors.surface,
@@ -160,13 +182,32 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSoft,
     borderRadius: radius.xl,
     padding: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.md,
     ...shadow.card,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardHeader: { flexDirection: ROW, alignItems: 'center', justifyContent: 'space-between' },
+  dateWrap: { flexDirection: ROW, alignItems: 'center', gap: spacing.xs },
   date: { color: colors.textMuted, fontSize: fontSize.xs },
-  branch: { color: colors.text, fontSize: fontSize.md, fontWeight: '700', textAlign: 'right' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  stat: { color: colors.textSecondary, fontSize: fontSize.sm },
-  statValue: { fontWeight: '800', color: colors.text },
+  branchRow: { flexDirection: ROW, alignItems: 'center', gap: spacing.sm },
+  branchIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  branch: { flex: 1, color: colors.text, fontSize: fontSize.md, fontWeight: '700', textAlign: 'right' },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  statsRow: { flexDirection: ROW, alignItems: 'center', gap: spacing.sm },
+  statPill: {
+    flexDirection: ROW,
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+  },
+  statLabel: { color: colors.textSecondary, fontSize: fontSize.xs, fontWeight: '600' },
+  statValue: { fontSize: fontSize.sm, fontWeight: '800', color: colors.text },
 })

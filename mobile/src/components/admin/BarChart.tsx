@@ -17,12 +17,12 @@ interface BarChartProps {
 
 const GRID_LINES = 4 // عدد خطوط الشبكة الأفقية
 
-/** صيغة مختصرة للقيمة فوق العمود: 1250000 → 1.3م، 12500 → 12.5ك */
+/** صيغة مختصرة للقيمة فوق العمود: 1250000 → 1.3م، 12500 → 12.5 ألف */
 function compact(v: number): string {
   if (!Number.isFinite(v) || v === 0) return '0'
   const abs = Math.abs(v)
   if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}م`
-  if (abs >= 1_000) return `${(v / 1_000).toFixed(1).replace(/\.0$/, '')}ك`
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(1).replace(/\.0$/, '')} ألف`
   return `${Math.round(v)}`
 }
 
@@ -54,7 +54,11 @@ export function BarChart({ data, height = 120, tint = colors.primary }: BarChart
               const isMax = d.value === max && d.value > 0
               return (
                 <View key={`${d.label}-${i}`} style={styles.column}>
-                  <Text style={[styles.value, isMax && { color: tint, fontWeight: '800' }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.value, isMax && { color: tint, fontWeight: '800' }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
                     {compact(d.value)}
                   </Text>
                   <View

@@ -25,5 +25,24 @@ export function fetchCustomers(search?: string, branchId?: string | null): Promi
   })
 }
 
+/** إنشاء عميل سريع من شاشة البيع الآجل. */
+export function createCustomer(input: {
+  name: string
+  phone?: string
+  branchId?: string | null
+}): Promise<CustomerDto> {
+  return api<CustomerDto>('/api/customers', {
+    method: 'POST',
+    body: {
+      name: input.name.trim(),
+      phone: input.phone?.trim() || null,
+      address: null,
+      initialBalance: 0,
+      creditLimit: 0,
+      branchId: input.branchId ?? undefined,
+    },
+  })
+}
+
 export const customersKey = (search: string, branchId?: string | null) =>
   ['customers', search, branchId ?? 'all'] as const

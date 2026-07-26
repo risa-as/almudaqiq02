@@ -259,7 +259,8 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rankBadge: { width: 30, height: 30, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   rankText: { fontSize: fontSize.sm, fontWeight: '800' },
-  textCol: { flex: 1, gap: 2 },
+  // flex-start = جهة البداية (اليمين في RTL) حتى يلتصق الاسم بشارة الرتبة بدل الانجراف لليسار
+  textCol: { flex: 1, gap: 2, alignItems: 'flex-start' },
   rowTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'right' },
   rowMeta: { fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' },
   rowAmounts: { alignItems: 'flex-end', gap: 2 },
