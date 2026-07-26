@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/api-helpers'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { canManageStock } from '@/lib/auth'
 import { logActionAs } from '@/lib/audit'
+import { RELATION_JOIN } from '@/lib/prisma-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,9 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: { items: { select: { quantity: true, costPrice: true, receivedQty: true } } },
+    // فارغ اليوم فلا يظهر الفرق، لكن الشكل مطابق لـ /api/stocktake (بنود إلى-متعدد)
+    // الذي وفّر ~234ms — الكسب يظهر مع أول أوامر شراء.
+    ...RELATION_JOIN,
   })
 
   return NextResponse.json({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,9 @@ export async function GET(request: NextRequest) {
                             unit:    { select: { name: true } }
                         }
                     }
-                }
+                },
+                // فواتير + مستخدم + بنود + منتج + وحدة: قياسًا ~1377ms ← ~556ms على 45 فاتورة.
+                ...RELATION_JOIN
             }),
             prisma.transaction.count({ where: whereClause }),
             prisma.transaction.findMany({

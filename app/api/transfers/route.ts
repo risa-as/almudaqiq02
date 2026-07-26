@@ -5,6 +5,7 @@ import { getAuthContext } from '@/lib/api-helpers'
 import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
 import { logActionAs } from '@/lib/audit'
+import { RELATION_JOIN } from '@/lib/prisma-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
       toBranch:   { select: { name: true } },
     },
     orderBy: { createdAt: 'desc' },
+    // جدول التحويلات فارغ اليوم فلا يظهر الفرق في القياس، لكن الشكل مطابق
+    // لـ /api/offers (علاقات إلى-واحد) الذي وفّر ~196ms — الكسب يظهر مع أول بيانات.
+    ...RELATION_JOIN,
   })
   return NextResponse.json(transfers)
 }

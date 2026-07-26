@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { getAuthContext } from '@/lib/api-helpers';
 import { logAction } from '@/lib/audit';
 import { enqueueSync } from '@/lib/sync-enqueue';
-import { IS_ELECTRON } from '@/lib/prisma-runtime';
+import { IS_ELECTRON, RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +52,9 @@ export async function GET(request: NextRequest) {
                     // Only while searching: the line products, so the client can show
                     // *why* an invoice matched. Skipped otherwise to keep the list cheap.
                     items: q ? { select: { product: { select: { name: true } } } } : false,
-                }
+                },
+                // فواتير + مستخدم + عميل: قياسًا ~937ms ← ~527ms على 45 صفًا.
+                ...RELATION_JOIN,
             })
         );
         // `items` is present only when searching (conditional include above), so the
