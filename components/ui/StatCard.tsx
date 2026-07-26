@@ -3,7 +3,8 @@ import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface StatCardProps {
     label: string;
-    value: string | number;
+    /** رقم/نص عادةً، ويقبل عقدة React لعرض هيكل عظمي أثناء التحميل. */
+    value: React.ReactNode;
     icon: LucideIcon;
     gradient?: string;       // CSS gradient for icon bg
     valueColor?: string;

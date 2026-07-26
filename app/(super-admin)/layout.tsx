@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, Building2, CreditCard, Activity, Megaphone, KeyRound, LogOut, Shield, WifiOff, Wallet, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { clearClientSession } from '@/lib/client-session';
 
 const NAV = [
   { href: '/super-admin/dashboard',      label: 'لوحة التحكم',   icon: LayoutDashboard, gradient: 'from-blue-400 to-violet-500' },
@@ -30,7 +31,8 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   }, [])
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    await fetch('/api/auth/logout', { method: 'POST' });
+    clearClientSession();
     router.push('/login')
   }
 

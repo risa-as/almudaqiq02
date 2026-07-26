@@ -13,6 +13,7 @@ import {
     Shield, Star, Zap, Monitor
 } from 'lucide-react';
 import { getRoleLabel, ROLE_LABELS } from '@/lib/roles';
+import { clearClientSession } from '@/lib/client-session';
 
 interface NavItem {
     href: string;
@@ -66,6 +67,7 @@ export default function Sidebar() {
     const handleLogout = async () => {
         if (!await confirm({ title: 'تسجيل الخروج', message: 'هل أنت متأكد من تسجيل الخروج من النظام؟', variant: 'logout', confirmLabel: 'خروج' })) return;
         await fetch('/api/auth/logout', { method: 'POST' });
+        clearClientSession();
         router.push('/login');
     };
 

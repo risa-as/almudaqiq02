@@ -45,6 +45,7 @@ import toast from "react-hot-toast";
 import { useBranch } from "@/contexts/BranchContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useConfirm } from "@/hooks/useConfirm";
+import { clearClientSession } from '@/lib/client-session';
 // Types
 interface CartItem {
   productId: number;
@@ -1226,6 +1227,7 @@ export default function POSPage() {
     )
       return;
     await fetch("/api/auth/logout", { method: "POST" });
+    clearClientSession();
     router.push("/login");
   };
 

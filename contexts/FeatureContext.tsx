@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { authMeQueryOptions } from '@/lib/query/auth-me'
 import { hasFeature as hasFeatureFn, type FeatureKey, type FeatureMap } from '@/lib/features'
 
 interface FeatureContextValue {
@@ -25,6 +27,7 @@ export function FeatureProvider({ children }: { children: React.ReactNode }) {
   const [features, setFeatures] = useState<FeatureMap>({})
   const [loading, setLoading]   = useState(true)
   const [ready, setReady]       = useState(false)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // Step 1: hydrate from cache immediately. If we have it, we can gate right
@@ -38,8 +41,9 @@ export function FeatureProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
 
     // Step 2: refresh from the canonical "who am I" endpoint in the background.
-    fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : { features: {} })
+    // يمرّ عبر كاش React Query بمفتاح ['auth','me'] فيُدمج مع طلب BranchContext
+    // وuseUser في رحلة شبكة واحدة بدل ثلاث.
+    queryClient.fetchQuery(authMeQueryOptions)
       .then(data => {
         const f: FeatureMap = data?.features ?? {}
         setFeatures(f)
@@ -47,7 +51,7 @@ export function FeatureProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => { /* keep cached/empty */ })
       .finally(() => { setReady(true); setLoading(false) })
-  }, [])
+  }, [queryClient])
 
   return (
     <FeatureContext.Provider value={{ features, hasFeature: (k) => hasFeatureFn(features, k), loading, ready }}>

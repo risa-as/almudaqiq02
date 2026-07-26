@@ -3,7 +3,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchJsonOr } from "@/lib/query/fetcher";
+import { fetchJson, fetchJsonOr } from "@/lib/query/fetcher";
 import { useConfirm } from "@/hooks/useConfirm";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -229,8 +229,16 @@ export default function InventoryPage() {
 
   const productsQuery = useQuery({
     queryKey: ["products", branchKey],
-    queryFn: () => fetchJsonOr<Product[]>(`/api/products${branchParam}`, []),
+    // fetchJson (يرمي الخطأ) وليس fetchJsonOr: الأخير كان يحوّل أي 401/500 إلى
+    // مصفوفة فارغة "ناجحة"، فتُكتب في الكاش المحفوظ ويُرسم "لا منتجات" عند
+    // إعادة التحميل. برمي الخطأ يحتفظ React Query بالبيانات السابقة.
+    queryFn: () => fetchJson<Product[]>(`/api/products${branchParam}`),
     enabled: !branchLoading,
+    // كميات المخزون تتغير مع كل عملية بيع: الكاش المحفوظ يُرسم فورًا لكن
+    // يُعاد الجلب دائمًا عند فتح الصفحة كي لا تُقرأ كمية قديمة كخطأ.
+    refetchOnMount: "always",
+    // عند تغيير الفرع نُبقي الجدول السابق معروضًا بدل العودة إلى الهيكل العظمي
+    placeholderData: (prev) => prev,
   });
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
@@ -244,8 +252,9 @@ export default function InventoryPage() {
   const products = Array.isArray(productsQuery.data) ? productsQuery.data : [];
   const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
   const suppliers = Array.isArray(suppliersQuery.data) ? suppliersQuery.data : [];
-  const loading =
-    productsQuery.isPending || categoriesQuery.isPending || suppliersQuery.isPending;
+  // شاشة الانتظار تنتظر المنتجات وحدها. الأقسام والموردون يغذّيان قائمتَي
+  // التصفية فحسب، وربط الصفحة بهما كان يجعل زمن أول رسم = أبطأ الثلاثة.
+  const loading = productsQuery.isPending;
 
   useEffect(() => {
     if (!isFilterOpen) return;
@@ -558,127 +567,13 @@ export default function InventoryPage() {
     0,
   );
 
-  if (loading)
-    return (
-      <div
-        className="min-h-screen p-6 md:p-8 space-y-8"
-        dir="rtl"
-        style={{ background: "var(--bg-page)" }}
-      >
-        {/* Hero */}
-        <div className="flex flex-col items-center justify-center pt-10 pb-4 gap-5">
-          <div className="relative">
-            <div
-              className="w-20 h-20 rounded-3xl flex items-center justify-center relative overflow-hidden"
-              style={{
-                background: "linear-gradient(135deg,#094B9F,#063A8A)",
-                boxShadow: "0 12px 40px rgba(9,75,159,0.4)",
-              }}
-            >
-              <div
-                className="absolute inset-0 opacity-25"
-                style={{
-                  background:
-                    "linear-gradient(135deg,rgba(255,255,255,0.5) 0%,transparent 60%)",
-                }}
-              />
-              <Package size={36} className="text-white relative z-10 sk-spin" />
-            </div>
-            <div
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white sk-pulse"
-              style={{
-                background: "linear-gradient(135deg,#094B9F,#063A8A)",
-                boxShadow: "0 2px 8px rgba(14,99,212,0.5)",
-              }}
-            />
-          </div>
-          <div className="text-center space-y-1.5">
-            <p className="text-xl font-black text-slate-800">
-              جاري تحميل المخزون
-            </p>
-            <div className="flex items-center justify-center gap-1.5">
-              {[0, 0.2, 0.4].map((delay, i) => (
-                <div
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full bg-blue-400 sk-pulse"
-                  style={{ animationDelay: `${delay}s` }}
-                />
-              ))}
-            </div>
-            <p className="text-sm text-slate-400 font-medium">
-              يتم تحميل قائمة المنتجات والمخزون
-            </p>
-          </div>
-        </div>
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-2xl p-5 space-y-3"
-              style={{
-                background: "white",
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="skeleton h-3 w-16" />
-                <div className="skeleton w-8 h-8 rounded-xl" />
-              </div>
-              <div className="skeleton h-7 w-20" />
-            </div>
-          ))}
-        </div>
-        {/* Search + filters */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="skeleton h-10 flex-1 min-w-[200px] rounded-xl" />
-          <div className="skeleton h-10 w-32 rounded-xl" />
-          <div className="skeleton h-10 w-32 rounded-xl" />
-          <div className="skeleton h-10 w-28 rounded-xl" />
-        </div>
-        {/* Table */}
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{
-            background: "white",
-            border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
-          }}
-        >
-          <div className="grid grid-cols-6 gap-3 px-5 py-3.5 border-b border-slate-100">
-            {[8, 30, 18, 15, 15, 14].map((w, i) => (
-              <div
-                key={i}
-                className="skeleton h-3"
-                style={{ width: `${w}%` }}
-              />
-            ))}
-          </div>
-          <div className="divide-y divide-slate-50">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-6 gap-3 px-5 py-4 items-center"
-              >
-                <div className="skeleton w-9 h-9 rounded-xl" />
-                <div className="space-y-1.5">
-                  <div className="skeleton h-3.5 w-36" />
-                  <div className="skeleton h-2.5 w-20" />
-                </div>
-                {[20, 15, 15, 18].map((w, j) => (
-                  <div
-                    key={j}
-                    className="skeleton h-3.5"
-                    style={{ width: `${w - ((i * 4 + j * 3) % 10)}%` }}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+  /**
+   * قيمة بطاقة إحصائية: هيكل عظمي أثناء أول تحميل بدل رقم صفر مضلِّل.
+   * لم نُخرج الصفحة كلها إلى شاشة انتظار كما كان سابقًا — الترويسة والأزرار
+   * وحقل البحث لا تنتظر الشبكة، فيرى المستخدم الصفحة فورًا.
+   */
+  const statValue = (v: string | number) =>
+    loading ? <span className="skeleton inline-block h-6 w-20 rounded align-middle" /> : v;
 
   return (
     <div
@@ -1159,14 +1054,14 @@ export default function InventoryPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="إجمالي المنتجات"
-            value={totalProducts}
+            value={statValue(totalProducts)}
             icon={Package}
             gradient="linear-gradient(135deg, #094B9F 0%, #063A8A 100%)"
             onClick={() => { setFilterStock("ALL"); setFilterCategory("ALL"); setFilterSupplier("ALL"); setSearch(""); }}
           />
           <StatCard
             label="مخزون منخفض"
-            value={lowStockCount}
+            value={statValue(lowStockCount)}
             icon={AlertCircle}
             gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
             valueColor={lowStockCount > 0 ? "var(--value-negative)" : undefined}
@@ -1174,7 +1069,7 @@ export default function InventoryPage() {
           />
           <StatCard
             label="نافذ من المخزون"
-            value={outOfStockCount}
+            value={statValue(outOfStockCount)}
             icon={PackageX}
             gradient="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
             valueColor={outOfStockCount > 0 ? "var(--value-negative)" : undefined}
@@ -1182,7 +1077,7 @@ export default function InventoryPage() {
           />
           <StatCard
             label="القيمة التقديرية"
-            value={formatCurrency(totalValue)}
+            value={statValue(formatCurrency(totalValue))}
             icon={DollarSign}
             gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
             valueColor="var(--value-positive)"
@@ -1323,10 +1218,21 @@ export default function InventoryPage() {
         {/* Results counter */}
         {!loading && (
           <div className="flex items-center justify-between px-1">
-            <p className="text-sm font-bold" style={{ color: "var(--text-muted)" }}>
+            <p
+              className="text-sm font-bold flex items-center gap-2"
+              style={{ color: "var(--text-muted)" }}
+            >
               {filteredProducts.length === products.length
                 ? `${products.length} منتج`
                 : `يعرض ${filteredProducts.length} من ${products.length} منتج`}
+              {/* البيانات معروضة من الكاش والتحديث يجري بالخلفية — نُخبر
+                  المستخدم بذلك بدل حجب الجدول */}
+              {productsQuery.isFetching && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-500">
+                  <Loader2 size={11} className="animate-spin" />
+                  تحديث
+                </span>
+              )}
             </p>
             {(filterStock !== "ALL" || filterCategory !== "ALL" || filterSupplier !== "ALL" || search) && (
               <button
@@ -1373,12 +1279,53 @@ export default function InventoryPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
+                  // هيكل عظمي داخل الجدول فقط — بقية الصفحة معروضة أصلًا
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`sk-${i}`}>
+                      <td className="px-3 py-4">
+                        <div className="skeleton h-3.5 w-4" />
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="skeleton h-3.5 w-40 mb-1.5" />
+                        <div className="skeleton h-2.5 w-24" />
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="skeleton h-6 w-20 rounded-md" />
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="skeleton h-2.5 w-24 mb-1.5" />
+                        <div className="skeleton h-4 w-28 rounded" />
+                      </td>
+                      <td className="px-3 py-4 text-center">
+                        <div className="skeleton w-9 h-9 rounded-lg mx-auto" />
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="flex items-center justify-center gap-1">
+                          {[0, 1, 2, 3].map((j) => (
+                            <div key={j} className="skeleton w-9 h-9 rounded-xl" />
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : productsQuery.isError ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="p-12 text-center text-gray-400 animate-pulse"
-                    >
-                      جاري تحميل البيانات...
+                    <td colSpan={6} className="p-12 text-center">
+                      <div className="flex flex-col items-center gap-3 text-gray-500">
+                        <AlertCircle size={44} className="text-red-300" />
+                        <p className="font-bold text-slate-700">
+                          تعذّر تحميل قائمة المنتجات
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {(productsQuery.error as Error)?.message}
+                        </p>
+                        <button
+                          onClick={() => productsQuery.refetch()}
+                          className="mt-1 px-4 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 text-sm font-bold hover:bg-blue-100 transition-colors"
+                        >
+                          إعادة المحاولة
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredProducts.length === 0 ? (

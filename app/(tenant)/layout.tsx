@@ -53,6 +53,7 @@ import { useUser } from "@/hooks/useUser";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { FeatureProvider, useFeatures } from "@/contexts/FeatureContext";
 import { requiredFeatureMeta, TIER_META, type PlanTier } from "@/lib/features";
+import { clearClientSession } from '@/lib/client-session';
 
 const NAV = [
   {
@@ -643,6 +644,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearClientSession();
     router.push("/login");
   }
 

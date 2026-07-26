@@ -6,6 +6,7 @@ import {
   Lock, Mail, LogIn, ShoppingCart, BarChart3,
   Users, Package, Shield, Zap, CheckCircle2,
 } from 'lucide-react'
+import { clearClientSession } from '@/lib/client-session'
 
 const FEATURES = [
   { icon: BarChart3,    label: 'تقارير وتحليلات متقدمة',   desc: 'إحصائيات لحظية وتقارير مفصّلة' },
@@ -35,6 +36,9 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (res.ok) {
+        // كاش العميل يعود لجلسة سابقة (قد تكون لمستخدم أو مستأجر آخر انتهت
+        // جلسته دون تسجيل خروج) — نمحوه قبل الدخول حتى لا تُرسم بياناته.
+        clearClientSession()
         router.push(data.redirectTo ?? '/')
         router.refresh()
       } else {
