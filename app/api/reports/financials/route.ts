@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export async function GET(request: Request) {
     const tenantId = await getTenantId();
@@ -17,26 +18,42 @@ export async function GET(request: Request) {
     const end = endDate ? new Date(endDate) : new Date();
 
     try {
-        // 1. Revenue (Total Sales) - include SALE and RETURN types
-        const transactions = await prisma.transaction.findMany({
-            where: {
-                tenantId,
-                ...branchFilter,
-                type: { in: ['SALE', 'RETURN', 'REFUND'] },
-                date: {
-                    gte: start,
-                    lte: end
-                }
-            },
-            include: {
-                items: {
-                    include: {
-                        product: true,
-                        unit: true
+        // الإيرادات والمصروفات استعلامان مستقلّان — كانا متتاليين فيكلّفان
+        // رحلتين (~1.1 ثانية). نجلبهما معًا هنا ونستعمل المصروفات في مكانها أدناه.
+        const [transactions, expenses] = await Promise.all([
+            // 1. Revenue (Total Sales) - include SALE and RETURN types
+            prisma.transaction.findMany({
+                where: {
+                    tenantId,
+                    ...branchFilter,
+                    type: { in: ['SALE', 'RETURN', 'REFUND'] },
+                    date: {
+                        gte: start,
+                        lte: end
+                    }
+                },
+                include: {
+                    items: {
+                        include: {
+                            product: true,
+                            unit: true
+                        }
+                    }
+                },
+                ...RELATION_JOIN
+            }),
+            // 2. Operating Expenses
+            prisma.expense.findMany({
+                where: {
+                    tenantId,
+                    ...branchFilter,
+                    date: {
+                        gte: start,
+                        lte: end
                     }
                 }
-            }
-        });
+            }),
+        ]);
 
         let grossRevenue = 0; // SALE only
         let returns = 0;      // REFUND/RETURN (positive magnitude)
@@ -73,18 +90,7 @@ export async function GET(request: Request) {
             }
         });
 
-        // 2. Operating Expenses
-        const expenses = await prisma.expense.findMany({
-            where: {
-                tenantId,
-                ...branchFilter,
-                date: {
-                    gte: start,
-                    lte: end
-                }
-            }
-        });
-
+        // 2. Operating Expenses (تُجلب أعلاه بالتوازي مع الإيرادات)
         let totalExpenses = 0;
         expenses.forEach(exp => totalExpenses += Number(exp.amount));
 

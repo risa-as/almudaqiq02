@@ -33,19 +33,21 @@ export async function GET(request: NextRequest) {
   if (!isOwner && auth.branchId) where.branchId = auth.branchId
   else if (branchId && branchId !== 'all') where.branchId = branchId
 
-  const sessions = await prisma.stocktakeSession.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    include: { items: { select: { expectedQty: true, countedQty: true } } },
-    // جلسات + بنودها في رحلة واحدة: قياسًا ~762ms ← ~528ms.
-    ...RELATION_JOIN,
-  })
-
-  const branches = await prisma.branch.findMany({
-    where: { tenantId: auth.tenantId },
-    select: { id: true, name: true },
-  })
+  // الجلسات وقائمة الفروع مستقلّتان — بالتوازي بدل رحلتين متتاليتين.
+  const [sessions, branches] = await Promise.all([
+    prisma.stocktakeSession.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: { items: { select: { expectedQty: true, countedQty: true } } },
+      // جلسات + بنودها في رحلة واحدة: قياسًا ~762ms ← ~528ms.
+      ...RELATION_JOIN,
+    }),
+    prisma.branch.findMany({
+      where: { tenantId: auth.tenantId },
+      select: { id: true, name: true },
+    }),
+  ])
   const branchName = new Map(branches.map(b => [b.id, b.name]))
 
   return NextResponse.json({

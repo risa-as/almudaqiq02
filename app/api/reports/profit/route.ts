@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { getTenantId } from '@/lib/api-helpers';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,25 +31,28 @@ export async function GET(req: NextRequest) {
             endDate = endOfDay(now);
         }
 
-        const transactions = await prisma.transaction.findMany({
-            where: {
-                tenantId,
-                ...branchFilter,
-                date: { gte: startDate, lte: endDate },
-                type: { in: ['SALE', 'REFUND', 'RETURN'] }
-            },
-            include: {
-                items: true
-            }
-        });
-
-        const expensesList = await prisma.expense.findMany({
-            where: {
-                tenantId,
-                ...branchFilter,
-                date: { gte: startDate, lte: endDate }
-            }
-        });
+        // استعلامان مستقلّان — رحلة واحدة بالتوازي بدل رحلتين متتاليتين.
+        const [transactions, expensesList] = await Promise.all([
+            prisma.transaction.findMany({
+                where: {
+                    tenantId,
+                    ...branchFilter,
+                    date: { gte: startDate, lte: endDate },
+                    type: { in: ['SALE', 'REFUND', 'RETURN'] }
+                },
+                include: {
+                    items: true
+                },
+                ...RELATION_JOIN
+            }),
+            prisma.expense.findMany({
+                where: {
+                    tenantId,
+                    ...branchFilter,
+                    date: { gte: startDate, lte: endDate }
+                }
+            }),
+        ]);
 
         let revenue = 0;
         let cogs = 0;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,20 +17,40 @@ export async function GET(request: NextRequest) {
 
     try {
         // ── Fetch products (no branchId on Product model) ─────────────
-        const products = await prisma.product.findMany({
-            where: { tenantId },
-            include: { category: true, supplier: true }
-        });
+        // ثلاثة استعلامات مستقلّة (المنتجات، دفعات الفرع، الدفعات المنتهية قريبًا)
+        // كانت متتالية = ثلاث رحلات (~1.6 ثانية). التاريخ يُحسب محليًا فلا تبعية.
+        const now = new Date();
+        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
 
-        // ── Fetch batches for the selected branch (or all) ─────────────
-        const batches = await prisma.productBatch.findMany({
-            where: {
-                tenantId,
-                ...(useBranch ? { branchId } : {}),
-                quantity: { gt: 0 }
-            },
-            include: { product: { include: { category: true } } }
-        });
+        const [products, batches, expiringBatches] = await Promise.all([
+            prisma.product.findMany({
+                where: { tenantId },
+                include: { category: true, supplier: true },
+                ...RELATION_JOIN
+            }),
+            // Batches for the selected branch (or all)
+            prisma.productBatch.findMany({
+                where: {
+                    tenantId,
+                    ...(useBranch ? { branchId } : {}),
+                    quantity: { gt: 0 }
+                },
+                include: { product: { include: { category: true } } },
+                ...RELATION_JOIN
+            }),
+            // Expiring batches (≤ 30 days)
+            prisma.productBatch.findMany({
+                where: {
+                    tenantId,
+                    ...(useBranch ? { branchId } : {}),
+                    expiryDate: { not: null, lte: thirtyDaysFromNow },
+                    quantity: { gt: 0 }
+                },
+                include: { product: { include: { category: true } } },
+                orderBy: { expiryDate: 'asc' },
+                ...RELATION_JOIN
+            }),
+        ]);
 
         // ── Build per-product stock map from batches ───────────────────
         // When a branch is selected, stock = sum of batches for that branch
@@ -44,20 +65,7 @@ export async function GET(request: NextRequest) {
                 ? (batchStockMap.get(p.id) ?? 0)
                 : p.baseStock;
 
-        // ── Expiring batches (≤ 30 days) ───────────────────────────────
-        const now = new Date();
-        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 86400000);
-
-        const expiringBatches = await prisma.productBatch.findMany({
-            where: {
-                tenantId,
-                ...(useBranch ? { branchId } : {}),
-                expiryDate: { not: null, lte: thirtyDaysFromNow },
-                quantity: { gt: 0 }
-            },
-            include: { product: { include: { category: true } } },
-            orderBy: { expiryDate: 'asc' }
-        });
+        // ── Expiring batches (≤ 30 days) — تُجلب أعلاه بالتوازي ─────────
 
         // ── Compute stats using branch-scoped stock ────────────────────
         let totalValuation = 0;

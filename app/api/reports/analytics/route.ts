@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { guardFeature } from '@/lib/plan-features';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,31 +33,33 @@ export async function GET(request: NextRequest) {
 
         const branchFilter = branchId ? { branchId } : {}
 
-        // Fetch Current Period Data
-        const currentTransactions = await prisma.transaction.findMany({
-            where: { tenantId, ...branchFilter, date: { gte: start, lte: end }, type: { in: ['SALE', 'RETURN', 'REFUND'] } },
-            include: {
-                items: {
-                    include: {
-                        product: { include: { category: true } }
+        // الفترتان الحالية والسابقة مستقلّتان تمامًا — كانت أربع رحلات متتالية
+        // (~2.1 ثانية على Neon) بلا سبب. Promise.all يجعلها رحلة واحدة بالتوازي.
+        const [currentTransactions, currentExpenses, prevTransactions, prevExpenses] = await Promise.all([
+            prisma.transaction.findMany({
+                where: { tenantId, ...branchFilter, date: { gte: start, lte: end }, type: { in: ['SALE', 'RETURN', 'REFUND'] } },
+                include: {
+                    items: {
+                        include: {
+                            product: { include: { category: true } }
+                        }
                     }
-                }
-            }
-        });
-
-        const currentExpenses = await prisma.expense.findMany({
-            where: { tenantId, ...branchFilter, date: { gte: start, lte: end } }
-        });
-
-        // Fetch Previous Period Data (Minimal info needed for KPI calculations)
-        const prevTransactions = await prisma.transaction.findMany({
-            where: { tenantId, ...branchFilter, date: { gte: prevStart, lte: prevEnd }, type: { in: ['SALE', 'RETURN', 'REFUND'] } },
-            include: { items: true }
-        });
-
-        const prevExpenses = await prisma.expense.findMany({
-            where: { tenantId, ...branchFilter, date: { gte: prevStart, lte: prevEnd } }
-        });
+                },
+                ...RELATION_JOIN
+            }),
+            prisma.expense.findMany({
+                where: { tenantId, ...branchFilter, date: { gte: start, lte: end } }
+            }),
+            // Previous period — minimal info needed for KPI calculations
+            prisma.transaction.findMany({
+                where: { tenantId, ...branchFilter, date: { gte: prevStart, lte: prevEnd }, type: { in: ['SALE', 'RETURN', 'REFUND'] } },
+                include: { items: true },
+                ...RELATION_JOIN
+            }),
+            prisma.expense.findMany({
+                where: { tenantId, ...branchFilter, date: { gte: prevStart, lte: prevEnd } }
+            }),
+        ]);
 
         // --- 1. KPI Calculations ---
         const calcNetProfit = (txs: any[], exps: any[]) => {

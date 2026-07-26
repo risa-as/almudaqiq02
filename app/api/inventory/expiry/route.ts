@@ -44,21 +44,35 @@ export async function GET(request: NextRequest) {
     if (useBranchFilter) batchWhere.branchId = branchId;
     if (categoryId)      batchWhere.product = { categoryId };
 
-    const batches = await prisma.productBatch.findMany({
-        where: batchWhere,
-        include: {
-            product: {
-                include: {
-                    category: { select: { id: true, name: true } },
-                    supplier: { select: { name: true } },
+    // القائمة المفلترة وملخّص كل الآفاق استعلامان مستقلّان — كانا متتاليين
+    // (~1.1 ثانية). بالتوازي يكلّفان رحلة واحدة.
+    const [batches, allExpiry] = await Promise.all([
+        prisma.productBatch.findMany({
+            where: batchWhere,
+            include: {
+                product: {
+                    include: {
+                        category: { select: { id: true, name: true } },
+                        supplier: { select: { name: true } },
+                    },
                 },
+                branch: { select: { name: true } },
             },
-            branch: { select: { name: true } },
-        },
-        orderBy: { expiryDate: 'asc' },
-        // دفعات + منتج + قسم + مورد + فرع: قياسًا ~1371ms ← ~524ms.
-        ...RELATION_JOIN,
-    });
+            orderBy: { expiryDate: 'asc' },
+            // دفعات + منتج + قسم + مورد + فرع: قياسًا ~1371ms ← ~524ms.
+            ...RELATION_JOIN,
+        }),
+        // Summary stats across all horizons (independent of the filtered list)
+        prisma.productBatch.findMany({
+            where: {
+                tenantId,
+                expiryDate: { not: null },
+                quantity: { gt: 0 },
+                ...(useBranchFilter ? { branchId } : {}),
+            },
+            select: { expiryDate: true, quantity: true, costPrice: true },
+        }),
+    ]);
 
     // Enrich each batch
     const rows = batches.map(b => {
@@ -91,17 +105,7 @@ export async function GET(request: NextRequest) {
         };
     });
 
-    // Always compute full summary stats (across all horizons)
-    const allExpiry = await prisma.productBatch.findMany({
-        where: {
-            tenantId,
-            expiryDate: { not: null },
-            quantity: { gt: 0 },
-            ...(useBranchFilter ? { branchId } : {}),
-        },
-        select: { expiryDate: true, quantity: true, costPrice: true },
-    });
-
+    // Summary stats (allExpiry fetched above, in parallel with the list)
     let expiredCount = 0, criticalCount = 0, warningCount = 0, okCount = 0;
     let totalValueAtRisk = 0;
 

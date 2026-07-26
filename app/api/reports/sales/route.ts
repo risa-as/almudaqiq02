@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { calculateProfit } from '@/lib/inventory-logic';
 import { getAuthContext } from '@/lib/api-helpers';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,28 +48,40 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // 1. Get Transaction Stats
-        const salesStats = await prisma.transaction.aggregate({
-            where: whereClause,
-            _sum: { totalAmount: true },
-            _count: { id: true },
-        });
-
-        // 2. Get Transactions list
-        const transactions = await prisma.transaction.findMany({
-            where: whereClause,
-            orderBy: { date: 'desc' },
-            take: 50, // Limit for performance, mostly for "Recent" table
-            include: {
-                user: { select: { username: true } }
-            }
-        });
-
-        // 3. Chart Data
-        const allTransactionsForChart = await prisma.transaction.findMany({
-            where: whereClause,
-            select: { date: true, totalAmount: true }
-        });
+        // الاستعلامات الأربعة تشترك في whereClause نفسه ولا يعتمد أيٌّ منها على
+        // نتيجة الآخر — كانت أربع رحلات متتالية (~2.1 ثانية) بلا سبب.
+        const [salesStats, transactions, allTransactionsForChart, allItems, profitStats] = await Promise.all([
+            // 1. Transaction stats
+            prisma.transaction.aggregate({
+                where: whereClause,
+                _sum: { totalAmount: true },
+                _count: { id: true },
+            }),
+            // 2. Transactions list
+            prisma.transaction.findMany({
+                where: whereClause,
+                orderBy: { date: 'desc' },
+                take: 50, // Limit for performance, mostly for "Recent" table
+                include: {
+                    user: { select: { username: true } }
+                },
+                ...RELATION_JOIN
+            }),
+            // 3. Chart data
+            prisma.transaction.findMany({
+                where: whereClause,
+                select: { date: true, totalAmount: true }
+            }),
+            // 5. Sales by category
+            prisma.transactionItem.findMany({
+                where: { transaction: whereClause },
+                include: { product: { include: { category: true } } },
+                ...RELATION_JOIN
+            }),
+            // 4. Profit calc — مستقلّ أيضًا (يأخذ التواريخ والفرع فقط)، وداخليًا
+            // يجمع ستة تجميعات بـ Promise.all، فإدخاله هنا يوفّر رحلة أخرى.
+            calculateProfit(startDate, endDate, branchId, tenantId),
+        ]);
 
         let chartData: any[] = [];
 
@@ -89,15 +102,7 @@ export async function GET(request: NextRequest) {
             dateMap.forEach((value, key) => chartData.push({ name: key, value }));
         }
 
-        // 4. Profit Calc (Global for range)
-        // Ensure profit calculation respects the branch filter
-        const profitStats = await calculateProfit(startDate, endDate, branchId, tenantId);
-
-        // 5. Sales By Category
-        const allItems = await prisma.transactionItem.findMany({
-            where: { transaction: whereClause },
-            include: { product: { include: { category: true } } }
-        });
+        // 4. Profit Calc + 5. Sales By Category — كلاهما يُجلب أعلاه بالتوازي
 
         const categorySalesMap = new Map();
         allItems.forEach(item => {
