@@ -18,13 +18,11 @@ interface BranchContextValue {
    * (auth/me + branches) ← ثم ← (products). صار الاثنان متوازيين.
    */
   loading:          boolean
-  /** true بعد أن تُثبِّت الشبكة قائمة الفروع (وليس من الكاش). */
-  confirmed:        boolean
   isSwitching:      boolean
 }
 
 const BranchContext = createContext<BranchContextValue>({
-  branches: [], selectedBranch: null, setSelectedBranch: () => {}, isOwner: false, loading: true, confirmed: false, isSwitching: false,
+  branches: [], selectedBranch: null, setSelectedBranch: () => {}, isOwner: false, loading: true, isSwitching: false,
 })
 
 const CACHE_KEY_BRANCHES = 'branchCache_branches'
@@ -44,7 +42,6 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const [selectedBranch, setSelectedBranchState] = useState<Branch | null>(null)
   const [isOwner,        setIsOwner]            = useState(false)
   const [loading,        setLoading]            = useState(true)
-  const [confirmed,      setConfirmed]          = useState(false)
   const [isSwitching,    setIsSwitching]        = useState(false)
   const queryClient = useQueryClient()
 
@@ -86,7 +83,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(CACHE_KEY_BRANCHES, JSON.stringify(list))
 
       setSelectedBranchState(pickBranch(list, localStorage.getItem(CACHE_KEY_SELECTED)))
-    }).finally(() => { setLoading(false); setConfirmed(true) })
+    }).finally(() => setLoading(false))
   }, [queryClient])
 
   const setSelectedBranch = useCallback((b: Branch) => {
@@ -97,7 +94,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <BranchContext.Provider value={{ branches, selectedBranch, setSelectedBranch, isOwner, loading, confirmed, isSwitching }}>
+    <BranchContext.Provider value={{ branches, selectedBranch, setSelectedBranch, isOwner, loading, isSwitching }}>
       {children}
     </BranchContext.Provider>
   )

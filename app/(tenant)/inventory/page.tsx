@@ -237,8 +237,9 @@ export default function InventoryPage() {
     // كميات المخزون تتغير مع كل عملية بيع: الكاش المحفوظ يُرسم فورًا لكن
     // يُعاد الجلب دائمًا عند فتح الصفحة كي لا تُقرأ كمية قديمة كخطأ.
     refetchOnMount: "always",
-    // عند تغيير الفرع نُبقي الجدول السابق معروضًا بدل العودة إلى الهيكل العظمي
-    placeholderData: (prev) => prev,
+    // بلا placeholderData عمدًا: إبقاء بيانات الفرع السابق أثناء تحميل الفرع
+    // الجديد يعني عرض كميات مخزون فرعٍ تحت اسم فرعٍ آخر — تُقرأ كبيانات خاطئة
+    // لا كحالة تحميل. تبديل الفرع فعل مقصود من المستخدم ويقبل انتظارًا قصيرًا.
   });
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
@@ -573,7 +574,13 @@ export default function InventoryPage() {
    * وحقل البحث لا تنتظر الشبكة، فيرى المستخدم الصفحة فورًا.
    */
   const statValue = (v: string | number) =>
-    loading ? <span className="skeleton inline-block h-6 w-20 rounded align-middle" /> : v;
+    // حالة الخطأ تُعامَل كالتحميل: بلا ذلك تظهر «إجمالي المنتجات: 0» و«القيمة
+    // التقديرية: 0» بجانب رسالة «تعذّر تحميل القائمة» فتناقضها.
+    loading || productsQuery.isError ? (
+      <span className="skeleton inline-block h-6 w-20 rounded align-middle" />
+    ) : (
+      v
+    );
 
   return (
     <div
@@ -1215,8 +1222,9 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Results counter */}
-        {!loading && (
+        {/* Results counter — يختفي عند الخطأ أيضًا كي لا يقول «0 منتج» بينما
+            الجدول يعرض رسالة تعذّر التحميل */}
+        {!loading && !productsQuery.isError && (
           <div className="flex items-center justify-between px-1">
             <p
               className="text-sm font-bold flex items-center gap-2"
