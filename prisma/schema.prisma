@@ -693,3 +693,30 @@ model LicenseLog {
   machineId      String?
   generatedBy    String?   // superAdminId
 }
+
+// ─── Offline Desktop Licenses (Ed25519, embeds a bootstrap account) ──────────
+// Separate from LicenseLog: this token contract (v2) also bootstraps the
+// desktop app's very first user account, so it carries clientUsername /
+// passwordHash. Never store the plaintext password — only the bcrypt hash
+// that was actually embedded in the signed token.
+model OfflineLicense {
+  id             String    @id @default(cuid())
+  clientName     String
+  clientEmail    String?
+  clientPhone    String?
+  clientAddress  String?
+  clientUsername String
+  passwordHash   String    // bcrypt hash embedded in the token — plaintext is never persisted
+  duration       String    // 1M | 3M | 6M | 1Y | LIFETIME | custom Xd
+  expiresAt      DateTime? // null = lifetime
+  machineId      String?
+  licenseKey     String    @db.Text
+  isRevoked      Boolean   @default(false)
+  revokedAt      DateTime?
+  notes          String?
+  generatedAt    DateTime  @default(now())
+  generatedBy    String?   // superAdminId
+
+  @@index([clientName])
+  @@index([generatedAt])
+}
