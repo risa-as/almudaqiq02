@@ -74,6 +74,35 @@ contexts/
 └── ThemeContext.tsx    # dark/light mode
 ```
 
+## Deployment region (important)
+
+Vercel functions **must** run in the same region as the database, otherwise every
+query crosses an ocean.
+
+- Database (Neon): `eu-central-1` — Frankfurt.
+- Functions: pinned to `fra1` (Frankfurt) via `"regions"` in `vercel.json`.
+
+Until 2026-07-27 no region was configured, so functions defaulted to `iad1`
+(Virginia). Confirmed from the production `X-Vercel-Id` header, which reads
+`bom1::iad1::…` — the first code is the edge PoP that received the request, the
+second is where the function executed. Every DB round trip was therefore
+Virginia ⇄ Frankfurt (~90–110ms) instead of same-region (~1–5ms), and that cost
+multiplies by the number of queries per request.
+
+To verify the region at any time:
+
+```bash
+curl -sI https://<host>/api/cron/daily-digest | grep -i x-vercel-id
+# bom1::fra1::…  → second code must be fra1
+# (this route 401s inside the function, so it proves where functions run;
+#  routes blocked by middleware 401 at the edge and show only one code)
+```
+
+Caveats: the Vercel dashboard setting (Project → Settings → Functions → Function
+Region) can override `vercel.json` — keep both on Frankfurt. If the database ever
+moves region, change this together with it. Do not add comment keys such as `"//"`
+to `vercel.json`; Vercel validates it strictly and rejects unknown properties.
+
 ## Commands
 
 ```bash
