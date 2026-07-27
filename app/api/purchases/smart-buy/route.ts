@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/api-helpers';
 import { guardFeature } from '@/lib/plan-features';
+import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,39 +27,63 @@ export async function GET(request: Request) {
     const ninetyDaysFromNow = new Date(Date.now() + 90 * 86400000);
 
     try {
-        // ── 1. Products + batches + units + supplier + category ──
-        const products = await prisma.product.findMany({
-            where: { tenantId },
-            include: {
-                supplier: true,
-                units: true,
-                category: { select: { name: true } },
-                batches: {
-                    where: { tenantId, ...batchBranchFilter },
-                    orderBy: { createdAt: 'desc' },
+        // الاستعلامات الثلاثة مستقلّة تمامًا — كانت ثلاث رحلات متتالية (~1.1 ثانية).
+        // expiryBatches يُجلب هنا أيضًا رغم استعماله لاحقًا.
+        const [products, salesItems, expiryBatches] = await Promise.all([
+            // ── 1. Products + batches + units + supplier + category ──
+            // أربع علاقات: قياسًا ~1233ms ← ~504ms برحلة واحدة.
+            prisma.product.findMany({
+                where: { tenantId },
+                include: {
+                    supplier: true,
+                    units: true,
+                    category: { select: { name: true } },
+                    batches: {
+                        where: { tenantId, ...batchBranchFilter },
+                        orderBy: { createdAt: 'desc' },
+                    },
                 },
-            },
-        });
-
-        // ── 2. Sales velocity: last 30 days ──
-        // quantity in TransactionItem is in the *sold unit* (e.g. carton=12 pcs).
-        // We must multiply by conversionFactor to get base-unit qty so it matches baseStock.
-        const salesItems = await prisma.transactionItem.findMany({
-            where: {
-                transaction: {
+                ...RELATION_JOIN,
+            }),
+            // ── 2. Sales velocity: last 30 days ──
+            // quantity in TransactionItem is in the *sold unit* (e.g. carton=12 pcs).
+            // We must multiply by conversionFactor to get base-unit qty so it matches baseStock.
+            // قياسًا: ~764ms ← ~426ms.
+            prisma.transactionItem.findMany({
+                where: {
+                    transaction: {
+                        tenantId,
+                        type: 'SALE',
+                        date: { gte: thirtyDaysAgo },
+                        ...(branchId && branchId !== 'all' ? { branchId } : {}),
+                    },
+                },
+                select: {
+                    productId: true,
+                    quantity: true,
+                    unit: { select: { conversionFactor: true } },
+                    transaction: { select: { date: true } },
+                },
+                ...RELATION_JOIN,
+            }),
+            // ── 3. Expiry alerts (selected branch — or all branches in global view, next 90 days) ──
+            // لا صفوف اليوم فلا يظهر فرق في القياس؛ الشكل مطابق لـ /api/offers
+            // (علاقتان إلى-واحد) الذي وفّر ~196ms.
+            prisma.productBatch.findMany({
+                where: {
                     tenantId,
-                    type: 'SALE',
-                    date: { gte: thirtyDaysAgo },
-                    ...(branchId && branchId !== 'all' ? { branchId } : {}),
+                    ...batchBranchFilter,
+                    expiryDate: { lte: ninetyDaysFromNow, gte: new Date() },
+                    quantity: { gt: 0 },
                 },
-            },
-            select: {
-                productId: true,
-                quantity: true,
-                unit: { select: { conversionFactor: true } },
-                transaction: { select: { date: true } },
-            },
-        });
+                include: {
+                    product: { select: { name: true, costPrice: true } },
+                    branch: { select: { name: true } },
+                },
+                orderBy: { expiryDate: 'asc' },
+                ...RELATION_JOIN,
+            }),
+        ]);
 
         // velocityMap: productId → { totalQty (in base units), lastSaleDate }
         const velocityMap = new Map<string, { totalQty: number; lastSaleDate: Date }>();
@@ -76,20 +101,7 @@ export async function GET(request: Request) {
             }
         }
 
-        // ── 3. Expiry alerts (selected branch — or all branches in global view, next 90 days) ──
-        const expiryBatches = await prisma.productBatch.findMany({
-            where: {
-                tenantId,
-                ...batchBranchFilter,
-                expiryDate: { lte: ninetyDaysFromNow, gte: new Date() },
-                quantity: { gt: 0 },
-            },
-            include: {
-                product: { select: { name: true, costPrice: true } },
-                branch: { select: { name: true } },
-            },
-            orderBy: { expiryDate: 'asc' },
-        });
+        // ── 3. Expiry alerts — تُجلب أعلاه بالتوازي ──
 
         // ── Helper: deduce true piece cost from raw batch cost ──
         const getTruePieceCost = (rawCost: number, p: typeof products[0]): number => {

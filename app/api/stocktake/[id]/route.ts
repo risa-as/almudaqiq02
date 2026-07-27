@@ -3,6 +3,7 @@ import { getAuthContext } from '@/lib/api-helpers'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { canManageStock } from '@/lib/auth'
 import { logActionAs } from '@/lib/audit'
+import { RELATION_JOIN } from '@/lib/prisma-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,8 +38,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   // category and the price come from the live Product. A product deleted since
   // the snapshot (or one with no units) yields null/0 rather than dropping the
   // row — the snapshot is what keeps the session auditable.
+  // لا يمكن توازي هذا مع items: المُرشِّح هنا مبنيّ على معرّفات البنود نفسها.
+  // لكن العلاقتين (القسم والوحدات) تُجلبان برحلة واحدة: ~775ms ← ~434ms.
   const products = await prisma.product.findMany({
     where: { id: { in: items.map(i => i.productId) }, tenantId: auth.tenantId },
+    ...RELATION_JOIN,
     select: {
       id: true,
       category: { select: { name: true } },

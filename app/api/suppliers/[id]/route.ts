@@ -15,13 +15,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const branchId = request.nextUrl.searchParams.get('branchId')
     const specificBranch = branchId && branchId !== 'all' ? branchId : null
 
-    const supplier = await prisma.supplier.findFirst({ where: { id, tenantId: auth.tenantId } })
+    // رحلتان متتاليتان بلا داعٍ: سجلّ المورد مستقلّ عن التحقق من ملكيته.
+    // الحارس 404 يبقى قبل أي استعمال للسجلّ، فلا يُعاد شيء لمستأجر غير مالك.
+    const [supplier, ledger] = await Promise.all([
+      prisma.supplier.findFirst({ where: { id, tenantId: auth.tenantId } }),
+      prisma.supplierLedger.findMany({
+        where:   { supplierId: id, ...(specificBranch ? { branchId: specificBranch } : {}) },
+        orderBy: { date: 'desc' },
+      }),
+    ])
     if (!supplier) return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
-
-    const ledger = await prisma.supplierLedger.findMany({
-      where:   { supplierId: id, ...(specificBranch ? { branchId: specificBranch } : {}) },
-      orderBy: { date: 'desc' },
-    })
 
     // Compute branch-scoped balance from ledger
     const branchBalance = ledger.reduce((acc, e) =>
