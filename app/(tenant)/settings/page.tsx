@@ -43,6 +43,7 @@ import { useTourContext } from "@/contexts/TourContext";
 import { useBranch } from "@/contexts/BranchContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchJson, fetchJsonOr } from "@/lib/query/fetcher";
+import SubscriptionStatusCard from "@/components/SubscriptionStatusCard";
 import toast from "react-hot-toast";
 
 interface User {
@@ -2507,6 +2508,10 @@ export default function SettingsPage() {
       {/* ══════════════ BILLING TAB ══════════════ */}
       {activeTab === "billing" && (
         <div className="space-y-5">
+          {/* Works on the desktop too, where /api/billing has no local row:
+              reads the cached subscription and can re-check the cloud on demand. */}
+          <SubscriptionStatusCard />
+
           {loadingBilling ? (
             <div className="py-20 flex flex-col items-center gap-3">
               <Loader2 size={32} className="animate-spin text-blue-400" />

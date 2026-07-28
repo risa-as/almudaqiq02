@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Building2, CreditCard, Activity, Megaphone, KeyRound, KeySquare, LogOut, Shield, WifiOff, Wallet, Settings } from 'lucide-react'
+import { LayoutDashboard, Building2, CreditCard, Activity, Megaphone, KeySquare, LogOut, Shield, WifiOff, Wallet, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { clearClientSession } from '@/lib/client-session';
 
@@ -13,7 +13,9 @@ const NAV = [
   { href: '/super-admin/payment-methods',label: 'طرق الدفع',     icon: Wallet,          gradient: 'from-purple-400 to-violet-500' },
   { href: '/super-admin/monitoring',     label: 'المراقبة',      icon: Activity,        gradient: 'from-emerald-400 to-teal-500' },
   { href: '/super-admin/announcements',  label: 'الإعلانات',     icon: Megaphone,       gradient: 'from-pink-400 to-rose-500' },
-  { href: '/super-admin/licenses',       label: 'التراخيص',      icon: KeyRound,        gradient: 'from-violet-400 to-purple-500' },
+  // The old HS256 "licenses" page is gone: this product is gated by the tenant
+  // subscription, not by pasted keys. Offline licences stay — they serve the
+  // separate desktop-only product, which has no server to check against.
   { href: '/super-admin/offline-licenses', label: 'تراخيص أوف لاين', icon: KeySquare,   gradient: 'from-amber-400 to-orange-500' },
   { href: '/super-admin/settings',       label: 'الإعدادات',     icon: Settings,        gradient: 'from-slate-400 to-gray-500' },
 ]

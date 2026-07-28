@@ -14,9 +14,12 @@
 - [ ] عند ترقية الخطة لاحقاً: فعّل **PITR** من لوحة Neon (تكامل فوري بلا تغيير كود — انظر `BACKUP.md` §6).
 
 ## 2. الأسرار (إلزامي)
-- [ ] دوّر كل الأسرار الخمسة في بيئة الإنتاج (ليست نفس قيم التطوير إن أمكن):
-      `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `BRANCH_TOKEN_SECRET`, `LICENSE_SECRET_KEY`, `DEVELOPER_PASSWORD`.
-- [ ] تأكد أن `DEVELOPER_PASSWORD` ≥ 16 حرفاً وقوي.
+- [ ] دوّر كل الأسرار في بيئة الإنتاج (ليست نفس قيم التطوير إن أمكن):
+      `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `BRANCH_TOKEN_SECRET`, `CRON_SECRET`,
+      `LICENSE_PRIVATE_KEY` (لتراخيص نسخة الأوف لاين فقط).
+- [ ] `LICENSE_SECRET_KEY` و`DEVELOPER_PASSWORD` لم يعودا مستخدَمين — أُزيل نظام
+      مفاتيح الترخيص من هذا المشروع (البوابة هي اشتراك المستأجر). احذفهما من
+      متغيّرات البيئة في الإنتاج.
 - [ ] لا يوجد `.env` أو `.env.bak` في git (مُتحقَّق — متجاهلان).
 
 ## 3. تشفير أجهزة الكاشير (إلزامي — بيانات SQLite غير مشفّرة)

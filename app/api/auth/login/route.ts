@@ -9,6 +9,11 @@ import {
 } from '@/lib/auth'
 import { checkRateLimitAsync } from '@/lib/rate-limit'
 import { logAction } from '@/lib/audit'
+import {
+  checkSubscriptionAllowed,
+  graceEndFor,
+  type SubscriptionSnapshot,
+} from '@/lib/subscriptions/grace'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,10 +132,19 @@ async function wipePreviousTenantData(newTenantId: string) {
       const fs   = require('fs')   as typeof import('fs')
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const path = require('path') as typeof import('path')
+      // electron/main.js passes the real path. It cannot be reconstructed here:
+      // userData resolves from app.getName() — the electron-builder productName
+      // ("المدقق") — not from the package name, so the old hard-coded
+      // 'supermarket-core' guess never matched a packaged install and the stale
+      // branch config survived a tenant switch. The guess is kept only as a
+      // fallback for dev runs where the app name does resolve that way.
+      const candidates: string[] = []
+      if (process.env.BRANCH_CONFIG_PATH) candidates.push(process.env.BRANCH_CONFIG_PATH)
       const appDataRoot = process.env.APPDATA
         || (process.env.HOME ? `${process.env.HOME}/.config` : null)
-      if (appDataRoot) {
-        const cfg = path.join(appDataRoot, 'supermarket-core', 'branch-config.json')
+      if (appDataRoot) candidates.push(path.join(appDataRoot, 'supermarket-core', 'branch-config.json'))
+
+      for (const cfg of candidates) {
         if (fs.existsSync(cfg)) fs.unlinkSync(cfg)
       }
     } catch { /* non-critical */ }
@@ -233,22 +247,38 @@ async function cacheCloudVerifyResult(data: CloudVerifyData, plainPassword: stri
   }).catch(() => {})
 }
 
-/** Decide whether a tenant's cached subscription is currently valid for login. */
-function checkSubscriptionAllowed(t: {
-  status?: string | null
-  cachedSubscriptionStatus?: string | null
-  cachedSubscriptionEndDate?: Date | null
-}): { ok: true } | { ok: false; error: string; status: number } {
-  if (t.status === 'SUSPENDED') return { ok: false, error: 'الحساب معلق، تواصل مع الدعم', status: 403 }
-  if (t.status === 'CANCELLED') return { ok: false, error: 'الاشتراك ملغى',               status: 403 }
-  const s = t.cachedSubscriptionStatus
-  if (s === 'EXPIRED' || s === 'CANCELLED' || s === 'SUSPENDED') {
-    return { ok: false, error: 'انتهى الاشتراك. يرجى التجديد من خلال لوحة الإدارة.', status: 403 }
+/** Shape the cloud verify payload into what the subscription gate reads. */
+function snapshotFromVerify(d: CloudVerifyData): SubscriptionSnapshot {
+  return {
+    status:                     d.tenant.status,
+    cachedSubscriptionStatus:   d.subscription?.status ?? null,
+    cachedSubscriptionEndDate:  d.subscription?.endDate ? new Date(d.subscription.endDate) : null,
+    cachedSubscriptionPlanName: d.subscription?.planName ?? null,
   }
-  if (t.cachedSubscriptionEndDate && t.cachedSubscriptionEndDate.getTime() < Date.now()) {
-    return { ok: false, error: 'انتهى الاشتراك. يرجى التجديد من خلال لوحة الإدارة.', status: 403 }
-  }
-  return { ok: true }
+}
+
+/**
+ * 403 body for a blocked subscription.
+ *
+ * Carries a machine-readable `code` plus the dates, so the login page can render
+ * a real expiry screen (plan, end date, grace end, re-check button) instead of a
+ * bare line of red text.
+ */
+function subscriptionBlockedResponse(
+  gate: Extract<ReturnType<typeof checkSubscriptionAllowed>, { ok: false }>,
+  snapshot: SubscriptionSnapshot,
+) {
+  const end = snapshot.cachedSubscriptionEndDate ?? null
+  return NextResponse.json({
+    error:        gate.error,
+    code:         gate.code,
+    subscription: {
+      status:      snapshot.cachedSubscriptionStatus ?? null,
+      planName:    snapshot.cachedSubscriptionPlanName ?? null,
+      endDate:     end ? end.toISOString() : null,
+      graceEndsAt: end ? graceEndFor(end).toISOString() : null,
+    },
+  }, { status: gate.status })
 }
 
 const LoginSchema = z.object({
@@ -357,6 +387,14 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
     await cacheCloudVerifyResult(verify.data, password)
+
+    // desktop-verify only rejects SUSPENDED/CANCELLED *tenants* — it does not
+    // look at the subscription, so an expired account used to sail through a
+    // first-time install. Apply the same gate every other login path uses.
+    const firstSnapshot = snapshotFromVerify(verify.data)
+    const firstGate     = checkSubscriptionAllowed(firstSnapshot)
+    if (!firstGate.ok) return subscriptionBlockedResponse(firstGate, firstSnapshot)
+
     user = await prisma.user.findFirst({
       where:   { id: verify.data.user.id },
       include: { tenant: { select: { id: true, name: true, status: true } } },
@@ -364,7 +402,6 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'تعذّر حفظ بيانات المستخدم محليًا' }, { status: 500 })
     }
-    // Cloud already verified credentials + tenant/subscription gates.
     return await issueLocalLoginResponse(user, isMobile)
   }
 
@@ -401,6 +438,8 @@ export async function POST(request: NextRequest) {
 
   await prisma.user.update({ where: { id: user.id }, data: { failedAttempts: 0, lockedUntil: null } })
 
+  let subscriptionNotice: SubscriptionNotice = null
+
   // ── Desktop: best-effort cloud refresh + subscription enforcement ──────────
   if (IS_DESKTOP) {
     const verify = await tryCloudHttpsVerify(email, password)
@@ -412,23 +451,38 @@ export async function POST(request: NextRequest) {
     // Read the locally-cached tenant + subscription fields (Electron-only columns).
     const cached = await (prisma as any).tenant.findUnique({
       where:  { id: user.tenantId },
-      select: { status: true, cachedSubscriptionStatus: true, cachedSubscriptionEndDate: true },
+      select: {
+        status: true,
+        cachedSubscriptionStatus: true,
+        cachedSubscriptionEndDate: true,
+        cachedSubscriptionPlanName: true,
+      },
     })
-    const sub = checkSubscriptionAllowed(cached ?? {})
-    if (!sub.ok) return NextResponse.json({ error: sub.error }, { status: sub.status })
+    const snapshot: SubscriptionSnapshot = cached ?? {}
+    const sub = checkSubscriptionAllowed(snapshot)
+    if (!sub.ok) return subscriptionBlockedResponse(sub, snapshot)
     if (!verify.ok) {
       // Offline / cloud unreachable: enforce 30-day grace period since last verify.
       const last = (user as any).lastCloudVerifyAt as Date | null
       if (!last || (Date.now() - last.getTime() > OFFLINE_GRACE_MS)) {
         return NextResponse.json({
           error: 'انقضت مهلة العمل دون اتصال (30 يومًا). يرجى الاتصال بالإنترنت لتجديد التحقق.',
+          code:  'OFFLINE_GRACE_ENDED',
         }, { status: 401 })
       }
     }
+
+    // Inside the cloud's 5-day grace window — let them in, but say so.
+    if (sub.inGrace && sub.graceEndsAt) {
+      subscriptionNotice = { inGrace: true, graceEndsAt: sub.graceEndsAt.toISOString() }
+    }
   }
 
-  return await issueLocalLoginResponse(user, isMobile)
+  return await issueLocalLoginResponse(user, isMobile, subscriptionNotice)
 }
+
+/** Non-blocking subscription warning attached to a successful login. */
+type SubscriptionNotice = { inGrace: true; graceEndsAt: string } | null
 
 async function issueLocalLoginResponse(user: {
   id: string
@@ -438,7 +492,7 @@ async function issueLocalLoginResponse(user: {
   tenantId: string
   branchId: string | null
   tenant: { id: string; name: string }
-}, isMobile: boolean) {
+}, isMobile: boolean, subscriptionNotice: SubscriptionNotice = null) {
   await logAction('LOGIN', 'User', user.id, 'Successful login',
     user.username ?? user.email ?? 'System', user.tenantId, user.branchId ?? undefined)
   const { accessToken, refreshToken } = await generateTokenPair({
@@ -460,6 +514,7 @@ async function issueLocalLoginResponse(user: {
     },
     tenant:     { id: user.tenant.id, name: user.tenant.name },
     redirectTo: redirectTo(user.role),
+    ...(subscriptionNotice ? { subscriptionNotice } : {}),
   })
   res.cookies.set('auth-token',    accessToken,  { httpOnly: true, secure: SECURE_COOKIE, path: '/',                  sameSite: 'lax', maxAge: 28800 })
   res.cookies.set('refresh-token', refreshToken, { httpOnly: true, secure: SECURE_COOKIE, path: '/api/auth/refresh', sameSite: 'lax', maxAge: 30 * 86400 })

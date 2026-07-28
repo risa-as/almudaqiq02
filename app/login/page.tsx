@@ -7,6 +7,17 @@ import {
   Users, Package, Shield, Zap, CheckCircle2,
 } from 'lucide-react'
 import { clearClientSession } from '@/lib/client-session'
+import SubscriptionExpiredScreen, { type SubscriptionBlock } from '@/components/SubscriptionExpiredScreen'
+
+/** Login failures that mean "the account is blocked", not "wrong credentials". */
+const BLOCK_CODES = new Set([
+  'SUBSCRIPTION_EXPIRED',
+  'SUBSCRIPTION_SUSPENDED',
+  'SUBSCRIPTION_CANCELLED',
+  'TENANT_SUSPENDED',
+  'TENANT_CANCELLED',
+  'OFFLINE_GRACE_ENDED',
+])
 
 const FEATURES = [
   { icon: BarChart3,    label: 'تقارير وتحليلات متقدمة',   desc: 'إحصائيات لحظية وتقارير مفصّلة' },
@@ -22,10 +33,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
+  const [block,    setBlock]    = useState<SubscriptionBlock | null>(null)
   const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  /**
+   * Shared by the form and by the expired screen's "تحقق الآن" button — that
+   * button is deliberately just another login attempt: on the desktop a login
+   * re-verifies against the cloud and refreshes the cached subscription, so a
+   * customer who has just renewed is let straight back in.
+   */
+  const submitLogin = async () => {
     setError('')
     setLoading(true)
     try {
@@ -39,9 +56,17 @@ export default function LoginPage() {
         // كاش العميل يعود لجلسة سابقة (قد تكون لمستخدم أو مستأجر آخر انتهت
         // جلسته دون تسجيل خروج) — نمحوه قبل الدخول حتى لا تُرسم بياناته.
         clearClientSession()
+        setBlock(null)
         router.push(data.redirectTo ?? '/')
         router.refresh()
+      } else if (typeof data.code === 'string' && BLOCK_CODES.has(data.code)) {
+        setBlock({
+          code:         data.code,
+          error:        data.error || 'تعذّر الدخول',
+          subscription: data.subscription ?? null,
+        })
       } else {
+        setBlock(null)
         setError(data.error || 'فشل تسجيل الدخول')
       }
     } catch {
@@ -49,6 +74,11 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await submitLogin()
   }
 
   return (
@@ -91,7 +121,15 @@ export default function LoginPage() {
             <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>إدارة متكاملة لمتجرك</p>
           </div>
 
-          {/* Card */}
+          {/* Card — swapped for the expiry screen when the subscription gate refuses */}
+          {block ? (
+            <SubscriptionExpiredScreen
+              block={block}
+              retrying={loading}
+              onRetry={() => { void submitLogin() }}
+              onBack={() => setBlock(null)}
+            />
+          ) : (
           <div
             className="rounded-2xl p-6"
             style={{
@@ -208,6 +246,7 @@ export default function LoginPage() {
               </button>
             </form>
           </div>
+          )}
 
           <p className="text-center text-xs mt-4 font-medium" style={{ color: 'var(--text-muted)' }}>
             نظام المدقق — الإصدار 2.0 &nbsp;·&nbsp; جميع الحقوق محفوظة

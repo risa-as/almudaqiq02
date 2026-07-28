@@ -28,7 +28,6 @@ const PUBLIC_PATHS = [
   '/logo.png',
   '/logo.jpg',
   '/logo.ico',
-  '/activate',
 ]
 
 function isPublic(pathname: string) {

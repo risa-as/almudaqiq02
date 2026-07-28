@@ -92,7 +92,7 @@ function loadEnvFile(serverDir) {
     return envVars;
 }
 
-function startServer(cloudUrl = '') {
+function startServer(cloudUrl = '', branchConfig = null) {
     if (!app.isPackaged) {
         // In dev, server is already running via "npm run dev"
         return Promise.resolve('http://localhost:3000');
@@ -116,6 +116,14 @@ function startServer(cloudUrl = '') {
                 LOCAL_DATABASE_URL:   databaseUrl,  // used by sync-enqueue in Next.js routes
                 IS_ELECTRON:          '1',          // gates enqueue calls in API routes
                 CLOUD_URL:            cloudUrl || envFromFile.CLOUD_URL || '',  // branch config → .env fallback
+                // Lets /api/subscription re-check the cloud on demand (Settings →
+                // "تحديث الحالة") using the same branch token the sync worker holds,
+                // instead of asking the user for their password again.
+                ...(branchConfig?.branchToken ? { BRANCH_TOKEN: branchConfig.branchToken } : {}),
+                // Absolute path to branch-config.json. The server process cannot
+                // derive it: userData resolves from app.getName() (productName,
+                // "المدقق"), not from the package name — so any guessed path is wrong.
+                BRANCH_CONFIG_PATH:   getConfigPath(),
                 // Per-install JWT secrets (never shipped in the bundle)
                 JWT_SECRET:           secrets.JWT_SECRET,
                 REFRESH_TOKEN_SECRET: secrets.REFRESH_TOKEN_SECRET,
@@ -609,7 +617,7 @@ app.whenReady().then(async () => {
     // Load branch config first so we can pass CLOUD_URL to the server process
     const branchConfig = loadBranchConfig();
 
-    const baseUrl = await startServer(branchConfig?.cloudUrl ?? '').catch((err) => {
+    const baseUrl = await startServer(branchConfig?.cloudUrl ?? '', branchConfig).catch((err) => {
         console.error('Failed to start server:', err);
         return 'http://localhost:3000';
     });
