@@ -26,7 +26,6 @@ export async function GET(request: NextRequest) {
   })
 
   let notified = 0
-  let emailed = 0
   const errors: string[] = []
 
   for (const tenant of tenants) {
@@ -53,29 +52,8 @@ export async function GET(request: NextRequest) {
       })
       notified++
 
-      // Email tenant admins (best-effort; skipped when Resend isn't configured).
-      if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
-        try {
-          const admins = await prisma.user.findMany({
-            where: { tenantId: tenant.id, role: 'ADMIN', email: { not: null } },
-            select: { email: true },
-          })
-          const to = admins.map(a => a.email!).filter(Boolean)
-          if (to.length) {
-            const { Resend } = await import('resend')
-            const resend = new Resend(process.env.RESEND_API_KEY)
-            await resend.emails.send({
-              from:    process.env.EMAIL_FROM,
-              to,
-              subject: `${title} — ${tenant.name}`,
-              text:    digest.text,
-            })
-            emailed++
-          }
-        } catch (e) {
-          errors.push(`email:${tenant.id}: ${e instanceof Error ? e.message : e}`)
-        }
-      }
+      // Email removed — the digest reaches tenants as an in-app notification only.
+      // Customer contact happens over WhatsApp, outside the system.
     } catch (e) {
       errors.push(`${tenant.id}: ${e instanceof Error ? e.message : e}`)
     }
@@ -84,7 +62,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     tenants: tenants.length,
     notified,
-    emailed,
     errors: errors.slice(0, 10),
   })
 }

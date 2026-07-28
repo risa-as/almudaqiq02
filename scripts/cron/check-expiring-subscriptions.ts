@@ -19,7 +19,6 @@ async function main() {
     ` | expired→GRACE: ${result.movedToGrace} | trials→GRACE: ${result.trialsEnded}` +
     ` | GRACE→SUSPENDED: ${result.suspended}`
   )
-  for (const err of result.emailErrors) console.error(`[cron] email failed — ${err}`)
 
   console.log('[cron] Subscription expiry check completed.')
   await prisma.$disconnect()

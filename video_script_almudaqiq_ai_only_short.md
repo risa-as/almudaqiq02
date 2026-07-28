@@ -69,26 +69,46 @@
 
 ## 🔤 الكلمات الإنجليزية المسموح ظهورها على الشاشات
 
-`Total` · `Profit` · `Low Stock` · `Assistant` · `Branches` · `Sales` · `12` · `14`
+`Total` · `Profit` · `Low Stock` · `Assistant` · `Branches` · `Sales` · `14`
 
-> ثمانية عناصر فقط — تكرارها عبر المقاطع يجعل الواجهات تبدو **نظامًا واحدًا** لا شاشات متفرقة.
+> سبعة عناصر فقط — تكرارها عبر المقاطع يجعل الواجهات تبدو **نظامًا واحدًا** لا شاشات متفرقة.
 > ❌ ممنوع: أي جملة، أي فقرة، أي اسم منتج، أي رقم هاتف، أي رابط. كلها تُضاف بالعربية في المونتاج.
+
+### 🚨 قاعدة الأرقام — مستخلصة من تجربة فعلية (2026-07-28)
+
+**لا تطلب من النموذج رسم أي رقم داخل الواجهة إطلاقًا.** جُرِّب وفشل: طلبنا رقم ربح واحدًا ثابتًا فأنتج `$0,90` ثم `$5,53` ثم `$9,68` ثم `118,33` ثم `152,89` — أرقامًا عشوائية متغيّرة، بفاصلة أوروبية وعلامة `$` **بينما عملتنا دينار عراقي**. وطلبنا الرقم `12` بجانب `Low Stock` فحُذف تمامًا وتكرّرت الكلمة مشوّهة.
+
+**البديل المثبَت نجاحه:**
+1. اطلب **مخططًا بيانيًا بلا أرقام** — أضف صراحة: `The chart area is completely plain, with no numbers, no digits, no axis labels and no gridline values of any kind.`
+2. **الأرقام كلها تُضاف في المونتاج** بالعربية وبالدينار العراقي. أدق، وأصدق، وتحت سيطرتك الكاملة.
+3. لهذا حُذف `12` من قائمة الكلمات المسموحة أعلاه. و`14` يظهر على ميدالية (المقطع 8) لا داخل واجهة — وهو الاستثناء الوحيد.
+
+### 🚨 قاعدة العلامات التجارية — من نفس التجربة
+
+النموذج رسم شعار **DELL** واضحًا على قاعدة الشاشة دون أن يُطلب منه. جملة `no brand names` وحدها لا تكفي — **صِف الجهاز نفسه بأنه بلا علامة**:
+
+> `a plain unbranded desktop monitor` … وفي جملة الختام: `Every device is plain and unbranded, carrying no manufacturer logo, no brand mark, no digits and no other writing anywhere in frame.`
+
+### 🚨 قاعدة المكان — من نفس التجربة
+
+`modern market` وحدها أنتجت **سوبرماركت أمريكيًا ضخمًا** بعشرات الصناديق — لا بقالة عراقية. حدّد دائمًا: `a small neighborhood grocery store, not a large supermarket`، وأضف `modest wooden shelving`.
 
 ---
 
-## 🗂️ خريطة المقاطع — 1:50
+## 🗂️ خريطة المقاطع — 1:55
 
 | # | المقطع | التوقيت | الطول | رفع صورة؟ | الخطورة |
 |---|--------|---------|-------|-----------|---------|
-| 1 | الألم — الدفتر والرفّ الفارغ | 0:00–0:15 | 15s | — | 🟢 |
+| 1 | الألم — الدفتر والرفّ الفارغ | 0:00–0:15 | 15s | — | 🟢 ✅ مولَّد |
 | 2 | كشف اللوكو | 0:15–0:25 | 10s | **اللوكو** | 🟢 |
 | 3 | تحوّل المتجر | 0:25–0:35 | 10s | — | 🟡 |
 | 4 | نقطة البيع | 0:35–0:50 | 15s | — | 🔴 |
-| 5 | الربح والتنبيه | 0:50–1:05 | 15s | — | 🔴 |
-| 6 | المساعد الذكي | 1:05–1:20 | 15s | — | 🔴 |
-| 7 | الفروع والسحابة | 1:20–1:30 | 10s | — | 🟡 |
-| 8 | العرض — 14 يوم | 1:30–1:40 | 10s | — | 🟡 |
-| 9 | الدعوة للتصرف | 1:40–1:50 | 10s | **اللوكو** | 🟢 |
+| 5أ | لوحة الربح | 0:50–1:00 | 10s | — | 🔴 ✅ مولَّد |
+| 5ب | بطاقة التنبيه | 1:00–1:10 | 10s | — | 🔴 ✅ مولَّد |
+| 6 | المساعد الذكي | 1:10–1:25 | 15s | — | 🔴 |
+| 7 | الفروع والسحابة | 1:25–1:35 | 10s | — | 🟡 |
+| 8 | العرض — 14 يوم | 1:35–1:45 | 10s | — | 🟡 |
+| 9 | الدعوة للتصرف | 1:45–1:55 | 10s | **اللوكو** | 🟢 |
 
 **🎬 الفواصل المتعمدة:** تعتيم كامل 0.4s بين **1 ← 2** (المشكلة/الحل) · فاصل أبيض 0.3s بين **7 ← 8** (الميزات/العرض). لا فواصل غيرهما.
 
@@ -266,38 +286,74 @@ no other writing anywhere in frame.
 
 ---
 
-## المقطع 5 — الربح والتنبيه `0:50–1:05` (15s) 🔴
+## المقطع 5 — الربح والتنبيه `0:50–1:10` (لقطتان × 10s) 🔴 ✅ **مولَّد ومعتمَد**
 
-> 🔗 **مقطع مدموج**: يجمع "لوحة الأرقام" و"تنبيه المخزون" من النسخة الطويلة — يوفّر 5 ثوانٍ، ويربط الربح بالتنبيه في تدفّق واحد يجيب مباشرةً على سؤالَي المقطع 1.
+> ✅ **حالة الإنتاج (2026-07-28):** وُلِّد ونجح. الملفان:
+> `marketing_video/clips/clip5a_profit_v2.mp4` · `marketing_video/clips/clip5b_lowstock_v2.mp4`
+>
+> ⚠️ **المحاولة الأولى (لقطة واحدة 15s) فشلت** — أرقام عشوائية بالدولار، `Low Stock` مكرّرة، شعار DELL ظاهر، ومتجر أمريكي ضخم. البرومبتان أدناه هما النسخة المصحّحة التي نجحت فعليًا. لا تعُد إلى الصيغة القديمة.
+>
+> 📐 **أثر التوقيت:** المقطع صار 20s بدل 15s ← **المدة الكلية 1:55** بدل 1:50، وما تزال داخل المدى المطلوب (1:30–2:00).
+
+### 5أ — لوحة الربح (10s)
 
 ```
 Single shot, 9:16 vertical, clean interface showcase style.
 
-Continuing from the receipt in the previous shot, the camera pushes in on the desktop
-monitor at the counter. The screen shows a simple clean dashboard: one large number
-under the short label "Profit" in large simple sans-serif font, correctly spelled, with
-a simple bar chart of seven bars growing upward one bar at a time beneath it. The number
-counts up quickly and settles. Then a small notification card slides in smoothly from
-the right side of the screen showing the short label "Low Stock" beside the number "12"
-in bold, and the card pulses gently once.
+Continuing from the receipt in the previous shot, the camera pushes in on a plain
+unbranded desktop monitor standing on the checkout counter of a small neighborhood
+grocery store. The screen shows one very simple clean dashboard: the single word
+"Profit" in large simple sans-serif font near the top, and directly beneath it a simple
+bar chart of seven plain blue bars that grow upward one bar at a time in a smooth
+animation until all seven stand still. The chart area is completely plain, with no
+numbers, no digits, no axis labels and no gridline values of any kind.
 
-Setting: the same modern checkout counter softly blurred behind the monitor, dark theme
-interface on the screen with blue accent highlights and one orange accent on the card.
+Setting: a small tidy neighborhood grocery store, modest wooden shelving softly blurred
+behind the monitor, packaging in plain solid colors and simple abstract shapes, warm
+daylight from a window, dark theme interface on the screen with blue accent highlights.
 
 Camera: a slow steady push in that ends filling the frame entirely with the screen, so
 the counter around it is no longer visible.
 
+Mood and grade: clean, sharp, professional, blue and white, 4K.
+
+Ambient sound only: soft interface clicks, a quiet electronic hum and quiet room tone.
+Nobody speaks and there is no voice, no narration and no music at any point.
+
+Use only the single word "Profit" anywhere in frame, correctly spelled, large and
+simple. Every device is plain and unbranded, carrying no manufacturer logo, no brand
+mark, no digits and no other writing anywhere in frame.
+```
+
+### 5ب — بطاقة التنبيه (10s)
+
+```
+Single shot, 9:16 vertical, clean interface showcase style.
+
+Continuing on the same plain unbranded monitor screen that filled the frame at the end
+of the previous shot, the seven blue bars of the chart remain settled in place. A single
+notification card then slides in smoothly from the right edge of the screen and stops
+near the top. The card is a plain rounded rectangle carrying one small orange warning
+triangle icon on its left side and the two words "Low Stock" beside it in large simple
+sans-serif font. The card pulses gently once, and nothing else on the screen changes.
+
+Setting: the screen fills the entire frame, dark theme interface with blue accent
+highlights and a single orange accent on the card.
+
+Camera: static framing on the screen with subtle interface motion only.
+
 Mood and grade: clean, sharp, professional, blue and white with a single orange accent,
 4K.
 
-Ambient sound only: soft interface clicks, a quiet electronic hum, and one gentle
-notification chime. No music.
+Ambient sound only: one gentle notification chime over a quiet electronic hum. Nobody
+speaks and there is no voice, no narration and no music at any point.
 
-Use only the words "Profit" and "Low Stock" and the number "12" on the screen, correctly
-spelled, large and simple, and place no other writing anywhere in frame.
+Use only the two words "Low Stock" anywhere in frame, correctly spelled, large and
+simple, appearing exactly once. The screen carries no digits, no numbers, no brand mark
+and no other writing anywhere in frame.
 ```
 
-**🔄 نسخة احتياطية مبسّطة:** إذا خرجت الشاشة مزدحمة أو مشوّشة — **قسّمها إلى لقطتين بـ 10s لكل منهما** (رقم `Profit` + مخطط في الأولى، بطاقة `Low Stock` + `12` في الثانية) وستصبح المدة الكلية 1:55، وهي ما تزال داخل المدى المطلوب.
+**📝 ملاحظة مونتاج:** رقم الربح ورقم الأصناف الناقصة (12) يُضافان **كنص عربي فوق الفيديو**، بالدينار العراقي — لا داخل التوليد.
 
 **🎤 التعليق الصوتي:**
 > ومن نفس الفاتورة يُحسب ربحك الصافي. والمخزون ينبّهك قبل أن ينفد الصنف — كما نفد ذلك اليوم.

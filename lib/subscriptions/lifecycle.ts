@@ -14,28 +14,28 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { createNotification } from '@/lib/notifications/in-app'
-import {
-  sendSubscriptionExpirySoon,
-  sendSubscriptionExpired,
-} from '@/lib/notifications/email'
 import { GRACE_PERIOD_DAYS, graceEndFor } from '@/lib/subscriptions/grace'
 
 export { GRACE_PERIOD_DAYS }
 
+/**
+ * Notifications here are **in-app only**. Email was removed deliberately: the
+ * customer is contacted over WhatsApp, outside the system. Each entry below is
+ * also a Notification row the tenant's admin sees inside the dashboard.
+ */
 export interface SubscriptionSweepResult {
   warned7: number
   warned1: number
   movedToGrace: number
   trialsEnded: number
   suspended: number
-  emailErrors: string[]
 }
 
 /**
  * True when this tenant already received a notification with the same title
  * today. The sweep is scheduled daily but Vercel may retry a failed run, and
- * warnings are sent on a date *range* — without this a retry re-notifies and
- * re-emails every tenant in the window.
+ * warnings are sent on a date *range* — without this a retry re-notifies
+ * every tenant in the window.
  */
 async function alreadyNotifiedToday(tenantId: string, title: string): Promise<boolean> {
   const startOfDay = new Date()
@@ -79,7 +79,7 @@ export async function runSubscriptionLifecycleSweep(): Promise<SubscriptionSweep
   ])
 
   const result: SubscriptionSweepResult = {
-    warned7: 0, warned1: 0, movedToGrace: 0, trialsEnded: 0, suspended: 0, emailErrors: [],
+    warned7: 0, warned1: 0, movedToGrace: 0, trialsEnded: 0, suspended: 0,
   }
 
   // ── Expiring in 7 days ──────────────────────────────────────────────────────
@@ -93,11 +93,6 @@ export async function runSubscriptionLifecycleSweep(): Promise<SubscriptionSweep
       `اشتراكك سينتهي خلال 7 أيام (${sub.endDate!.toLocaleDateString('ar-IQ')}). يرجى التجديد لتجنب انقطاع الخدمة.`
     )
     result.warned7++
-
-    if (admin.email) {
-      await sendSubscriptionExpirySoon(admin.email, sub.tenant.name, 7)
-        .catch(e => result.emailErrors.push(`7d ${sub.tenantId}: ${e?.message ?? e}`))
-    }
   }
 
   // ── Expiring tomorrow ───────────────────────────────────────────────────────
@@ -111,11 +106,6 @@ export async function runSubscriptionLifecycleSweep(): Promise<SubscriptionSweep
       `اشتراكك ينتهي غدًا (${sub.endDate!.toLocaleDateString('ar-IQ')}). تواصل مع الدعم فورًا.`
     )
     result.warned1++
-
-    if (admin.email) {
-      await sendSubscriptionExpirySoon(admin.email, sub.tenant.name, 1)
-        .catch(e => result.emailErrors.push(`1d ${sub.tenantId}: ${e?.message ?? e}`))
-    }
   }
 
   // ── Expired → GRACE ─────────────────────────────────────────────────────────
@@ -141,10 +131,6 @@ export async function runSubscriptionLifecycleSweep(): Promise<SubscriptionSweep
       'انتهى اشتراكك — فترة المهلة نشطة',
       `انتهى اشتراكك. لديك ${GRACE_PERIOD_DAYS} أيام (حتى ${graceEnd.toLocaleDateString('ar-IQ')}) لتجديد الاشتراك. بعدها سيتم تعليق الحساب.`
     )
-    if (admin.email) {
-      await sendSubscriptionExpired(admin.email, sub.tenant.name)
-        .catch(e => result.emailErrors.push(`grace ${sub.tenantId}: ${e?.message ?? e}`))
-    }
   }
 
   // ── Trial ended → GRACE ─────────────────────────────────────────────────────
@@ -169,10 +155,6 @@ export async function runSubscriptionLifecycleSweep(): Promise<SubscriptionSweep
       'انتهت الفترة التجريبية — فترة المهلة نشطة',
       `انتهت فترتك التجريبية. لديك ${GRACE_PERIOD_DAYS} أيام (حتى ${graceEnd.toLocaleDateString('ar-IQ')}) للاشتراك. بعدها سيتم تعليق الحساب.`
     )
-    if (admin.email) {
-      await sendSubscriptionExpired(admin.email, sub.tenant.name)
-        .catch(e => result.emailErrors.push(`trial ${sub.tenantId}: ${e?.message ?? e}`))
-    }
   }
 
   // ── Grace ended → SUSPENDED ─────────────────────────────────────────────────

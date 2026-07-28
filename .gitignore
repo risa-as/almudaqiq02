@@ -21,7 +21,7 @@
 /build
 /dist
 /dist2
-
+/marketing_video
 # misc
 .DS_Store
 *.pem
