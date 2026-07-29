@@ -45,7 +45,11 @@ interface CloudVerifyData {
 
 type CloudVerifyResult =
   | { ok: true; data: CloudVerifyData }
-  | { ok: false; reason: 'no_cloud_url' | 'network' | 'invalid_credentials' | 'forbidden' | 'server'; error?: string }
+  | {
+      ok: false
+      reason: 'no_cloud_url' | 'network' | 'invalid_credentials' | 'forbidden' | 'rate_limited' | 'server'
+      error?: string
+    }
 
 async function tryCloudHttpsVerify(email: string, password: string): Promise<CloudVerifyResult> {
   const cloudUrl = process.env.CLOUD_URL?.replace(/\/$/, '')
@@ -67,6 +71,14 @@ async function tryCloudHttpsVerify(email: string, password: string): Promise<Clo
     if (res.status === 403) {
       const d = await res.json().catch(() => ({}))
       return { ok: false, reason: 'forbidden', error: d.error }
+    }
+    // The cloud rate-limits desktop-verify per IP. Without this branch a 429
+    // fell into the generic failure below and the user was told to check an
+    // internet connection that was working perfectly — the single most
+    // confusing failure this flow can produce.
+    if (res.status === 429) {
+      const d = await res.json().catch(() => ({}))
+      return { ok: false, reason: 'rate_limited', error: d.error }
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -382,8 +394,27 @@ export async function POST(request: NextRequest) {
       if (verify.reason === 'forbidden') {
         return NextResponse.json({ error: verify.error || 'الحساب غير مفعّل أو معلق' }, { status: 403 })
       }
+      if (verify.reason === 'rate_limited') {
+        return NextResponse.json({
+          error: 'محاولات تسجيل دخول كثيرة من هذا الاتصال. انتظر ٥ دقائق ثم أعد المحاولة — لا علاقة للأمر بالإنترنت.',
+          code:  'RATE_LIMITED',
+        }, { status: 429 })
+      }
+      if (verify.reason === 'no_cloud_url') {
+        return NextResponse.json({
+          error: 'هذه النسخة غير مهيّأة للاتصال بالخادم (CLOUD_URL غير مضبوط). تواصل مع المطوّر.',
+          code:  'NO_CLOUD_URL',
+        }, { status: 503 })
+      }
+      if (verify.reason === 'server') {
+        return NextResponse.json({
+          error: 'الخادم غير متاح حالياً. أعد المحاولة بعد قليل.',
+          code:  'CLOUD_UNAVAILABLE',
+        }, { status: 503 })
+      }
       return NextResponse.json({
         error: 'تسجيل الدخول الأول يتطلّب اتصالاً بالإنترنت للتحقق من الحساب والاشتراك.',
+        code:  'OFFLINE_FIRST_LOGIN',
       }, { status: 503 })
     }
     await cacheCloudVerifyResult(verify.data, password)
