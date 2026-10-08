@@ -9,7 +9,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
+        "EXPO_PUBLIC_API_URL": "https://almudaqiq02.com"
       }
     },
     "production": {
@@ -18,7 +18,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://app.faramace.com/api"
+        "EXPO_PUBLIC_API_URL": "https://almudaqiq02.com"
       }
     }
   }
