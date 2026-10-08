@@ -19,11 +19,17 @@ const nextConfig: NextConfig = {
   // Next traces the whole project root — which once shipped DB backups, Postgres
   // dumps and a branch activation code inside the installer.
   // scripts/prepare-standalone.js removes and re-checks these as a second layer.
+  //
+  // ⚠ Next matches these globs against ANY part of a traced path, not just the
+  // project root: a './dist/**' entry also matched node_modules/next/dist/** and
+  // stripped Next itself out of every Vercel function ("Cannot find module
+  // 'next/dist/server/node-environment'" → every API route 500). Only list names
+  // that cannot occur inside node_modules; generic folder names (dist, scripts,
+  // mobile, specs…) are handled by prepare-standalone.js instead.
   outputFileTracingExcludes: {
     '*': [
-      './backups/**', './mobile/**', './marketing_video/**', './specs/**', './scripts/**',
-      './dist/**', './.env*', './activation_params.json', './dump.txt', './errors.txt',
-      './files.txt', './tmp_files.txt', './*.log', './**/*.dump', './**/*.bak',
+      './backups/**', './marketing_video/**', './activation_params.json', './dump.txt',
+      './.env.bak', './.env.before-license-key.bak', './.env.local', './**/*.dump',
     ],
   },
   typescript: {
