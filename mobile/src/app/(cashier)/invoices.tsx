@@ -69,6 +69,11 @@ const t = {
     `سيتم استرداد الفاتورة كاملة بقيمة ${amount} وإعادة المنتجات للمخزون. هل أنت متأكد؟`,
   returnSuccess: 'تم تسجيل الإرجاع وإعادة الكميات للمخزون',
   refundSuccess: 'تم استرداد الفاتورة وإعادة المنتجات للمخزون',
+  // The server values the return from the original invoice (discount and earlier
+  // returns included) and cancels open debt first — this is what leaves the drawer.
+  cashBack: (cash: number, debt: number) =>
+    `أعد للعميل نقداً: ${formatMoney(cash)}` + (debt > 0 ? `
+وخُصم من دينه: ${formatMoney(debt)}` : ''),
   failTitle: 'فشلت العملية',
   successTitle: 'تمت العملية',
   processing: 'جارٍ التنفيذ…',
@@ -182,7 +187,8 @@ export default function InvoicesScreen() {
   const returnMutation = useMutation({
     mutationFn: (params: { originalTransactionId: string; items: { productId: string; unitId: string; quantity: number; price: number }[] }) =>
       returnItems({ ...params, branchId }),
-    onSuccess: () => afterWriteSuccess(t.returnSuccess),
+    onSuccess: res => afterWriteSuccess(`${t.returnSuccess}
+${t.cashBack(Number(res.cashOut ?? res.amount ?? 0), Math.max(0, Number(res.amount ?? 0) - Number(res.cashOut ?? res.amount ?? 0)))}`),
     onError: onWriteError,
   })
 
@@ -193,7 +199,8 @@ export default function InvoicesScreen() {
       items: { productId: string; unitId: string; quantity: number; price: number; cost: number }[]
       totalAmount: number
     }) => refundTransaction(params),
-    onSuccess: () => afterWriteSuccess(t.refundSuccess),
+    onSuccess: res => afterWriteSuccess(`${t.refundSuccess}
+${t.cashBack(Number(res.cashOut ?? res.amount ?? 0), Math.max(0, Number(res.amount ?? 0) - Number(res.cashOut ?? res.amount ?? 0)))}`),
     onError: onWriteError,
   })
 

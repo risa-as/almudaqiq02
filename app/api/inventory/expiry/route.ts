@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
+import { pinnedBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     const { tenantId, branchId: authBranchId } = auth;
 
     const { searchParams } = request.nextUrl;
-    const branchId   = searchParams.get('branchId') || authBranchId || undefined;
+    const branchId   = pinnedBranchId(auth) ?? (searchParams.get('branchId') || authBranchId || undefined);
     const daysAhead  = searchParams.get('days') ?? '30'; // 'expired' | '7'|'14'|'30'|'60'|'90'|'all'
     const categoryId = searchParams.get('categoryId');
     const fromDate   = searchParams.get('fromDate');

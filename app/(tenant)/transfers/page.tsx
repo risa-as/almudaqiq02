@@ -11,6 +11,7 @@ import {
     RefreshCw, Layers, Filter, Globe, Loader2,
 } from 'lucide-react'
 import { useBranch } from '@/contexts/BranchContext'
+import { useUser } from '@/hooks/useUser'
 import toast from 'react-hot-toast'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -18,6 +19,7 @@ interface TransferItem { productId: string; unitId: string; quantity: number }
 
 interface Transfer {
     id: string; status: string; notes?: string; createdAt: string
+    fromBranchId: string; toBranchId: string
     fromBranch: { name: string }; toBranch: { name: string }
     items: string
 }
@@ -47,6 +49,11 @@ const FILTER_TABS = [
 export default function TransfersPage() {
   usePageTitle('التحويلات');
     const { branches, loading: branchesLoading } = useBranch()
+    // Only the SOURCE branch (or an owner) may approve — the API refuses the
+    // receiving branch, which must not approve taking another branch's stock.
+    const { role, branchId: myBranchId } = useUser()
+    const canApprove = (fromBranchId: string) =>
+        role === 'ADMIN' || role === 'SUPER_ADMIN' || !myBranchId || myBranchId === fromBranchId
     const { confirm, dialog } = useConfirm()
     const queryClient = useQueryClient()
     const [filterStatus, setFilter]   = useState('ALL')
@@ -286,7 +293,7 @@ export default function TransfersPage() {
 
                                     {/* Actions */}
                                     <div className="col-span-3 flex items-center gap-2 justify-center">
-                                        {t.status === 'PENDING' && (
+                                        {t.status === 'PENDING' && canApprove(t.fromBranchId) && (
                                             <button
                                                 onClick={() => changeStatus(t.id, 'APPROVED', 'تمت الموافقة')}
                                                 className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all"

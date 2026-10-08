@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { summariseShiftCash } from '@/lib/shift-cash';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,32 +22,17 @@ export async function GET(request: NextRequest) {
             select: { type: true, paymentMethod: true, paidAmount: true, totalAmount: true }
         });
 
-        let cashSales = 0, cardSales = 0, creditSales = 0, splitSales = 0;
-        let cashRefunds = 0;
-
-        for (const tx of transactions) {
-            if (tx.type === 'SALE') {
-                const amt = Number(tx.totalAmount);
-                if (tx.paymentMethod === 'CASH')   cashSales   += amt;
-                else if (tx.paymentMethod === 'CARD')   cardSales   += amt;
-                else if (tx.paymentMethod === 'CREDIT') creditSales += amt;
-                else if (tx.paymentMethod === 'SPLIT')  splitSales  += amt;
-            } else if ((tx.type === 'REFUND' || tx.type === 'RETURN') && tx.paymentMethod === 'CASH') {
-                cashRefunds += Number(tx.paidAmount ?? tx.totalAmount ?? 0);
-            }
-        }
-
-        const expectedCash = Number(activeShift.openingAmount) + cashSales - cashRefunds;
+        const sum = summariseShiftCash(Number(activeShift.openingAmount), transactions);
 
         return NextResponse.json({
             openingAmount: Number(activeShift.openingAmount),
-            cashSales,
-            cardSales,
-            creditSales,
-            splitSales,
-            cashRefunds,
-            expectedCash,
-            totalSales: cashSales + cardSales + creditSales + splitSales
+            cashSales:   sum.cashSales,
+            cardSales:   sum.cardSales,
+            creditSales: sum.creditSales,
+            splitSales:  sum.splitSales,
+            cashRefunds: sum.cashRefunds,
+            expectedCash: sum.expectedCash,
+            totalSales:  sum.totalSales
         });
     } catch (error) {
         console.error('Error fetching shift summary:', error);
@@ -62,6 +48,9 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const enteredAmount = Number(body.closingAmount || 0);
+        if (!Number.isFinite(enteredAmount) || enteredAmount < 0) {
+            return NextResponse.json({ error: 'المبلغ المُدخل غير صالح' }, { status: 400 });
+        }
         const notes = body.notes || '';
 
         // Get the active shift for this user within this tenant
@@ -77,31 +66,20 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'لا توجد وردية مفتوحة لإغلاقها' }, { status: 400 });
         }
 
-        // Calculate System Cash Expected
-        // Cash = Opening Float + Sum of cash received from transactions
+        // Calculate System Cash Expected — same formula as the live summary above.
         const transactions = await prisma.transaction.findMany({
             where: {
                 tenantId,
                 userId,
-                date: {
-                    gte: activeShift.openedAt
-                },
-                type: { in: ['SALE', 'REFUND'] }
-            }
+                date: { gte: activeShift.openedAt },
+                type: { in: ['SALE', 'REFUND', 'RETURN'] }
+            },
+            select: { type: true, paymentMethod: true, paidAmount: true, totalAmount: true }
         });
 
-        let totalCashCollected = 0;
-        let totalCashRefunded = 0;
-
-        transactions.forEach((tx: any) => {
-            if (tx.type === 'SALE' && (tx.paymentMethod === 'CASH' || tx.paymentMethod === 'SPLIT')) {
-                totalCashCollected += Number(tx.paidAmount || 0);
-            } else if (tx.type === 'REFUND' && tx.paymentMethod === 'CASH') {
-                totalCashRefunded += Number(tx.paidAmount || tx.totalAmount || 0);
-            }
-        });
-
-        const expectedAmount = Number(activeShift.openingAmount) + totalCashCollected - totalCashRefunded;
+        const sum = summariseShiftCash(Number(activeShift.openingAmount), transactions);
+        const expectedAmount = sum.expectedCash;
+        const totalCashCollected = sum.cashCollected;
         const difference = enteredAmount - expectedAmount;
 
         const closedShift = await prisma.cashierShift.update({

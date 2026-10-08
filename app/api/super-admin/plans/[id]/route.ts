@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { invalidateTenantFeatures } from '@/lib/plan-features'
 import { z } from 'zod'
@@ -17,6 +18,8 @@ const UpdateSchema = z.object({
 })
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
     const body = await request.json().catch(() => null)
@@ -34,6 +37,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
 

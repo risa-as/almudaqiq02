@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
@@ -6,6 +7,8 @@ import { withCloudDb } from '@/lib/cloud-guard'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const announcements = await prisma.announcement.findMany({
       orderBy: { createdAt: 'desc' },
@@ -25,6 +28,8 @@ const Schema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const body = await request.json().catch(() => null)
     const parsed = Schema.safeParse(body)

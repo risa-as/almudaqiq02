@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
@@ -13,6 +14,8 @@ function generateSlug(name: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { searchParams } = request.nextUrl
     const page   = Math.max(1, parseInt(searchParams.get('page')  ?? '1'))
@@ -54,6 +57,8 @@ const CreateSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const body   = await request.json().catch(() => null)
     const parsed = CreateSchema.safeParse(body)

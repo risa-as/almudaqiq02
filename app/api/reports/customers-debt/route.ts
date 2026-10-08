@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 import { getTenantPrisma } from '@/lib/multi-tenant/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const db = getTenantPrisma(tenantId);
 
     const { searchParams } = request.nextUrl;
-    const branchId = searchParams.get('branchId');
+    const branchId = readBranchId(auth, searchParams.get('branchId'));
     const now      = new Date();
 
     const customerWhere: any = { tenantId, balance: { gt: 0 } };

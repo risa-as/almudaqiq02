@@ -13,6 +13,22 @@ const destStatic = path.join(projectRoot, `${distDir}/standalone/${distDir}/stat
 
 console.log('Preparing standalone build...');
 
+/**
+ * Project files that Next's output tracing sweeps into standalone/ but that must
+ * NEVER reach a customer. The Jul-2026 installer shipped every one of these in
+ * resources/server/: SQLite + Postgres dumps of real data under backups/, a live
+ * branch activation code (activation_params.json), dev scratch files, the mobile
+ * app (with its own .env), specs and scripts. Paths are relative to standalone/.
+ */
+const NEVER_SHIP = [
+    'backups', 'mobile', 'marketing_video', 'specs', 'scripts', 'dist', 'tmp',
+    'activation_params.json', 'dump.txt', 'errors.txt', 'files.txt', 'tmp_files.txt',
+    'ts_errors.log', 'tsc.log', '.env.bak', '.env.before-license-key.bak',
+    '.env.local', '.env.example', '.git',
+];
+/** Extensions that are data, not code — refused anywhere in the bundle except the clean dev.db. */
+const NEVER_SHIP_EXT = ['.dump', '.bak']; // not .sql: prisma/migrations is legitimately traced
+
 async function main() {
     // Copy public folder
     if (fs.existsSync(sourcePublic)) {
@@ -128,6 +144,15 @@ async function main() {
     console.log('Wrote minimal desktop .env (no cloud secrets).');
 
     // ── Remove what Next's file tracing swept in ─────────────────────────────
+    const standaloneRoot = path.join(projectRoot, `${distDir}/standalone`);
+    for (const rel of NEVER_SHIP) {
+        const target = path.join(standaloneRoot, rel);
+        if (fs.existsSync(target)) {
+            fs.rmSync(target, { recursive: true, force: true });
+            console.log(`Removed swept project file: ${rel}`);
+        }
+    }
+
     // `next build` copies the whole prisma/ folder into standalone/, so the
     // developer's real database lands at standalone/prisma/dev.db — a second
     // copy that bypasses the clean database written above. The shipped .env
@@ -198,6 +223,28 @@ async function verifyNothingSecretIsShipped() {
             problems.push(`${path.relative(projectRoot, dbPath)}: ${err.message}`);
         }
     }
+
+    // 3. Nothing from the NEVER_SHIP list, no other .env*, no data dumps, and no
+    //    database other than the verified clean dev.db anywhere in the bundle.
+    for (const rel of NEVER_SHIP) {
+        if (fs.existsSync(path.join(standaloneDir, rel))) problems.push(`ملف محظور في الحزمة: ${rel}`);
+    }
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            const rel = path.relative(standaloneDir, full).split(path.sep).join('/');
+            if (entry.isDirectory()) {
+                if (entry.name === 'node_modules') continue; // third-party test fixtures etc.
+                walk(full);
+                continue;
+            }
+            const lower = entry.name.toLowerCase();
+            if (lower.startsWith('.env') && rel !== '.env') problems.push(`ملف .env إضافي: ${rel}`);
+            if (NEVER_SHIP_EXT.some(ext => lower.endsWith(ext))) problems.push(`ملف بيانات: ${rel}`);
+            if ((lower.endsWith('.db') || lower.endsWith('.sqlite')) && rel !== 'dev.db') problems.push(`قاعدة بيانات إضافية: ${rel}`);
+        }
+    };
+    walk(standaloneDir);
 
     if (problems.length > 0) {
         throw new Error(

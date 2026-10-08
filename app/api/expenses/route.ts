@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId, getAuthContext } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { pinnedBranchId, readBranchId, resolveWriteBranchId } from '@/lib/branch-scope';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
 import { logActionAs, logAction } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
     try {
         const { searchParams } = new URL(req.url);
         const period = searchParams.get('period');
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
-        const branchId = searchParams.get('branchId');
+        // Branch managers are pinned to their own branch.
+        const branchId = readBranchId(auth, searchParams.get('branchId'));
 
         let where: any = { tenantId };
-        if (branchId && branchId !== 'all') {
+        if (branchId) {
             where.branchId = branchId;
         }
 
@@ -57,8 +60,12 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const { title, amount, category, description, date, branchId } = body;
         
-        const finalBranchId = branchId || authBranchId;
+        const finalBranchId = await resolveWriteBranchId(auth, branchId || authBranchId);
         if (!finalBranchId) return NextResponse.json({ error: 'معرف الفرع مطلوب' }, { status: 400 });
+        const amountNum = Number(amount);
+        if (!title || !Number.isFinite(amountNum) || amountNum <= 0) {
+            return NextResponse.json({ error: 'العنوان والمبلغ (أكبر من صفر) مطلوبان' }, { status: 400 });
+        }
 
         const expense = await prisma.expense.create({
             data: {
@@ -87,8 +94,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
+    const pinned = pinnedBranchId(auth);
 
     try {
         const { searchParams } = new URL(req.url);
@@ -98,7 +107,7 @@ export async function DELETE(req: NextRequest) {
 
         // Verify the expense belongs to this tenant before deleting
         const existing = await prisma.expense.findFirst({
-            where: { id, tenantId }
+            where: { id, tenantId, ...(pinned ? { branchId: pinned } : {}) }
         });
         if (!existing) {
             return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
@@ -121,8 +130,10 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
+    const pinned = pinnedBranchId(auth);
 
     try {
         const body = await req.json();
@@ -130,17 +141,20 @@ export async function PUT(req: NextRequest) {
 
         // Verify the expense belongs to this tenant before updating
         const existing = await prisma.expense.findFirst({
-            where: { id, tenantId }
+            where: { id, tenantId, ...(pinned ? { branchId: pinned } : {}) }
         });
         if (!existing) {
             return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
+        }
+        if (amount !== undefined && !(Number(amount) > 0)) {
+            return NextResponse.json({ error: 'المبلغ يجب أن يكون أكبر من صفر' }, { status: 400 });
         }
 
         const expense = await prisma.expense.update({
             where: { id },
             data: {
                 title,
-                amount: Number(amount),
+                amount: amount !== undefined ? Number(amount) : undefined,
                 category,
                 description,
                 date: date ? new Date(date) : undefined
@@ -148,7 +162,7 @@ export async function PUT(req: NextRequest) {
         });
 
         enqueueSync('expenses', 'UPDATE', expense.id, {
-            id: expense.id, title, amount: Number(amount),
+            id: expense.id, title, amount: Number(expense.amount),
             category, description, date: expense.date,
         });
 

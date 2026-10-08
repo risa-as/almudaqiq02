@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
@@ -16,6 +17,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
     const body   = await request.json().catch(() => null)

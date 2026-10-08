@@ -3,24 +3,31 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { logAction } from '@/lib/audit';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { canManageStock } from '@/lib/auth';
+import { resolveWriteBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canManageStock(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     const { tenantId, branchId: authBranchId } = auth;
 
     try {
         const body = await request.json();
         const { productId, unitId, quantity, costPrice, expiryDate, batchNumber, supplierId, paidAmount, branchId: bodyBranchId } = body;
 
-        // Admin users have null branchId in JWT; they must pass it from the frontend context
-        const branchId = authBranchId || bodyBranchId;
+        // Staff are pinned to their own branch; owners book into the branch the UI
+        // selected (validated against the tenant). Previously the token branch won
+        // even for owners, so an admin's stock-in could land in the wrong branch.
+        const branchId = await resolveWriteBranchId(auth, bodyBranchId || authBranchId);
         if (!branchId) return NextResponse.json({ error: 'غير مصرح - يجب تحديد الفرع' }, { status: 401 });
 
-        // Validate
-        if (!productId || !unitId || !quantity || quantity <= 0) {
+        const qtyNum  = Number(quantity);
+        const costNum = parseFloat(costPrice) || 0;
+        const paidNum = paidAmount ? parseFloat(paidAmount) : 0;
+        if (!productId || !unitId || !Number.isFinite(qtyNum) || qtyNum <= 0 || costNum < 0 || !Number.isFinite(paidNum) || paidNum < 0) {
             return NextResponse.json(
                 { error: 'بيانات غير صالحة (المنتج، الوحدة، والكمية مطلوبة)' },
                 { status: 400 }
@@ -28,10 +35,16 @@ export async function POST(request: NextRequest) {
         }
 
         // 1. Get Product and Unit info
-        const unit = await prisma.productUnit.findUnique({
-            where: { id: unitId },
-        });
+        const [unit, supplier] = await Promise.all([
+            prisma.productUnit.findFirst({ where: { id: unitId, productId, product: { tenantId } } }),
+            supplierId
+                ? prisma.supplier.findFirst({ where: { id: supplierId, tenantId }, select: { id: true } })
+                : Promise.resolve(null),
+        ]);
 
+        if (supplierId && !supplier) {
+            return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 });
+        }
         if (!unit) {
             return NextResponse.json({ error: 'الوحدة غير موجودة' }, { status: 404 });
         }
@@ -45,7 +58,11 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. Calculate Base Quantity
-        const baseQuantityToAdd = quantity * unit.conversionFactor;
+        const baseQuantityToAdd = qtyNum * unit.conversionFactor;
+        // Batches count whole base units (ProductBatch.quantity is an Int).
+        if (!Number.isInteger(baseQuantityToAdd)) {
+            return NextResponse.json({ error: 'الكمية يجب أن تكون عددًا صحيحًا من الوحدة الأساسية' }, { status: 400 });
+        }
 
         // 3. Transaction to update stock and create batch
         const result = await prisma.$transaction(async (tx) => {
@@ -104,8 +121,8 @@ export async function POST(request: NextRequest) {
             if (supplierId) {
                 // Number(quantity) represents the quantity of the *selected* unit
                 // costPrice represents the price of the *selected* unit
-                const totalInvoiceAmount = Number(quantity) * parseFloat(costPrice);
-                const paid = paidAmount ? parseFloat(paidAmount) : 0;
+                const totalInvoiceAmount = qtyNum * costNum;
+                const paid = paidNum;
                 const creditAmount = totalInvoiceAmount - paid;
 
                 // 1. Record the Purchase Invoice (Debit to Supplier's perspective, or we owe them Credit)

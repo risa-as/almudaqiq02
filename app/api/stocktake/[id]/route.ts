@@ -121,7 +121,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // ── Cancel ───────────────────────────────────────────────────────────────────
   if (body.action === 'cancel') {
-    await prisma.stocktakeSession.update({ where: { id }, data: { status: 'CANCELLED', completedAt: new Date() } })
+    const moved = await prisma.stocktakeSession.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'CANCELLED', completedAt: new Date() } })
+    if (moved.count !== 1) return NextResponse.json({ error: 'هذه الجلسة مُغلقة مسبقًا' }, { status: 409 })
     await logActionAs(auth, 'STOCKTAKE_CANCEL', 'StocktakeSession', id, 'Stocktake cancelled')
     return NextResponse.json({ success: true })
   }
@@ -135,16 +136,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .map(i => ({ ...i, diff: (i.countedQty ?? 0) - i.expectedQty }))
       .filter(i => i.diff !== 0)
 
+    // One transaction for the whole session, opened by claiming it: only one
+    // request can move DRAFT→COMPLETED, and a failure part-way rolls back every
+    // adjustment (previously each item committed on its own, so a retry after a
+    // partial failure — or a double click — applied the differences twice).
     let applied = 0
+    try {
+    await prisma.$transaction(async tx => {
+      const claimed = await tx.stocktakeSession.updateMany({
+        where: { id, tenantId: auth.tenantId, status: 'DRAFT' },
+        data:  { status: 'COMPLETED', completedAt: new Date() },
+      })
+      if (claimed.count !== 1) throw new Error('STOCKTAKE_ALREADY_CLOSED')
+
     for (const item of adjustments) {
-      await prisma.$transaction(async tx => {
+      {
         if (item.diff > 0) {
           // Surplus found: book it as an adjustment batch at the product's cost.
           const product = await tx.product.findFirst({
             where: { id: item.productId, tenantId: auth.tenantId },
             select: { costPrice: true },
           })
-          if (!product) return
+          if (!product) continue
           await tx.productBatch.create({
             data: {
               tenantId:    auth.tenantId,
@@ -173,14 +186,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           where: { id: item.productId, tenantId: auth.tenantId },
           data:  { baseStock: { increment: item.diff } },
         })
-      })
+      }
       applied++
     }
-
-    await prisma.stocktakeSession.update({
-      where: { id },
-      data:  { status: 'COMPLETED', completedAt: new Date() },
-    })
+    }, { timeout: 120_000 })
+    } catch (err) {
+      if (err instanceof Error && err.message === 'STOCKTAKE_ALREADY_CLOSED') {
+        return NextResponse.json({ error: 'هذه الجلسة مُغلقة مسبقًا' }, { status: 409 })
+      }
+      throw err
+    }
 
     await logActionAs(auth, 'STOCKTAKE_COMPLETE', 'StocktakeSession', id,
       `Stocktake completed — ${applied} adjustments of ${items.length} counted items`)

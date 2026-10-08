@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
   serverExternalPackages: IS_ELECTRON
     ? ["@prisma/client", "@prisma/client-local"]
     : ["@prisma/client"],
+  // Never let output tracing copy project data into .next*/standalone (the
+  // desktop server bundle). Some route touches the filesystem dynamically, so
+  // Next traces the whole project root — which once shipped DB backups, Postgres
+  // dumps and a branch activation code inside the installer.
+  // scripts/prepare-standalone.js removes and re-checks these as a second layer.
+  outputFileTracingExcludes: {
+    '*': [
+      './backups/**', './mobile/**', './marketing_video/**', './specs/**', './scripts/**',
+      './dist/**', './.env*', './activation_params.json', './dump.txt', './errors.txt',
+      './files.txt', './tmp_files.txt', './*.log', './**/*.dump', './**/*.bak',
+    ],
+  },
   typescript: {
     // Kept intentionally: shared files (login/sync routes) reference desktop-only
     // Prisma models (syncQueue, cachedSubscriptionStatus…) that exist only in

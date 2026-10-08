@@ -144,12 +144,12 @@ async function wipePreviousTenantData(newTenantId: string) {
       const fs   = require('fs')   as typeof import('fs')
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const path = require('path') as typeof import('path')
-      // electron/main.js passes the real path. It cannot be reconstructed here:
-      // userData resolves from app.getName() — the electron-builder productName
-      // ("المدقق") — not from the package name, so the old hard-coded
-      // 'supermarket-core' guess never matched a packaged install and the stale
-      // branch config survived a tenant switch. The guess is kept only as a
-      // fallback for dev runs where the app name does resolve that way.
+      // electron/main.js passes the real path via BRANCH_CONFIG_PATH. The
+      // hard-coded fallback below does currently match a packaged install
+      // (userData resolves to %APPDATA%/supermarket-core — app.getName() uses the
+      // package name, not the electron-builder productName "المدقق"), but it is a
+      // guess that silently breaks if either name ever changes, so the explicit
+      // env var is preferred and the guess is kept only as a fallback.
       const candidates: string[] = []
       if (process.env.BRANCH_CONFIG_PATH) candidates.push(process.env.BRANCH_CONFIG_PATH)
       const appDataRoot = process.env.APPDATA

@@ -33,12 +33,10 @@
       "output": "dist"
     },
     "files": [
-      "**/*",
-      "!.next/**",
-      "!.next-build/**",
-      "!.next-cloud/**",
-      "!dist/**",
-      "!prisma/dev.db"
+      "electron/**/*",
+      "public/logo.ico",
+      "public/logo.png",
+      "package.json"
     ],
     "win": {
       "target": "nsis",
@@ -70,7 +68,7 @@
     "exceljs": "^4.4.0",
     "jose": "^6.1.3",
     "lucide-react": "^0.563.0",
-    "next": "^16.2.10",
+    "next": "^16.3.8",
     "openai": "^6.38.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -90,7 +88,7 @@
     "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.10",
+    "eslint-config-next": "^16.3.8",
     "prisma": "^5.22.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",

@@ -16,6 +16,7 @@ export function useUser() {
     return {
         role,
         username,
+        branchId: q.data?.user?.branchId ?? null,
         loading: q.isPending,
         isElectron: q.data?.isElectron === true,
         isAdmin: role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'BRANCH_MANAGER',

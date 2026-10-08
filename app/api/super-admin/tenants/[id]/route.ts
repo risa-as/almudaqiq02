@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
@@ -9,6 +10,8 @@ import { invalidateTenantFeatures } from '@/lib/plan-features'
 export const dynamic = 'force-dynamic'
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
     const tenant = await prisma.tenant.findUnique({
@@ -35,6 +38,8 @@ const UpdateSchema = z.object({
 })
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
     const body   = await request.json().catch(() => null)
@@ -101,6 +106,8 @@ const DeleteSchema = z.object({
 })
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const { id } = await params
 

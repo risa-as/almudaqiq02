@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
+import { resolveWriteBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,8 +41,16 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const branchId = body.branchId || authBranchId;
-        if (!branchId || branchId === 'all') return NextResponse.json({ error: 'الرجاء اختيار فرع محدد لفتح الوردية (لا يمكن فتح وردية لكل الفروع)' }, { status: 400 });
+        const requested = body.branchId || authBranchId;
+        if (!requested || requested === 'all') return NextResponse.json({ error: 'الرجاء اختيار فرع محدد لفتح الوردية (لا يمكن فتح وردية لكل الفروع)' }, { status: 400 });
+
+        // Pinned to the cashier's own branch; an owner's pick must be in the tenant.
+        const branchId = await resolveWriteBranchId(auth, requested);
+        if (!branchId) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 });
+        const openingAmount = Number(body.openingAmount || 0);
+        if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+            return NextResponse.json({ error: 'مبلغ الافتتاح غير صالح' }, { status: 400 });
+        }
 
         // Check if there's already an open shift for this user in this tenant
         const existingShift = await prisma.cashierShift.findFirst({
@@ -61,7 +70,7 @@ export async function POST(request: NextRequest) {
                 tenant: { connect: { id: tenantId } },
                 branch: { connect: { id: branchId } },
                 user: { connect: { id: userId } },
-                openingAmount: Number(body.openingAmount || 0),
+                openingAmount,
                 openedAt: new Date()
             },
             include: { user: { select: { username: true } } }

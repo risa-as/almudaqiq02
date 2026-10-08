@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { canAccessAdmin } from '@/lib/auth'
+import { readBranchId } from '@/lib/branch-scope'
 import { enqueueSync } from '@/lib/sync-enqueue'
 import { logCloudDelete } from '@/lib/sync-delete-log'
 
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
 
     const { id } = await params
-    const branchId = request.nextUrl.searchParams.get('branchId')
+    const branchId = readBranchId(auth, request.nextUrl.searchParams.get('branchId'))
     const specificBranch = branchId && branchId !== 'all' ? branchId : null
 
     // رحلتان متتاليتان بلا داعٍ: سجلّ المورد مستقلّ عن التحقق من ملكيته.
@@ -53,7 +55,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!exists) return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
 
     const body = await request.json()
-    const { name, phone, address, balance, creditLimit, notes } = body
+    // `balance` is deliberately NOT writable here: setting it directly bypassed
+    // the supplier ledger (stored balance ≠ ledger sum). Balance changes go
+    // through /payment, /debt or the manager-only /adjust-balance.
+    const { name, phone, address, creditLimit, notes } = body
 
     const updated = await prisma.supplier.update({
       where: { id },
@@ -61,7 +66,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         name,
         phone:   phone   || undefined,
         address: address || undefined,
-        balance: balance !== undefined ? Number(balance) : undefined,
         creditLimit: creditLimit !== undefined ? (creditLimit ? Number(creditLimit) : null) : undefined,
         notes: notes !== undefined ? (notes || null) : undefined,
       },
@@ -85,6 +89,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     const auth = await getAuthContext()
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    if (!canAccessAdmin(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
 
     const { id } = await params
 

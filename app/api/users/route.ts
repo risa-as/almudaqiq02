@@ -6,6 +6,16 @@ import { canManage } from '@/lib/roles';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
 import { logActionAs } from '@/lib/audit';
+import { pinnedBranchId, resolveWriteBranchId } from '@/lib/branch-scope';
+
+/** Roles a tenant user can hold (SUPER_ADMIN is a platform account, never a tenant user). */
+const TENANT_ROLES = ['ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'STOCK_KEEPER'];
+
+/** Branch-bound managers can only act on users of their own branch. */
+function outsideCallerBranch(auth: { role: string; branchId?: string | null }, target: { branchId: string | null }) {
+    const pinned = pinnedBranchId({ tenantId: '', ...auth });
+    return !!pinned && target.branchId !== pinned;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +91,9 @@ export async function POST(request: NextRequest) {
         }
 
         const requestedRole = role || 'CASHIER';
+        if (!TENANT_ROLES.includes(requestedRole)) {
+            return NextResponse.json({ error: 'دور غير صالح' }, { status: 400 });
+        }
 
         // المنشئ لا يستطيع إنشاء مستخدم بدور مساوٍ له أو أعلى منه
         if (!canManage(callerRole, requestedRole)) {
@@ -122,9 +135,15 @@ export async function POST(request: NextRequest) {
         if (!isManagerRole) {
             // Owner creators assign the new user to the branch selected in the UI;
             // branch-bound creators assign to their own branch. Fall back to first branch.
-            const preferred = isOwnerCaller
-                ? (bodyBranchId && bodyBranchId !== 'all' ? bodyBranchId : null)
-                : (auth.branchId ?? (bodyBranchId && bodyBranchId !== 'all' ? bodyBranchId : null));
+            // resolveWriteBranchId pins branch-bound creators and checks an owner's
+            // choice against the tenant (connect would accept a foreign branch id).
+            const requested = bodyBranchId && bodyBranchId !== 'all' ? bodyBranchId : null;
+            const preferred = requested || (!isOwnerCaller && auth.branchId)
+                ? await resolveWriteBranchId(auth, requested ?? auth.branchId)
+                : null;
+            if (requested && !preferred) {
+                return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 });
+            }
             assignedBranchId =
                 preferred
                 ?? (await prisma.branch.findFirst({ where: { tenantId }, select: { id: true }, orderBy: { createdAt: 'asc' } }))?.id
@@ -187,8 +206,9 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
         }
 
-        // Only users with strictly higher role can delete
-        if (!canManage(callerRole, user.role)) {
+        // Only users with strictly higher role can delete — and branch managers
+        // only within their own branch.
+        if (!canManage(callerRole, user.role) || outsideCallerBranch(auth, user)) {
             return NextResponse.json({ error: 'غير مصرح لك بحذف هذا المستخدم' }, { status: 403 });
         }
 
@@ -241,10 +261,13 @@ export async function PATCH(request: NextRequest) {
         const user = await prisma.user.findFirst({ where: { id: String(id), tenantId } });
         if (!user) return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
 
-        if (!canManage(callerRole, user.role)) {
+        if (!canManage(callerRole, user.role) || outsideCallerBranch(auth, user)) {
             return NextResponse.json({ error: 'غير مصرح لك بتعديل هذا المستخدم' }, { status: 403 });
         }
 
+        if (role && !TENANT_ROLES.includes(role)) {
+            return NextResponse.json({ error: 'دور غير صالح' }, { status: 400 });
+        }
         if (role && role !== user.role && !canManage(callerRole, role)) {
             return NextResponse.json({ error: 'غير مصرح لك بتعيين هذا الدور' }, { status: 403 });
         }
@@ -268,12 +291,18 @@ export async function PATCH(request: NextRequest) {
         if (email?.trim())    updateData.email    = email.trim();
         if (role)             updateData.role     = role;
         if (password?.trim()) updateData.password = await hashPassword(password.trim());
+        // A credential change must end existing sessions (refresh tokens) of that user.
+        const credentialsChanged = !!password?.trim() || (!!role && role !== user.role);
 
         const updated = await prisma.user.update({
             where: { id: String(id) },
             data: updateData,
             select: { id: true, username: true, email: true, role: true },
         });
+
+        if (credentialsChanged) {
+            await prisma.refreshToken.deleteMany({ where: { userId: String(id) } }).catch(() => {});
+        }
 
         await logActionAs(auth, 'UPDATE_USER', 'User', String(id),
             `Updated user: ${updated.username} — fields: ${Object.keys(updateData).join(', ')}`);

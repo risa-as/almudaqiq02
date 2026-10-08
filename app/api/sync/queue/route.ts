@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { IS_ELECTRON, getDbUrl } from '@/lib/prisma-runtime'
+import { getAuthContext } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,12 @@ const TABLE_LABELS: Record<string, string> = {
 export async function GET(request: NextRequest) {
   if (!IS_ELECTRON) {
     return NextResponse.json({ error: 'only available on desktop' }, { status: 403 })
+  }
+  // /api/sync/ skips the middleware session check, so verify the local user here.
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER'].includes(auth.role)) {
+    return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
   }
 
   // Dynamic require — only available in Electron (local SQLite client)
@@ -71,7 +78,7 @@ export async function GET(request: NextRequest) {
       failedCount:  g.failed.length,
       syncedCount:  g.synced.length,
       operations: [
-        ...g.failed.map(r => ({
+        ...g.failed.map((r: any) => ({
           id:        r.id,
           type:      r.operation,
           recordId:  r.recordId,
@@ -81,7 +88,7 @@ export async function GET(request: NextRequest) {
           createdAt: r.createdAt,
           payload:   parsePayloadPreview(r.payload),
         })),
-        ...g.pending.map(r => ({
+        ...g.pending.map((r: any) => ({
           id:        r.id,
           type:      r.operation,
           recordId:  r.recordId,
@@ -91,7 +98,7 @@ export async function GET(request: NextRequest) {
           createdAt: r.createdAt,
           payload:   parsePayloadPreview(r.payload),
         })),
-        ...(showAll ? g.synced.map(r => ({
+        ...(showAll ? g.synced.map((r: any) => ({
           id:        r.id,
           type:      r.operation,
           recordId:  r.recordId,

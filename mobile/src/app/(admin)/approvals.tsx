@@ -29,6 +29,7 @@ import { LoadingView } from '@/components/LoadingView'
 import { Screen } from '@/components/Screen'
 import { useFeature } from '@/hooks/useFeature'
 import { ar } from '@/i18n/ar'
+import { useAuthStore } from '@/stores/auth'
 import { useBranchSelection } from '@/stores/branch'
 import { colors, fontSize, radius, shadow, spacing } from '@/theme'
 import { ROW } from '@/utils/rtl'
@@ -215,7 +216,8 @@ function ApprovalCard({
   rejectLabel: string
   busy: 'approve' | 'reject' | null
   disabled: boolean
-  onApprove: () => void
+  /** Omitted when the user may not approve (the button is then hidden). */
+  onApprove?: () => void
   onReject: () => void
   children?: ReactNode
 }) {
@@ -254,6 +256,7 @@ function ApprovalCard({
       <View style={styles.divider} />
 
       <View style={styles.actionsRow}>
+        {onApprove ? (
         <Pressable
           disabled={disabled}
           onPress={onApprove}
@@ -273,6 +276,7 @@ function ApprovalCard({
             </>
           )}
         </Pressable>
+        ) : null}
         <Pressable
           disabled={disabled}
           onPress={onReject}
@@ -323,6 +327,11 @@ function RouteStrip({ from, to }: { from: string; to: string }) {
 // ── قسم التحويلات المعلقة (ميزة stock_transfers) ─────────────────────────────
 function TransfersSection({ q }: { q: UseQueryResult<TransferRow[], Error> }) {
   const queryClient = useQueryClient()
+  // The server lets only the SOURCE branch (or an owner) approve: the receiving
+  // branch must not approve taking another branch's stock. It may still reject.
+  const me = useAuthStore(s => s.user)
+  const canApprove = (tr: TransferRow) =>
+    me?.role === 'ADMIN' || !me?.branchId || me.branchId === tr.fromBranchId
 
   const mutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'APPROVED' | 'CANCELLED' }) =>
@@ -392,7 +401,7 @@ function TransfersSection({ q }: { q: UseQueryResult<TransferRow[], Error> }) {
               rejectLabel={t.reject}
               busy={busyOf(tr.id)}
               disabled={mutation.isPending}
-              onApprove={() => act(tr, 'APPROVED')}
+              onApprove={canApprove(tr) ? () => act(tr, 'APPROVED') : undefined}
               onReject={() => act(tr, 'CANCELLED')}
             >
               <RouteStrip from={tr.fromBranch.name} to={tr.toBranch.name} />

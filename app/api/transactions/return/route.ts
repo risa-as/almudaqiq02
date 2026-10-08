@@ -3,35 +3,35 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logActionAs } from '@/lib/audit';
+import { pinnedBranchId, resolveWriteBranchId } from '@/lib/branch-scope';
+import { ReturnError, debtReductionFor, planReturn, restockReturnedLines } from '@/lib/returns';
 
+/**
+ * RETURN — the mobile «إرجاع أصناف» flow. Stores NEGATIVE totalAmount/price
+ * (REFUND stores positives; reports normalise both).
+ *
+ * Amounts are computed from the original sale (lib/returns.ts); the client's
+ * per-item price is ignored.
+ */
 export async function POST(req: NextRequest) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
-    const { tenantId, userId, branchId: authBranchId } = auth;
+    const { tenantId, userId } = auth;
 
     try {
         const body = await req.json();
         const { originalTransactionId, items, branchId: bodyBranchId } = body;
-        const branchId = bodyBranchId || authBranchId;
-        if (!branchId) return NextResponse.json({ error: 'غير مصرح - لا يوجد فرع' }, { status: 401 });
-        // items: [{ itemId, quantity, price, productId, unitId }]
+        // items: [{ productId, unitId, quantity }]
 
-        if (!items || items.length === 0) {
+        if (!originalTransactionId) return NextResponse.json({ error: 'معرف الفاتورة الأصلية مطلوب' }, { status: 400 });
+        if (!Array.isArray(items) || items.length === 0) {
             return NextResponse.json({ error: 'No items to return' }, { status: 400 });
         }
 
-        // Validate each item carries the fields needed to create the return line.
-        const invalid = items.some((it: any) =>
-            !it.productId || !it.unitId || isNaN(Number(it.quantity)) || isNaN(Number(it.price))
-        );
-        if (invalid) {
-            return NextResponse.json({ error: 'بيانات المواد المرتجعة غير مكتملة' }, { status: 400 });
-        }
-
-        // 1. Get Original Transaction (scoped to tenant)
+        // Branch-bound staff can only return their own branch's sales.
+        const pinned = pinnedBranchId(auth);
         const originalTx = await prisma.transaction.findFirst({
-            where: { id: originalTransactionId, tenantId },
-            include: { user: true }
+            where: { id: originalTransactionId, tenantId, ...(pinned ? { branchId: pinned } : {}) },
         });
 
         if (!originalTx) {
@@ -41,144 +41,92 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'معرف الفاتورة الأصلية غير صحيح' }, { status: 400 });
         }
 
-        // ── Guard against over-returning ──────────────────────────────────────
-        // Mirrors the refund route: sum what was sold per line and what was already
-        // sent back (REFUND/RETURN linked to this sale), then reject a request that
-        // exceeds the remainder. Without this the same line could be returned again
-        // and again, restocking and refunding it every time.
-        const [soldLines, priorReturns] = await Promise.all([
-            prisma.transactionItem.findMany({
-                where: { transactionId: originalTransactionId },
-                select: { productId: true, unitId: true, quantity: true },
-            }),
-            prisma.transactionItem.findMany({
-                where: { transaction: { originalTxId: originalTransactionId, type: { in: ['REFUND', 'RETURN'] } } },
-                select: { productId: true, unitId: true, quantity: true },
-            }),
-        ]);
-        const soldMap = new Map<string, number>();
-        for (const l of soldLines) soldMap.set(`${l.productId}|${l.unitId}`, (soldMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Number(l.quantity));
-        const returnedMap = new Map<string, number>();
-        for (const l of priorReturns) returnedMap.set(`${l.productId}|${l.unitId}`, (returnedMap.get(`${l.productId}|${l.unitId}`) ?? 0) + Math.abs(Number(l.quantity)));
+        const branchId = await resolveWriteBranchId(auth, bodyBranchId || originalTx.branchId);
+        if (!branchId) return NextResponse.json({ error: 'غير مصرح - لا يوجد فرع' }, { status: 401 });
 
-        for (const it of items) {
-            const key = `${it.productId}|${it.unitId}`;
-            const remaining = (soldMap.get(key) ?? 0) - (returnedMap.get(key) ?? 0);
-            if (Number(it.quantity) > remaining) {
-                return NextResponse.json({
-                    error: `الكمية المطلوب إرجاعها تتجاوز المتاح (المتبقّي: ${Math.max(0, remaining)})`,
-                }, { status: 400 });
-            }
-        }
+        const { returnTx, plan, cashOut, customerBalance } = await prisma.$transaction(async (tx) => {
+            const plan = await planReturn(tx, tenantId, originalTx, items);
+            // Credit first cancels the open debt; the rest is cash handed back, and
+            // is what the shift close deducts from the drawer.
+            const debtReduction = debtReductionFor(originalTx, plan.amount);
+            const cashOut = plan.amount - debtReduction;
 
-        // 2. Calculate Refund Amount
-        let refundTotal = 0;
-
-        // 3. Process Return in Transaction
-        const result = await prisma.$transaction(async (tx) => {
-
-            // Create Return Transaction
             const returnTx = await tx.transaction.create({
                 data: {
                     type: 'RETURN',
-                    totalAmount: 0, // Will update later
+                    totalAmount: -plan.amount,
+                    paymentMethod: 'CASH',
+                    paidAmount: cashOut,
                     date: new Date(),
                     tenant: { connect: { id: tenantId } },
                     branch: { connect: { id: branchId } },
-                    // Links the return to the sale it came from. Without it the
-                    // over-return guard above (and the refund route's) can never see
-                    // a prior RETURN, so every line stayed returnable indefinitely.
+                    // Links the return to the sale it came from, so the over-return
+                    // guard sees it next time.
                     originalTxId: originalTransactionId,
-                    ...(originalTx.userId ? { user: { connect: { id: originalTx.userId } } } : {}),
+                    // Recorded against the user who processed it, so it lands in
+                    // *their* shift, not the original cashier's.
+                    ...(userId ? { user: { connect: { id: userId } } } : {}),
                     ...(originalTx.customerId ? { customer: { connect: { id: originalTx.customerId } } } : {})
                 }
             });
 
-            for (const item of items) {
-                const quantity = Number(item.quantity);
-                const price = Number(item.price);
-                const total = quantity * price;
-                refundTotal += total;
-
-                // A. Add Return Item
-                await tx.transactionItem.create({
-                    data: {
-                        transactionId: returnTx.id,
-                        productId: item.productId,
-                        unitId: item.unitId,
-                        quantity: quantity,
-                        price: -price, // Negative price for return
-                        cost: 0
-                    }
-                });
-
-                // B. Restock Product
-                // Need to find conversion factor if unit is not base unit.
-                // For simplicity, assuming the passed unitId is correct and we just add to stock?
-                // Actually, we should check the unit's conversion factor.
-
-                const unit = await tx.productUnit.findFirst({ where: { id: item.unitId, product: { tenantId } } });
-                const conversionFactor = unit?.conversionFactor || 1;
-                const stockToAdd = quantity * conversionFactor;
-
-                await tx.product.update({
-                    where: { id: item.productId, tenantId },
-                    data: { baseStock: { increment: stockToAdd } }
-                });
-            }
-
-            // Update Return Transaction Total (Negative)
-            await tx.transaction.update({
-                where: { id: returnTx.id },
-                data: { totalAmount: -refundTotal }
+            await tx.transactionItem.createMany({
+                data: plan.lines.map(l => ({
+                    transactionId: returnTx.id,
+                    productId: l.productId,
+                    unitId:    l.unitId,
+                    quantity:  l.quantity,
+                    price:     -l.unitPrice, // Negative price for return
+                    cost:      l.cost,
+                })),
             });
 
-            // Reduce customer debt only if the original sale was on credit
-            if (originalTx.customerId && (originalTx.paymentMethod === 'CREDIT' || originalTx.paymentMethod === 'SPLIT')) {
-                const originalDebtPortion = originalTx.paymentMethod === 'SPLIT'
-                    ? Math.max(0, Number(originalTx.totalAmount) - Number(originalTx.paidAmount || 0))
-                    : Number(originalTx.totalAmount);
+            await restockReturnedLines(tx, tenantId, branchId, plan.lines);
 
-                const debtReduction = Math.min(refundTotal, originalDebtPortion);
-
-                if (debtReduction > 0) {
-                    await tx.customer.update({
-                        where: { id: originalTx.customerId, tenantId },
-                        data: { balance: { decrement: debtReduction } }
-                    });
-                }
+            let customerBalance: number | null = null;
+            if (debtReduction > 0 && originalTx.customerId) {
+                const c = await tx.customer.update({
+                    where: { id: originalTx.customerId, tenantId },
+                    data: { balance: { decrement: debtReduction } }
+                });
+                customerBalance = Number(c.balance);
             }
 
-            return returnTx;
-        });
+            return { returnTx, plan, cashOut, customerBalance };
+        }, { timeout: 30000 });
 
-        enqueueSync('transactions', 'INSERT', result.id, {
-            cloudId:       result.id,
+        enqueueSync('transactions', 'INSERT', returnTx.id, {
+            cloudId:       returnTx.id,
             type:          'RETURN',
-            totalAmount:   -refundTotal,
-            date:          result.date ?? new Date(),
-            userId:        originalTx.userId ?? null,
+            totalAmount:   -plan.amount,
+            date:          returnTx.date ?? new Date(),
+            userId:        userId ?? null,
             customerId:    originalTx.customerId ?? null,
             notes:         `إرجاع من فاتورة ${originalTransactionId}`,
             discount:      0,
             paymentMethod: 'CASH',
-            paidAmount:    0,
+            paidAmount:    cashOut,
             originalTxId:  originalTransactionId,
-            items:         items.map((item: any) => ({
-                productId: item.productId,
-                unitId:    item.unitId,
-                quantity:  Number(item.quantity),
-                price:     -Number(item.price),
-                cost:      0,
+            items:         plan.lines.map(l => ({
+                productId: l.productId,
+                unitId:    l.unitId,
+                quantity:  l.quantity,
+                price:     -l.unitPrice,
+                cost:      l.cost,
             })),
         })
 
-        await logActionAs(auth, 'RETURN', 'Transaction', result.id,
-            `Return from invoice ${originalTransactionId} — amount: ${refundTotal}`);
+        if (customerBalance != null && originalTx.customerId) {
+            enqueueSync('customers', 'UPDATE', originalTx.customerId, { id: originalTx.customerId, balance: customerBalance });
+        }
 
-        return NextResponse.json({ success: true, returnId: result.id });
+        await logActionAs(auth, 'RETURN', 'Transaction', returnTx.id,
+            `Return from invoice ${originalTransactionId} — amount: ${plan.amount}`);
+
+        return NextResponse.json({ success: true, returnId: returnTx.id, amount: plan.amount, cashOut });
 
     } catch (error) {
+        if (error instanceof ReturnError) return NextResponse.json({ error: error.message }, { status: error.status });
         console.error('Return Error:', error);
         return NextResponse.json({ error: 'Failed to process return' }, { status: 500 });
     }

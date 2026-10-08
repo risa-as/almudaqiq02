@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/multi-tenant/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { pinnedBranchId, readBranchId } from '@/lib/branch-scope'
 import { guardFeature } from '@/lib/plan-features'
 import { enqueueSync } from '@/lib/sync-enqueue'
 import { logActionAs } from '@/lib/audit'
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   const tenantId = auth.tenantId
   const { searchParams } = request.nextUrl
   const status   = searchParams.get('status') ?? undefined
-  const branchId = searchParams.get('branchId') ?? undefined
+  const branchId = readBranchId(auth, searchParams.get('branchId')) ?? undefined
 
   const transfers = await prisma.stockTransfer.findMany({
     where: {
@@ -55,6 +56,12 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 
   const { fromBranchId, toBranchId, items, notes } = parsed.data
+  if (fromBranchId === toBranchId) return NextResponse.json({ error: 'لا يمكن التحويل إلى الفرع نفسه' }, { status: 400 })
+  // A branch-bound manager can only open transfers that involve their own branch.
+  const pinned = pinnedBranchId(auth)
+  if (pinned && pinned !== fromBranchId && pinned !== toBranchId) {
+    return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
+  }
 
   // Validate both branches belong to tenant
   const [from, to] = await Promise.all([

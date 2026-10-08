@@ -4,11 +4,16 @@ import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logCloudDelete } from '@/lib/sync-delete-log';
 import { logActionAs } from '@/lib/audit';
+import { canAccessAdmin } from '@/lib/auth';
+import { pinnedBranchId } from '@/lib/branch-scope';
+import { foreignRef, invalidOfferValue } from '@/lib/offer-validation';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canAccessAdmin(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     const tenantId = auth.tenantId;
+    const pinned = pinnedBranchId(auth);
 
     try {
         const body = await request.json();
@@ -20,11 +25,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const { id: offerId } = await params;
 
         // Verify the offer belongs to this tenant before updating
+        // A branch manager may only edit their own branch's offers (not org-wide ones).
         const existing = await prisma.offer.findFirst({
-            where: { id: offerId, tenantId }
+            where: { id: offerId, tenantId, ...(pinned ? { branchId: pinned } : {}) }
         });
         if (!existing) {
             return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
+        }
+        const valueError = invalidOfferValue(type ?? existing.type, value);
+        if (valueError) return NextResponse.json({ error: valueError }, { status: 400 });
+        if (await foreignRef(tenantId, productId, categoryId)) {
+            return NextResponse.json({ error: 'المنتج أو القسم غير موجود' }, { status: 400 });
         }
 
         const updatedOffer = await prisma.offer.update({
@@ -67,14 +78,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    if (!canAccessAdmin(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     const tenantId = auth.tenantId;
+    const pinned = pinnedBranchId(auth);
 
     try {
         const { id: offerId } = await params;
 
-        // Verify the offer belongs to this tenant before deleting
+        // Verify the offer belongs to this tenant (and branch) before deleting
         const existing = await prisma.offer.findFirst({
-            where: { id: offerId, tenantId }
+            where: { id: offerId, tenantId, ...(pinned ? { branchId: pinned } : {}) }
         });
         if (!existing) {
             return NextResponse.json({ error: 'غير موجود' }, { status: 404 });

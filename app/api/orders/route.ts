@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchFilter } from '@/lib/branch-scope';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
     const { searchParams } = new URL(request.url);
     const search  = searchParams.get('search')?.trim() || '';
-    const page    = Number(searchParams.get('page')) || 1;
-    const branchId = searchParams.get('branchId');
-    const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
+    const page    = Math.max(1, Number(searchParams.get('page')) || 1);
+    const branchFilter = readBranchFilter(auth, searchParams.get('branchId'));
     const startDate = searchParams.get('startDate');
     const endDate   = searchParams.get('endDate');
     const limit = 20;

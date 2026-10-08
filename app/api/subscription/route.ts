@@ -59,10 +59,10 @@ function viewFromSnapshot(
  * Locate the branch token this install syncs with.
  *
  * Both inputs come from electron/main.js, which is the only process that can
- * resolve them: BRANCH_TOKEN directly, and BRANCH_CONFIG_PATH as the absolute
- * path to branch-config.json. The path is never guessed here — userData is
- * derived from app.getName() (the electron-builder productName, "المدقق"), so
- * any path this process reconstructed from the package name would be wrong.
+ * resolve them reliably: BRANCH_TOKEN directly, and BRANCH_CONFIG_PATH as the
+ * absolute path to branch-config.json. The path is not reconstructed here —
+ * userData derives from app.getName(), which this process cannot see and which
+ * changes silently if the app is ever renamed.
  *
  * Returns null on installs whose main process predates this, which simply
  * hides the refresh button; those users still recover via the login screen's

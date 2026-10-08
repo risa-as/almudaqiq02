@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { resolveOptionalBranchId } from '@/lib/branch-scope';
+
+class StockChangedError extends Error {}
 import { enqueueSync } from '@/lib/sync-enqueue';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +31,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         // Branch isolation: when a specific branch is selected, the returned batch
         // must belong to that branch — never decrement another branch's stock.
-        const specificBranch = branchId && branchId !== 'all' ? String(branchId) : null;
+        const specificBranch = await resolveOptionalBranchId(auth, branchId);
+        if (specificBranch === undefined) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 });
         const batch = await prisma.productBatch.findFirst({
             where: { id: batchId, tenantId: auth.tenantId, ...(specificBranch ? { branchId: specificBranch } : {}) },
             include: { product: true }
@@ -48,10 +52,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             || `مرتجع بضاعة - ${batch.product.name} (تشغيلة: ${batch.batchNumber || 'بدون'}) بكمية ${returnQty}`;
 
         const result = await prisma.$transaction(async (tx) => {
-            const updatedBatch = await tx.productBatch.update({
-                where: { id: batchId },
+            // Conditional decrement: a sale that took the stock in the meantime makes
+            // this match nothing, and we abort instead of driving the batch negative.
+            const dec = await tx.productBatch.updateMany({
+                where: { id: batchId, quantity: { gte: returnQty } },
                 data: { quantity: { decrement: returnQty } }
             });
+            if (dec.count !== 1) throw new StockChangedError();
+            const updatedBatch = await tx.productBatch.findUniqueOrThrow({ where: { id: batchId } });
 
             // Also decrement product.baseStock so totals stay correct
             await tx.product.update({
@@ -62,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             const ledgerEntry = await tx.supplierLedger.create({
                 data: {
                     supplierId,
-                    branchId: branchId && branchId !== 'all' ? branchId : null,
+                    branchId: specificBranch ?? batch.branchId,
                     type: 'RETURN',
                     amount: amount,
                     description: batchDesc,
@@ -109,6 +117,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ success: true, message: 'تم تسجيل المرتجع وخصم المخزون بنجاح' });
 
     } catch (error) {
+        if (error instanceof StockChangedError) {
+            return NextResponse.json({ error: 'تغيّرت كمية الدفعة — حدّث الصفحة وأعد المحاولة' }, { status: 409 });
+        }
         console.error('Supplier return error:', error);
         return NextResponse.json({ error: 'حدث خطأ أثناء تسجيل المرتجع' }, { status: 500 });
     }

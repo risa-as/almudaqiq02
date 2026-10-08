@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
+import { pinnedBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +18,9 @@ export async function GET(request: NextRequest) {
         const querySupplierId = searchParams.get('supplierId');
         
         // Use standard branch filtering
-        const branchFilter = queryBranchId && queryBranchId !== 'all' 
-            ? queryBranchId 
-            : authBranchId || undefined;
+        // Branch-bound roles are pinned to their own branch.
+        const branchFilter = pinnedBranchId(auth)
+            ?? (queryBranchId && queryBranchId !== 'all' ? queryBranchId : authBranchId || undefined);
 
         const batches = await prisma.productBatch.findMany({
             where: {

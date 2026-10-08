@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { canAccessAdmin } from '@/lib/auth'
+import { resolveOptionalBranchId } from '@/lib/branch-scope'
 import { enqueueSync } from '@/lib/sync-enqueue'
 import { logActionAs } from '@/lib/audit'
 
@@ -13,6 +15,8 @@ export async function POST(
   try {
     const auth = await getAuthContext()
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+    // Overwriting a supplier balance is a manager decision, not a stock-keeper one.
+    if (!canAccessAdmin(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
 
     const { id } = await params
     const body = await request.json()
@@ -31,8 +35,9 @@ export async function POST(
     // specificBranch matches the list-API scoping: when a branch is selected the
     // displayed balance is computed from that branch's ledger entries; otherwise
     // it is the global stored supplier.balance field.
-    const specificBranch =
-      branchId && branchId !== 'all' ? String(branchId) : null
+    // Branch managers are pinned to their own branch's ledger.
+    const specificBranch = await resolveOptionalBranchId(auth, branchId)
+    if (specificBranch === undefined) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Compute the CURRENT balance exactly as the list view shows it, so the

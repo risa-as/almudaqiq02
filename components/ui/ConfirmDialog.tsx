@@ -67,7 +67,7 @@ export function ConfirmDialog({
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                         <h3 className="font-black text-gray-900 text-[15px] leading-snug">{title}</h3>
-                        <p className="text-gray-500 text-sm mt-1.5 leading-relaxed">{message}</p>
+                        <p className="text-gray-500 text-sm mt-1.5 leading-relaxed whitespace-pre-line">{message}</p>
                     </div>
                     <button onClick={onCancel} className="text-gray-300 hover:text-gray-500 transition-colors shrink-0 mt-0.5">
                         <X size={17} />

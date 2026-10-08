@@ -1,3 +1,4 @@
+import { requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { invalidateTenantFeatures } from '@/lib/plan-features'
 import { z } from 'zod'
@@ -7,6 +8,8 @@ import { withCloudDb } from '@/lib/cloud-guard'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const plans = await prisma.subscriptionPlan.findMany({
       orderBy: { monthlyPrice: 'asc' },
@@ -26,6 +29,8 @@ const PlanSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   return withCloudDb(async () => {
     const body = await request.json().catch(() => null)
     const parsed = PlanSchema.safeParse(body)

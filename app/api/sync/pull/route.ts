@@ -149,6 +149,9 @@ export async function GET(request: NextRequest) {
     }),
 
     // ── Structural (all branches — needed for StockTransfer FK resolution) ───
+    // activationCode is stripped from every branch but the caller's own (see
+    // below): it is what binds a desktop to a branch and yields that branch's
+    // sync token, so one branch must never learn another's.
     prisma.branch.findMany({ where: { tenantId } }),
 
     // ── Users (all tenant users — mirrors the web user-management list) ───────
@@ -156,8 +159,12 @@ export async function GET(request: NextRequest) {
     // lockedUntil because those are device-local security state — syncing them
     // would let one device's lockout clobber another's. password (bcrypt hash)
     // IS included so users can log in offline on the desktop.
+    // Only this branch's staff plus owners (branchId = null, who may sign in on
+    // any desktop). Other branches' staff were previously sent too — with their
+    // password hashes — and the desktop then remapped them onto ITS branch,
+    // letting them sign in to a till they don't belong to.
     prisma.user.findMany({
-      where: { tenantId, ...sinceUpdated },
+      where: { tenantId, OR: [{ branchId }, { branchId: null }], ...sinceUpdated },
       select: {
         id: true, tenantId: true, branchId: true, username: true,
         password: true, role: true, email: true,
@@ -255,7 +262,11 @@ export async function GET(request: NextRequest) {
     productBatches,
 
     // Structural
-    branches,
+    branches: branches.map((br: any) => {
+      if (br.id === branchId) return br
+      const { activationCode: _code, tokenVersion: _tv, ...rest } = br
+      return rest
+    }),
     users,
 
     // Operational

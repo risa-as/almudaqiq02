@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
@@ -9,8 +10,9 @@ export async function GET(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
     try {
         const { id } = await context.params;
@@ -21,7 +23,7 @@ export async function GET(
 
         // Branch isolation: when a specific branch is selected, only transactions of
         // that branch are visible — a cashier cannot fetch/refund another branch's invoice.
-        const branchId = request.nextUrl.searchParams.get('branchId');
+        const branchId = readBranchId(auth, request.nextUrl.searchParams.get('branchId'));
         const branchFilter = branchId && branchId !== 'all' ? { branchId } : {};
 
         const include = {

@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
     try {
         const { searchParams } = new URL(req.url);
         const period = searchParams.get('period') || 'daily'; // daily, monthly, yearly
-        const branchId = searchParams.get('branchId');
+        const branchId = readBranchId(auth, searchParams.get('branchId'));
         const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
 
         let startDate: Date;

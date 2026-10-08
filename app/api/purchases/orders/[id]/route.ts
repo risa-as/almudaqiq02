@@ -6,6 +6,9 @@ import { logActionAs } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
+/** Rolls the receive transaction back when another request already received the order. */
+class AlreadyReceivedError extends Error {}
+
 async function findOwnedOrder(id: string, auth: { tenantId: string; role: string; branchId?: string | null }) {
   const order = await prisma.purchaseOrder.findFirst({ where: { id, tenantId: auth.tenantId } })
   if (!order) return null
@@ -71,7 +74,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   if (body.action === 'order') {
     if (order.status !== 'DRAFT') return NextResponse.json({ error: 'الطلب ليس مسودة' }, { status: 400 })
-    await prisma.purchaseOrder.update({ where: { id }, data: { status: 'ORDERED', orderedAt: new Date() } })
+    const moved = await prisma.purchaseOrder.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'ORDERED', orderedAt: new Date() } })
+    if (moved.count !== 1) return NextResponse.json({ error: 'تغيّرت حالة الطلب — حدّث الصفحة' }, { status: 409 })
     await logActionAs(auth, 'ORDER_PURCHASE_ORDER', 'PurchaseOrder', id, 'PO marked as ordered')
     return NextResponse.json({ success: true })
   }
@@ -80,7 +84,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!['DRAFT', 'ORDERED'].includes(order.status)) {
       return NextResponse.json({ error: 'لا يمكن إلغاء طلب مستلَم' }, { status: 400 })
     }
-    await prisma.purchaseOrder.update({ where: { id }, data: { status: 'CANCELLED' } })
+    const moved = await prisma.purchaseOrder.updateMany({ where: { id, status: { in: ['DRAFT', 'ORDERED'] } }, data: { status: 'CANCELLED' } })
+    if (moved.count !== 1) return NextResponse.json({ error: 'تغيّرت حالة الطلب — حدّث الصفحة' }, { status: 409 })
     await logActionAs(auth, 'CANCEL_PURCHASE_ORDER', 'PurchaseOrder', id, 'PO cancelled')
     return NextResponse.json({ success: true })
   }
@@ -94,7 +99,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const receivedMap = new Map<string, number>()
     if (Array.isArray(body.received)) {
       for (const r of body.received) {
-        const qty = Math.max(0, Math.round(Number(r?.receivedQty)))
+        const qty = Math.max(0, Math.round(Number(r?.receivedQty) || 0))
         if (r?.itemId && Number.isFinite(qty)) receivedMap.set(String(r.itemId), qty)
       }
     }
@@ -102,7 +107,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     let totalInvoice = 0
     let receivedLines = 0
 
+    try {
     await prisma.$transaction(async tx => {
+      // Claim the order first: only one request can move it to RECEIVED, so a
+      // double click can't book the stock and the supplier debt twice.
+      const claimed = await tx.purchaseOrder.updateMany({
+        where: { id, tenantId: auth.tenantId, status: { in: ['DRAFT', 'ORDERED'] } },
+        data:  { status: 'RECEIVED', receivedAt: new Date() },
+      })
+      if (claimed.count !== 1) throw new AlreadyReceivedError()
+
       for (const item of items) {
         // Default: received exactly what was ordered.
         const receivedQty = receivedMap.has(item.id) ? receivedMap.get(item.id)! : item.quantity
@@ -167,18 +181,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         }
         const credit = totalInvoice - Math.min(paid, totalInvoice)
         if (credit > 0) {
-          await tx.supplier.update({
-            where: { id: order.supplierId },
+          await tx.supplier.updateMany({
+            where: { id: order.supplierId, tenantId: auth.tenantId },
             data:  { balance: { increment: credit } },
           })
         }
       }
-
-      await tx.purchaseOrder.update({
-        where: { id },
-        data:  { status: 'RECEIVED', receivedAt: new Date() },
-      })
     }, { timeout: 60_000 })
+    } catch (err) {
+      if (err instanceof AlreadyReceivedError) return NextResponse.json({ error: 'هذا الطلب مستلَم مسبقًا' }, { status: 409 })
+      throw err
+    }
 
     await logActionAs(auth, 'RECEIVE_PURCHASE_ORDER', 'PurchaseOrder', id,
       `PO received — ${receivedLines} lines, total: ${Math.round(totalInvoice * 100) / 100}`)

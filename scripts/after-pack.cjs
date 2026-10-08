@@ -58,4 +58,63 @@ module.exports = async function afterPack(context) {
         copyDir(src, dest, label);
         console.log(`afterPack: ${label} — done`);
     }
+
+    verifyPackagedApp(appOutDir);
 };
+
+/**
+ * Last gate on what actually ships, run on the packed output. prepare-standalone
+ * only sees the Next standalone dir — but app.asar is assembled by electron-builder
+ * from `build.files`, and that is where the Jul-2026 installer carried the real
+ * project .env (DB password, JWT/branch secrets, LICENSE_PRIVATE_KEY), .env.bak,
+ * backups/*.db and *.dump files. Throwing here aborts the build before an
+ * installer exists.
+ */
+function verifyPackagedApp(appOutDir) {
+    const problems = [];
+    const forbidden = (rel) => {
+        const p = rel.split('\\').join('/').replace(/^\/+/, '');
+        const name = p.split('/').pop().toLowerCase();
+        if (p.split('/').includes('node_modules')) return null;
+        if (name.startsWith('.env')) return '.env file';
+        if (/\.(db|sqlite|dump|bak)$/.test(name)) return 'data file'; // not .sql: prisma/migrations ships
+        if (name === 'activation_params.json' || name === 'dump.txt') return 'dev data';
+        if (/^(backups|mobile|specs|marketing_video)\//.test(p)) return 'project folder';
+        return null;
+    };
+
+    const asarPath = path.join(appOutDir, 'resources', 'app.asar');
+    if (fs.existsSync(asarPath)) {
+        const asar = require('@electron/asar');
+        for (const entry of asar.listPackage(asarPath)) {
+            const why = forbidden(entry);
+            if (why) problems.push(`app.asar: ${entry} (${why})`);
+        }
+    }
+
+    const serverDir = path.join(appOutDir, 'resources', 'server');
+    const walk = (dir, base) => {
+        if (!fs.existsSync(dir)) return;
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (e.name === 'node_modules') continue;
+            const rel = base ? `${base}/${e.name}` : e.name;
+            if (e.isDirectory()) { walk(path.join(dir, e.name), rel); continue; }
+            // The generated minimal .env and the verified clean dev.db are expected.
+            if (rel === '.env' || rel === 'dev.db') continue;
+            const why = forbidden(rel);
+            if (why) problems.push(`resources/server/${rel} (${why})`);
+        }
+    };
+    walk(serverDir, '');
+
+    const shippedEnv = path.join(serverDir, '.env');
+    const SECRET_KEYS = /(^|\n)\s*(DATABASE_URL|JWT_SECRET|REFRESH_TOKEN_SECRET|BRANCH_TOKEN_SECRET|LICENSE_PRIVATE_KEY|CRON_SECRET|GEMINI_API_KEY|OPENAI_API_KEY)=/;
+    if (fs.existsSync(shippedEnv) && SECRET_KEYS.test(fs.readFileSync(shippedEnv, 'utf8'))) {
+        problems.push('resources/server/.env contains cloud secrets');
+    }
+
+    if (problems.length) {
+        throw new Error('afterPack: refusing to build an installer that ships private data:\n  - ' + problems.slice(0, 50).join('\n  - '));
+    }
+    console.log('afterPack: packaged app verified — no secrets or data files in app.asar or resources/server');
+}

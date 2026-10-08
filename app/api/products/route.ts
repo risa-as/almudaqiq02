@@ -2,19 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 import { Prisma } from '@prisma/client';
-import { getTenantId, getAuthContext } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 import { canManageStock } from '@/lib/auth';
 import { enqueueSync } from '@/lib/sync-enqueue';
+import { resolveWriteBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic'; // Prevent static generation
 
 
 // GET /api/products - List all products with their units and current stock
 export async function GET(request: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
-    const branchId = request.nextUrl.searchParams.get('branchId');
+    const branchId = readBranchId(auth, request.nextUrl.searchParams.get('branchId'));
     const specificBranch = branchId && branchId !== 'all' ? branchId : null;
 
     try {
@@ -91,14 +94,33 @@ export async function POST(request: NextRequest) {
             supplierId,
             expiryDate,   // optional — applied to the INITIAL stock batch(es)
             isPrepaid,    // optional — if true + supplier, creates full-payment ledger entry
+            branchId: bodyBranchId, // optional — branch for the initial stock (owners)
         } = body;
 
         // Normalise the expiry once so both the batch row and its sync payload agree.
         const initialExpiry = expiryDate ? new Date(expiryDate) : null;
 
-        if (!name || !units || units.length === 0) {
+        if (!name || !Array.isArray(units) || units.length === 0) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
+        // Every unit needs a positive whole conversion factor and a non-negative
+        // price — a 0 factor would make every later stock movement for it a no-op.
+        if (units.some((u: any) => !(Number(u.conversion) >= 1) || !Number.isInteger(Number(u.conversion))
+                                 || !(Number(u.price) >= 0) || !(Number(u.initialQty ?? 0) >= 0))) {
+            return NextResponse.json({ error: 'بيانات الوحدات غير صالحة (معامل التحويل عدد صحيح ≥ 1، والسعر ≥ 0)' }, { status: 400 });
+        }
+        if (!(Number(baseCost ?? 0) >= 0)) {
+            return NextResponse.json({ error: 'سعر التكلفة غير صالح' }, { status: 400 });
+        }
+        // Category/supplier must be this tenant's (Prisma doesn't check plain FK ids).
+        const [cat, sup] = await Promise.all([
+            categoryId ? prisma.category.findFirst({ where: { id: String(categoryId), tenantId }, select: { id: true } }) : Promise.resolve(true),
+            supplierId ? prisma.supplier.findFirst({ where: { id: String(supplierId), tenantId }, select: { id: true } }) : Promise.resolve(true),
+        ]);
+        if (!cat || !sup) return NextResponse.json({ error: 'القسم أو المورد غير موجود' }, { status: 400 });
+
+        // Initial stock branch: staff → their own; owners → the selected branch.
+        const chosenBranchId = await resolveWriteBranchId(auth, bodyBranchId || branchId);
 
         // Use transaction to ensure Product and Units are created together
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -133,8 +155,8 @@ export async function POST(request: NextRequest) {
             }
 
             // 3. Create initial stock batches per unit (quantity * conversionFactor)
-            const firstBranch = await tx.branch.findFirst({ where: { tenantId } });
-            const targetBranchId = branchId && branchId !== 'all' ? branchId : firstBranch?.id;
+            const targetBranchId = chosenBranchId
+                ?? (await tx.branch.findFirst({ where: { tenantId }, select: { id: true } }))?.id;
 
             let totalBaseStock = 0;
             const initialBatches: { id: string; productId: string; branchId: string; quantity: number; costPrice: number }[] = [];

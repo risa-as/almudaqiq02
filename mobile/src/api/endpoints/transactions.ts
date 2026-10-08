@@ -119,7 +119,7 @@ export function returnItems(params: {
   originalTransactionId: string
   items: ReturnItemPayload[]
   branchId?: string | null
-}): Promise<{ success: boolean; returnId: string }> {
+}): Promise<{ success: boolean; returnId: string; amount?: number; cashOut?: number }> {
   return api('/api/transactions/return', {
     method: 'POST',
     body: {
@@ -139,7 +139,7 @@ export function refundTransaction(params: {
   items: RefundItemPayload[]
   totalAmount: number
   notes?: string
-}): Promise<{ success: boolean; transaction: TransactionListItem }> {
+}): Promise<{ success: boolean; transaction: TransactionListItem; amount?: number; cashOut?: number }> {
   return api('/api/transactions/refund', {
     method: 'POST',
     body: {

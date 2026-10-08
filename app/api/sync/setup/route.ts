@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/api-helpers'
 import { prisma } from '@/lib/multi-tenant/prisma'
+import { IS_ELECTRON } from '@/lib/prisma-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,11 @@ export const dynamic = 'force-dynamic'
  * branch-config.json exists yet.
  */
 export async function GET() {
+  // Desktop-only. On the cloud this would hand any signed-in user (a cashier
+  // included — /api/sync/ is outside the role middleware) the branch activation
+  // code, which /api/branches/[id]/activate exchanges for a sync token.
+  if (!IS_ELECTRON) return NextResponse.json({ error: 'only available on desktop' }, { status: 403 })
+
   const auth = await getAuthContext()
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

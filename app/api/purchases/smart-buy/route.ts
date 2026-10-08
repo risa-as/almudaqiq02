@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 import { guardFeature } from '@/lib/plan-features';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
     const blocked = await guardFeature('ai_smart_buy'); if (blocked) return blocked;
 
     const { searchParams } = new URL(request.url);
-    const branchId = searchParams.get('branchId');
+    const branchId = readBranchId(auth, searchParams.get('branchId'));
     const specificBranch = branchId && branchId !== 'all' ? branchId : null;
     const batchBranchFilter = specificBranch ? { branchId: specificBranch } : {};
 

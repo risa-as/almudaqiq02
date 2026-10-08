@@ -10,6 +10,7 @@ import { formatCurrency } from '@/lib/format';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import { useBranch } from '@/contexts/BranchContext';
+import { useUser } from '@/hooks/useUser';
 import toast from 'react-hot-toast';
 
 interface Supplier {
@@ -72,6 +73,8 @@ export default function SuppliersPage() {
   usePageTitle('الموردون');
     const router = useRouter();
     const { selectedBranch, loading: branchLoading } = useBranch();
+    // Manual balance overrides are manager-only (the API answers 403 to stock keepers).
+    const { isAdmin: canAdjustBalance } = useUser();
     const { confirm, dialog } = useConfirm();
     const queryClient = useQueryClient();
 
@@ -706,7 +709,7 @@ export default function SuppliersPage() {
                                         <label className="block text-xs font-bold text-gray-700 mb-1">الرصيد الحالي</label>
                                         <div className="w-full bg-gray-50 border border-gray-200 p-2.5 rounded-lg text-sm font-bold text-gray-500 flex items-center justify-between">
                                             <span>{formatCurrency(Number(initialBalance))}</span>
-                                            <button
+                                            {canAdjustBalance && <button
                                                 type="button"
                                                 onClick={() => {
                                                     const s = suppliers.find(x => x.id === editingId);
@@ -719,7 +722,7 @@ export default function SuppliersPage() {
                                                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
                                             >
                                                 تسوية يدوية
-                                            </button>
+                                            </button>}
                                         </div>
                                     </div>
                                 ) : (

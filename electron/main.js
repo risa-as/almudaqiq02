@@ -60,6 +60,41 @@ function loadBranchConfig() {
     return null;
 }
 
+/**
+ * True when a cloudUrl points at this machine rather than a real server.
+ *
+ * branch-config.json survives reinstalls (it lives in userData), so a machine
+ * that was ever pointed at a dev server keeps that URL forever — and since it
+ * takes priority over the shipped .env, the installed app silently calls
+ * http://localhost:3001 instead of the production host. Nothing is listening,
+ * fetch fails, and the user is told "first login requires an internet
+ * connection" while their internet is perfectly fine.
+ */
+function isLocalCloudUrl(url) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?/i.test(url ?? '');
+}
+
+/**
+ * Which cloud the packaged app should talk to.
+ *
+ * The branch config wins normally (it is how a branch is bound to its server),
+ * but never when it points at localhost in a packaged build — there the shipped
+ * .env value is the only trustworthy one.
+ */
+function resolveCloudUrl(branchConfig, envFromFile) {
+    const fromConfig = branchConfig?.cloudUrl ?? '';
+    const fromEnv    = envFromFile?.CLOUD_URL ?? '';
+
+    if (fromConfig && isLocalCloudUrl(fromConfig) && app.isPackaged && fromEnv && !isLocalCloudUrl(fromEnv)) {
+        console.warn(
+            `[cloud-url] Ignoring stale local cloudUrl from branch-config.json (${fromConfig}); ` +
+            `using shipped CLOUD_URL (${fromEnv}) instead.`
+        );
+        return fromEnv;
+    }
+    return fromConfig || fromEnv || '';
+}
+
 function saveBranchConfig(config) {
     fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf-8');
 }
@@ -107,6 +142,8 @@ function startServer(cloudUrl = '', branchConfig = null) {
         const dbPath = path.join(serverDir, 'dev.db');
         const databaseUrl = `file:${dbPath}`;
         const secrets = getOrCreateDesktopSecrets();
+        const resolvedCloudUrl = resolveCloudUrl(branchConfig, envFromFile) || cloudUrl;
+        console.log(`[cloud-url] server will use CLOUD_URL=${resolvedCloudUrl || '(empty)'}`);
 
         serverProcess = spawn(process.execPath, [serverPath], {
             env: {
@@ -115,14 +152,14 @@ function startServer(cloudUrl = '', branchConfig = null) {
                 DATABASE_URL:         databaseUrl,
                 LOCAL_DATABASE_URL:   databaseUrl,  // used by sync-enqueue in Next.js routes
                 IS_ELECTRON:          '1',          // gates enqueue calls in API routes
-                CLOUD_URL:            cloudUrl || envFromFile.CLOUD_URL || '',  // branch config → .env fallback
+                CLOUD_URL:            resolvedCloudUrl,  // branch config → .env, with the localhost guard above
                 // Lets /api/subscription re-check the cloud on demand (Settings →
                 // "تحديث الحالة") using the same branch token the sync worker holds,
                 // instead of asking the user for their password again.
                 ...(branchConfig?.branchToken ? { BRANCH_TOKEN: branchConfig.branchToken } : {}),
-                // Absolute path to branch-config.json. The server process cannot
-                // derive it: userData resolves from app.getName() (productName,
-                // "المدقق"), not from the package name — so any guessed path is wrong.
+                // Absolute path to branch-config.json, so the server process never
+                // has to guess where userData lives (it resolves from app.getName()
+                // and would break silently if the app or product name changed).
                 BRANCH_CONFIG_PATH:   getConfigPath(),
                 // Per-install JWT secrets (never shipped in the bundle)
                 JWT_SECRET:           secrets.JWT_SECRET,
@@ -565,7 +602,13 @@ ipcMain.handle('backup:save', async (_event, { json, filename }) => {
     try {
         const backupsDir = path.join(app.getPath('userData'), 'backups');
         if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-        fs.writeFileSync(path.join(backupsDir, filename), json, 'utf-8');
+        // The name comes from the renderer: keep it a plain *.json file inside
+        // backupsDir — a "../" name would otherwise write anywhere on disk.
+        const safeName = path.basename(String(filename || ''));
+        if (!/^[\w.\-]+\.json$/i.test(safeName)) {
+            return { success: false, error: 'invalid backup filename' };
+        }
+        fs.writeFileSync(path.join(backupsDir, safeName), json, 'utf-8');
         debugLog(`[backup] Saved: ${filename} (${Math.round(Buffer.byteLength(json, 'utf8') / 1024)} KB)`);
         return { success: true };
     } catch (err) {

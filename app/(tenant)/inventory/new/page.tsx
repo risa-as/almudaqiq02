@@ -24,6 +24,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useBranch } from "@/contexts/BranchContext";
 
 interface UnitInput {
   name: string;
@@ -36,6 +37,8 @@ interface UnitInput {
 export default function NewProductPage() {
   usePageTitle('إضافة منتج');
   const router = useRouter();
+  // Initial stock goes into the branch selected in the header (server-validated).
+  const { selectedBranch } = useBranch();
   const searchParams = useSearchParams();
   const prefilledBarcode = searchParams.get("barcode") || "";
 
@@ -141,6 +144,10 @@ export default function NewProductPage() {
           supplierId: supplierId || null,
           expiryDate: expiryDate || null,
           isPrepaid: supplierId ? isPrepaid : false,
+          branchId:
+            selectedBranch?.id && selectedBranch.id !== "all"
+              ? selectedBranch.id
+              : undefined,
         }),
       });
       if (!res.ok) throw new Error("فشل إنشاء المنتج");

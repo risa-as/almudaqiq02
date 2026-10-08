@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { calculateProfit } from '@/lib/inventory-logic';
 import { getAuthContext } from '@/lib/api-helpers';
+import { pinnedBranchId } from '@/lib/branch-scope';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     const customStart = searchParams.get('startDate');
     const customEnd = searchParams.get('endDate');
     const userId = searchParams.get('userId'); // Filter by cashier
-    const branchId = searchParams.get('branchId') || authBranchId || undefined;
+    const branchId = pinnedBranchId(auth) ?? (searchParams.get('branchId') || authBranchId || undefined);
 
     let startDate = new Date();
     let endDate = new Date();

@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { IS_ELECTRON, getDbUrl } from '@/lib/prisma-runtime'
+import { getAuthContext } from '@/lib/api-helpers'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   if (!IS_ELECTRON) {
     return NextResponse.json({ error: 'only available on desktop' }, { status: 403 })
+  }
+  // /api/sync/ skips the middleware session check, so verify the local user here.
+  const auth = await getAuthContext()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER'].includes(auth.role)) {
+    return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
   }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires

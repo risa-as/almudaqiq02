@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { logAction } from '@/lib/audit';
+import { logActionAs } from '@/lib/audit';
 import { getAuthContext } from '@/lib/api-helpers';
 import { canManageStock } from '@/lib/auth';
 import { enqueueSync } from '@/lib/sync-enqueue';
@@ -56,6 +56,9 @@ export async function PUT(
         if (!productId) {
             return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
         }
+        if (Array.isArray(units) && units.some((u: any) => !(Number(u.conversion) >= 1) || !Number.isInteger(Number(u.conversion)) || !(Number(u.price) >= 0))) {
+            return NextResponse.json({ error: 'بيانات الوحدات غير صالحة (معامل التحويل عدد صحيح ≥ 1، والسعر ≥ 0)' }, { status: 400 });
+        }
 
         // Verify product belongs to this tenant
         const existing = await prisma.product.findFirst({
@@ -64,6 +67,11 @@ export async function PUT(
         if (!existing) {
             return NextResponse.json({ error: 'Product not found' }, { status: 404 });
         }
+        const [cat, sup] = await Promise.all([
+            categoryId ? prisma.category.findFirst({ where: { id: String(categoryId), tenantId }, select: { id: true } }) : Promise.resolve(true),
+            supplierId ? prisma.supplier.findFirst({ where: { id: String(supplierId), tenantId }, select: { id: true } }) : Promise.resolve(true),
+        ]);
+        if (!cat || !sup) return NextResponse.json({ error: 'القسم أو المورد غير موجود' }, { status: 400 });
 
         // Transaction to update product and reconcile units.
         // We collect resolvedUnits so that newly-created units get their real
@@ -74,7 +82,7 @@ export async function PUT(
                 data: {
                     name,
                     description,
-                    costPrice: Number(baseCost),
+                    ...(baseCost !== undefined && Number(baseCost) >= 0 ? { costPrice: Number(baseCost) } : {}),
                     minimumStock: Number(minimumStock) || 0,
                     supplierId: supplierId ? String(supplierId) : null,
                     categoryId: categoryId ? String(categoryId) : null,
@@ -129,7 +137,7 @@ export async function PUT(
             return { prod, resolvedUnits };
         });
 
-        await logAction('UPDATE_PRODUCT', 'Product', String(updatedProduct.id), `Updated product: ${updatedProduct.name}`);
+        await logActionAs(auth, 'UPDATE_PRODUCT', 'Product', String(updatedProduct.id), `Updated product: ${updatedProduct.name}`);
 
         enqueueSync('products', 'UPDATE', updatedProduct.id, {
             id:           updatedProduct.id,

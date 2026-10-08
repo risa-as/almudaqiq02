@@ -5,6 +5,10 @@ import { getAuthContext } from '@/lib/api-helpers';
 import { logAction } from '@/lib/audit';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { IS_ELECTRON, RELATION_JOIN } from '@/lib/prisma-runtime';
+import { readBranchFilter, resolveWriteBranchId } from '@/lib/branch-scope';
+
+/** Thrown inside the sale transaction when a batch no longer holds enough stock. */
+class StockRaceError extends Error {}
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +18,9 @@ export async function GET(request: NextRequest) {
     const { tenantId } = auth;
 
     const { searchParams } = new URL(request.url);
-    const limit    = parseInt(searchParams.get('limit') || '50', 10);
-    const branchId = searchParams.get('branchId');
-    const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
+    const limit    = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10) || 50, 1), 500);
+    // Branch-bound roles (cashier, manager, stock keeper) only ever see their own branch.
+    const branchFilter = readBranchFilter(auth, searchParams.get('branchId'));
 
     // ── Invoice lookup (mobile «فواتيري» search box) ──────────────────────────
     // q matches either the receipt number or the name of any product sold on the
@@ -90,26 +94,34 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { items, totalAmount, shiftId, branchId: bodyBranchId } = body;
-        const branchId = bodyBranchId || authBranchId;
+        const { items, shiftId, branchId: bodyBranchId } = body;
+        // Cashiers are pinned to their token branch; an owner's choice is checked
+        // against the tenant before anything is connected to it.
+        const branchId = await resolveWriteBranchId(auth, bodyBranchId || authBranchId);
 
         if (!branchId)              return NextResponse.json({ error: 'غير مصرح - لا يوجد فرع' },           { status: 401 });
-        if (!items?.length)         return NextResponse.json({ error: 'السلة فارغة' },                       { status: 400 });
+        if (!Array.isArray(items) || !items.length)
+                                    return NextResponse.json({ error: 'السلة فارغة' },                       { status: 400 });
         if (items.some((i: any) => !i.productId || !i.unitId))
                                     return NextResponse.json({ error: 'بيانات المنتج غير مكتملة' },          { status: 400 });
+        // A sale only ever removes stock — returns go through /api/transactions/return.
+        // A zero/negative quantity here would add stock and pay cash out of the drawer.
+        if (items.some((i: any) => !(Number(i.quantity) > 0) || !Number.isFinite(Number(i.quantity))
+                                 || !(Number(i.price) >= 0)  || !Number.isFinite(Number(i.price))))
+                                    return NextResponse.json({ error: 'كمية أو سعر غير صالح في السلة' },     { status: 400 });
 
         // ── Pre-fetch everything in ONE parallel round-trip ────────────────────
         const productIds = [...new Set<string>(items.map((i: any) => i.productId))];
         const unitIds    = [...new Set<string>(items.map((i: any) => i.unitId))];
 
-        const [products, units, batches, shiftRecord, saleCount] = await Promise.all([
+        const [products, units, batches, shiftRecord, saleCount, customer] = await Promise.all([
             prisma.product.findMany({
                 where: { id: { in: productIds }, tenantId },
                 select: { id: true, costPrice: true, name: true, baseStock: true }
             }),
             prisma.productUnit.findMany({
-                where: { id: { in: unitIds } },
-                select: { id: true, conversionFactor: true, price: true }
+                where: { id: { in: unitIds }, product: { tenantId } },
+                select: { id: true, productId: true, conversionFactor: true, price: true }
             }),
             // Fetch all relevant batches for stock deduction (FIFO)
             prisma.productBatch.findMany({
@@ -123,22 +135,55 @@ export async function POST(request: NextRequest) {
                 : userId
                     ? prisma.cashierShift.findFirst({ where: { userId, tenantId, closedAt: null }, select: { id: true } })
                     : Promise.resolve(null),
-            // Receipt-number counter — fetched here in parallel (instead of an extra
-            // round-trip inside the write transaction) to keep the sale fast.
-            prisma.transaction.count({ where: { tenantId, type: 'SALE' } }),
+            // Receipt-number counter. On Postgres it is re-read under a lock inside
+            // the write transaction (see below); this pre-fetch is only used on SQLite.
+            IS_ELECTRON ? prisma.transaction.count({ where: { tenantId, type: 'SALE' } }) : Promise.resolve(0),
+            body.customerId
+                ? prisma.customer.findFirst({
+                    where: { id: body.customerId, tenantId },
+                    select: { id: true, name: true, balance: true, creditLimit: true },
+                })
+                : Promise.resolve(null),
         ]);
+
+        // Every product and unit must exist in this tenant, and each unit must belong
+        // to its line's product — otherwise a foreign unit's conversion factor would
+        // decide how much stock is taken.
+        const productMap = new Map(products.map(p => [p.id, p]));
+        const unitMap    = new Map(units.map(u => [u.id, u]));
+        for (const item of items) {
+            const unit = unitMap.get(item.unitId);
+            if (!productMap.has(item.productId) || !unit || unit.productId !== item.productId) {
+                return NextResponse.json({ error: 'منتج أو وحدة غير موجودة' }, { status: 400 });
+            }
+        }
+        if (body.customerId && !customer) {
+            return NextResponse.json({ error: 'العميل غير موجود' }, { status: 400 });
+        }
+
+        // ── Totals are recomputed from the lines, never taken on trust ─────────
+        // Both POS clients send totalAmount = Σ(qty × price) − discount (offers are
+        // folded into the discount). A mismatch means a tampered or buggy client, so
+        // the sale is refused rather than booked at an amount nobody can explain.
+        const subTotal       = items.reduce((s: number, i: any) => s + Number(i.quantity) * Number(i.price), 0);
+        const discountAmount = Math.min(Math.max(Number(body.discount) || 0, 0), subTotal);
+        const totalAmount    = subTotal - discountAmount;
+        if (body.totalAmount != null && Math.abs(Number(body.totalAmount) - totalAmount) > 1) {
+            return NextResponse.json({ error: 'إجمالي الفاتورة لا يطابق الأصناف — أعد المحاولة' }, { status: 400 });
+        }
 
         // ── Credit limit guard ─────────────────────────────────────────────────
         // For credit sales (unpaid portion > 0), block when the customer's new
         // outstanding balance would exceed their creditLimit (0 = no limit).
-        const totalNum    = Number(totalAmount);
-        const paidNum     = body.paidAmount != null ? Number(body.paidAmount) : (body.isCredit ? 0 : totalNum);
+        const totalNum    = totalAmount;
+        const rawPaid     = body.paidAmount != null ? Number(body.paidAmount) : (body.isCredit ? 0 : totalNum);
+        const paidNum     = Math.min(Math.max(Number.isFinite(rawPaid) ? rawPaid : 0, 0), totalNum);
         const creditPortion = Math.max(0, totalNum - paidNum);
-        if (creditPortion > 0 && body.customerId) {
-            const customer = await prisma.customer.findFirst({
-                where: { id: body.customerId, tenantId },
-                select: { name: true, balance: true, creditLimit: true },
-            });
+        // An unpaid portion is a debt, so it has to be booked against someone.
+        if (creditPortion > 0 && !customer) {
+            return NextResponse.json({ error: 'يجب اختيار عميل لتسجيل بيع آجل' }, { status: 400 });
+        }
+        if (creditPortion > 0 && customer) {
             const limit = Number(customer?.creditLimit ?? 0);
             const newBalance = Number(customer?.balance ?? 0) + creditPortion;
             if (limit > 0 && newBalance > limit) {
@@ -156,10 +201,6 @@ export async function POST(request: NextRequest) {
         if (!shiftId && userId && !shiftRecord) {
             return NextResponse.json({ error: 'لا توجد وردية نشطة. يرجى فتح وردية جديدة أولاً.' }, { status: 400 });
         }
-
-        // ── Build lookup maps ──────────────────────────────────────────────────
-        const productMap = new Map(products.map(p => [p.id, p]));
-        const unitMap    = new Map(units.map(u => [u.id, u]));
 
         // ── Detect manual price edits ──────────────────────────────────────────
         // A line is "price-edited" when its sold price differs from the unit's
@@ -181,88 +222,110 @@ export async function POST(request: NextRequest) {
             }
         }
         const priceEdited      = editedItems.length > 0;
-        const discountAmount   = body.discount ? Number(body.discount) : 0;
         const discountApplied  = discountAmount > 0;
 
-        // ── Pre-compute FIFO batch deductions + line costs from actual batches ──
+        // ── FIFO plan: which batches each line consumes, and its real cost ──────
         // batchDeductions: batchId → qty to decrement
         // productDeductions: productId → total base qty to decrement from baseStock
         // itemFifoCost: index → total cost (from actual batches consumed, FIFO)
-        const batchDeductions   = new Map<string, number>();
-        const productDeductions = new Map<string, number>();
-        const itemFifoCost      = new Map<number, number>(); // item index → cost
+        type BatchRow = { id: string; productId: string; quantity: unknown; costPrice: unknown };
+        const planFifo = (rows: BatchRow[]) => {
+            const batchDeductions   = new Map<string, number>();
+            const productDeductions = new Map<string, number>();
+            const itemFifoCost      = new Map<number, number>();
+            const batchRemaining    = new Map<string, number>(rows.map(b => [b.id, Number(b.quantity)]));
+            const branchStock       = new Map<string, number>();
+            for (const b of rows) branchStock.set(b.productId, (branchStock.get(b.productId) ?? 0) + Number(b.quantity));
 
-        // Track remaining batch quantities per product (mutable copy for multi-item iteration)
-        const batchRemaining = new Map<string, number>(
-            batches.map(b => [b.id, Number(b.quantity)])
-        );
+            items.forEach((item: any, idx: number) => {
+                const unit    = unitMap.get(item.unitId)!;
+                const product = productMap.get(item.productId);
+                const baseQty = Number(item.quantity) * Number(unit.conversionFactor);
+                productDeductions.set(item.productId, (productDeductions.get(item.productId) ?? 0) + baseQty);
 
-        items.forEach((item: any, idx: number) => {
-            const unit    = unitMap.get(item.unitId);
-            const product = productMap.get(item.productId);
-            if (!unit) { itemFifoCost.set(idx, 0); return; }
+                let remaining = baseQty;
+                let totalCost = 0;
+                for (const batch of rows) {
+                    if (remaining <= 0) break;
+                    if (batch.productId !== item.productId) continue;
+                    const available = batchRemaining.get(batch.id) ?? 0;
+                    if (available <= 0) continue;
+                    const deduct = Math.min(available, remaining);
+                    batchDeductions.set(batch.id, (batchDeductions.get(batch.id) ?? 0) + deduct);
+                    batchRemaining.set(batch.id, available - deduct);
+                    totalCost += deduct * Number(batch.costPrice);
+                    remaining -= deduct;
+                }
+                // Fallback to WAC for any qty not covered by batches (only reachable
+                // if the shortage check below is bypassed — kept for cost safety).
+                if (remaining > 0 && product) totalCost += remaining * Number(product.costPrice);
+                itemFifoCost.set(idx, totalCost);
+            });
 
-            const baseQty = Number(item.quantity) * Number(unit.conversionFactor);
-            productDeductions.set(item.productId, (productDeductions.get(item.productId) ?? 0) + baseQty);
-
-            let remaining  = baseQty;
-            let totalCost  = 0;
-
-            for (const batch of batches.filter(b => b.productId === item.productId)) {
-                if (remaining <= 0) break;
-                const available = batchRemaining.get(batch.id) ?? 0;
-                if (available <= 0) continue;
-                const deduct = Math.min(available, remaining);
-                batchDeductions.set(batch.id, (batchDeductions.get(batch.id) ?? 0) + deduct);
-                batchRemaining.set(batch.id, available - deduct);
-                totalCost += deduct * Number(batch.costPrice);
-                remaining -= deduct;
+            // Stock is per branch (ProductBatch.branchId). Product.baseStock is the
+            // sum over ALL branches, so checking it let a branch sell stock it
+            // doesn't hold. A shortage is reported as { product, available, needed }.
+            let shortage: { name: string; available: number; needed: number } | null = null;
+            for (const [pid, needed] of productDeductions.entries()) {
+                const available = branchStock.get(pid) ?? 0;
+                if (needed > available) { shortage = { name: productMap.get(pid)?.name ?? '', available, needed }; break; }
             }
 
-            // Fallback to WAC for any qty not covered by batches (shouldn't happen normally)
-            if (remaining > 0 && product) {
-                totalCost += remaining * Number(product.costPrice);
-            }
-
-            itemFifoCost.set(idx, totalCost);
-        });
+            const itemsPayload = items.map((item: any, idx: number) => ({
+                productId: item.productId,
+                unitId:    item.unitId,
+                quantity:  Number(item.quantity),
+                price:     Number(item.price),
+                cost:      itemFifoCost.get(idx) ?? 0,
+            }));
+            return { batchDeductions, productDeductions, itemsPayload, shortage };
+        };
 
         // ── Stock guard — never allow a sale to drive stock negative ───────────
-        // Returns (negative quantity) are exempt. We compare the total base qty
-        // requested per product against its current baseStock.
-        const isReturn = items.some((i: any) => Number(i.quantity) < 0);
-        if (!isReturn) {
-            for (const [pid, needed] of productDeductions.entries()) {
-                const product = productMap.get(pid);
-                const available = Number(product?.baseStock ?? 0);
-                if (needed > available) {
-                    return NextResponse.json(
-                        { error: `الكمية غير كافية للمنتج "${product?.name ?? ''}" — المتوفر ${available}، المطلوب ${needed}` },
-                        { status: 400 }
-                    );
-                }
-            }
+        // Fast rejection from the pre-fetched batches; on Postgres the plan is
+        // redone below from locked rows, which is the authoritative check.
+        let plan = planFifo(batches);
+        if (plan.shortage) {
+            return NextResponse.json(
+                { error: `الكمية غير كافية للمنتج "${plan.shortage.name}" — المتوفر ${plan.shortage.available}، المطلوب ${plan.shortage.needed}` },
+                { status: 400 }
+            );
         }
-
-        const itemsPayload = items.map((item: any, idx: number) => ({
-            productId: item.productId,
-            unitId:    item.unitId,
-            quantity:  Number(item.quantity),
-            price:     Number(item.price),
-            cost:      itemFifoCost.get(idx) ?? 0,
-        }));
 
         // ── Single transaction: create records + apply pre-computed updates ────
         const transactionRecord = await withRetry(() => prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Receipt number — tenant-scoped sequential counter (SALE only), stored
-            // permanently. Count was pre-fetched in parallel above to save a round-trip.
-            const receiptNumber = String(saleCount + 1).padStart(8, '0');
+            // permanently. On Postgres two concurrent sales would read the same count
+            // and print the same number, so the count is taken under a per-tenant
+            // transaction lock (released at commit). SQLite already serialises writes.
+            let saleNo = saleCount;
+            if (!IS_ELECTRON) {
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'receipt:' + tenantId}))`;
+                saleNo = await tx.transaction.count({ where: { tenantId, type: 'SALE' } });
+
+                // Re-plan from the branch's batches as they are NOW, row-locked until
+                // commit. Planning from the pre-fetched read made concurrent sales
+                // collide on the same batch and be refused although stock sufficed.
+                const locked = await tx.$queryRaw<BatchRow[]>(Prisma.sql`
+                    SELECT "id", "productId", "quantity", "costPrice"
+                    FROM "ProductBatch"
+                    WHERE "branchId" = ${branchId}
+                      AND "productId" IN (${Prisma.join(productIds)})
+                      AND "quantity" > 0
+                    ORDER BY "expiryDate" ASC NULLS LAST, "createdAt" ASC
+                    FOR UPDATE
+                `);
+                plan = planFifo(locked);
+                if (plan.shortage) throw new StockRaceError();
+            }
+            const { batchDeductions, productDeductions, itemsPayload } = plan;
+            const receiptNumber = String(saleNo + 1).padStart(8, '0');
 
             // 1. Create transaction header
             const newTx = await (tx as any).transaction.create({
                 data: {
                     type: 'SALE',
-                    totalAmount: Number(totalAmount),
+                    totalAmount,
                     date: new Date(),
                     receiptNumber,
                     tenant:    { connect: { id: tenantId } },
@@ -273,7 +336,7 @@ export async function POST(request: NextRequest) {
                     discount:      discountAmount,
                     priceEdited,
                     paymentMethod: body.paymentMethod || (body.isCredit ? 'CREDIT' : 'CASH'),
-                    paidAmount:    body.paidAmount ? Number(body.paidAmount) : (body.isCredit ? 0 : Number(totalAmount))
+                    paidAmount:    paidNum
                 } as any,
             });
 
@@ -283,14 +346,13 @@ export async function POST(request: NextRequest) {
             });
 
             // 3. Customer balance update (credit sale only)
-            if (body.isCredit && body.customerId) {
-                const debtAmt = Number(totalAmount) - Number(body.paidAmount || 0);
-                if (debtAmt > 0) {
-                    await tx.customer.update({
-                        where: { id: body.customerId, tenantId },
-                        data:  { balance: { increment: debtAmt } }
-                    });
-                }
+            let customerBalance: number | null = null;
+            if (creditPortion > 0 && customer) {
+                const c = await tx.customer.update({
+                    where: { id: customer.id, tenantId },
+                    data:  { balance: { increment: creditPortion } }
+                });
+                customerBalance = Number(c.balance);
             }
 
             // 4. Apply all stock updates (pre-computed FIFO).
@@ -302,12 +364,16 @@ export async function POST(request: NextRequest) {
             if (!IS_ELECTRON) {
                 if (batchDeductions.size > 0) {
                     const rows = [...batchDeductions.entries()].map(([id, d]) => Prisma.sql`(${id}, ${d})`);
-                    await tx.$executeRaw(Prisma.sql`
+                    // The quantity guard makes the decrement atomic: if a concurrent
+                    // sale already took the stock, fewer rows match and the whole sale
+                    // rolls back instead of driving a batch negative.
+                    const updated = await tx.$executeRaw(Prisma.sql`
                         UPDATE "ProductBatch" AS b
                         SET "quantity" = b."quantity" - v.deduct::numeric
                         FROM (VALUES ${Prisma.join(rows)}) AS v(id, deduct)
-                        WHERE b."id" = v.id::text
+                        WHERE b."id" = v.id::text AND b."quantity" >= v.deduct::numeric
                     `);
+                    if (updated !== batchDeductions.size) throw new StockRaceError();
                 }
                 if (productDeductions.size > 0) {
                     const rows = [...productDeductions.entries()].map(([id, q]) => Prisma.sql`(${id}, ${q})`);
@@ -327,14 +393,15 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            return { ...newTx, receiptNumber };
+            return { ...newTx, receiptNumber, customerBalance };
         }, { timeout: 30000 }));
 
         // Enqueue for cloud sync (only runs in Electron — no-op in web mode)
+        const { itemsPayload } = plan;
         enqueueSync('transactions', 'INSERT', transactionRecord.id, {
             cloudId:       transactionRecord.id,
             type:          'SALE',
-            totalAmount:   Number(totalAmount),
+            totalAmount:   totalAmount,
             receiptNumber: transactionRecord.receiptNumber,
             date:          transactionRecord.date,
             userId,
@@ -343,9 +410,15 @@ export async function POST(request: NextRequest) {
             discount:      discountAmount,
             priceEdited,
             paymentMethod: body.paymentMethod || (body.isCredit ? 'CREDIT' : 'CASH'),
-            paidAmount:    body.paidAmount ? Number(body.paidAmount) : (body.isCredit ? 0 : Number(totalAmount)),
+            paidAmount:    paidNum,
             items:         itemsPayload,
         })
+
+        // The debt lives on the customer row; push its new balance too (same as
+        // /api/customers/payment) so the cloud doesn't miss offline credit sales.
+        if (transactionRecord.customerBalance != null && customer) {
+            enqueueSync('customers', 'UPDATE', customer.id, { id: customer.id, balance: transactionRecord.customerBalance });
+        }
 
         // ── Audit logging — fire-and-forget so the receipt isn't delayed ───────
         // The user lookup + audit writes are extra DB round-trips that the cashier
@@ -363,7 +436,7 @@ export async function POST(request: NextRequest) {
                     'Transaction',
                     transactionRecord.id,
                     JSON.stringify({
-                        total:         Number(totalAmount),
+                        total:         totalAmount,
                         items:         items.length,
                         paymentMethod: body.paymentMethod || 'CASH',
                         ...(discountApplied ? { discount: discountAmount } : {}),
@@ -381,7 +454,7 @@ export async function POST(request: NextRequest) {
                         'APPLY_DISCOUNT',
                         'Transaction',
                         transactionRecord.id,
-                        JSON.stringify({ receipt: receiptNo, discount: discountAmount, total: Number(totalAmount) }),
+                        JSON.stringify({ receipt: receiptNo, discount: discountAmount, total: totalAmount }),
                         actorName,
                         tenantId,
                         branchId
@@ -414,7 +487,10 @@ export async function POST(request: NextRequest) {
         });
 
     } catch (error: any) {
+        if (error instanceof StockRaceError) {
+            return NextResponse.json({ error: 'الكمية المتوفرة لم تعد كافية — بيع آخر سبقك إليها. حدّث الصفحة وأعد المحاولة' }, { status: 409 });
+        }
         console.error('Transaction failed:', error);
-        return NextResponse.json({ error: error.message || 'Transaction processing failed' }, { status: 500 });
+        return NextResponse.json({ error: 'فشل إتمام عملية البيع' }, { status: 500 });
     }
 }

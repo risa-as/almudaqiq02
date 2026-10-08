@@ -1,4 +1,5 @@
 import { cookies, headers } from 'next/headers'
+import { NextResponse } from 'next/server'
 import { verifyAccessToken } from '@/lib/auth'
 
 /** Token extraction: `Authorization: Bearer` header first (mobile), then the `auth-token` cookie (web). */
@@ -46,4 +47,15 @@ export async function getSuperAdminContext(): Promise<{ superAdminId: string } |
   } catch {
     return null
   }
+}
+
+/**
+ * In-route guard for /api/super-admin/*. Middleware already blocks other roles,
+ * but routes must not depend on a single layer (a middleware bypass — such as
+ * the Next.js advisory fixed in 16.3.8 — would otherwise expose every tenant).
+ * Returns a 403 response to send, or null when the caller is a super admin.
+ */
+export async function requireSuperAdmin(): Promise<NextResponse | null> {
+  const ctx = await getSuperAdminContext()
+  return ctx ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }

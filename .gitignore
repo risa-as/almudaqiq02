@@ -78,3 +78,9 @@ check-db.js
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Local data/scratch — never commit (real customer data was once tracked here)
+dump.txt
+*.dump
+# Any alternative NEXT_DIST_DIR (e.g. .next-test) — also keeps Tailwind from scanning build output
+.next-*/

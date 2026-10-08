@@ -113,6 +113,10 @@ export async function POST(request: NextRequest) {
 
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+  // Bound the work a single request can trigger (parse + one write per row).
+  if (file.size > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: 'حجم الملف يتجاوز 5 ميغابايت' }, { status: 413 })
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -135,6 +139,9 @@ export async function POST(request: NextRequest) {
 
   if (rows.length === 0) {
     return NextResponse.json({ error: 'الملف فارغ — لا توجد بيانات للاستيراد' }, { status: 400 })
+  }
+  if (rows.length > 5000) {
+    return NextResponse.json({ error: 'الحد الأقصى 5000 صف في الملف الواحد — قسّم الملف وأعد المحاولة' }, { status: 400 })
   }
 
   // Determine target branch

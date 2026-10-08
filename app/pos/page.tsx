@@ -735,10 +735,18 @@ export default function POSPage() {
       0,
     );
 
+    // The server prices the refund from the original invoice (discounts and
+    // earlier refunds included) and, on credit invoices, cancels the open debt
+    // before any cash goes back — so this figure is an estimate; the amount to
+    // hand over is shown after confirmation.
+    const onCredit =
+      refundTx?.paymentMethod === "CREDIT" || refundTx?.paymentMethod === "SPLIT";
     if (
       !(await confirm({
         title: "تأكيد الاسترجاع",
-        message: `هل أنت متأكد من استرجاع بقيمة ${formatCurrency(refundTotal)}؟`,
+        message: onCredit
+          ? `استرجاع بقيمة تقريبية ${formatCurrency(refundTotal)} — الفاتورة آجلة، فيُخصم المبلغ من دين العميل أولاً. سيظهر المبلغ النقدي الواجب إعادته بعد التأكيد.`
+          : `هل أنت متأكد من استرجاع بقيمة ${formatCurrency(refundTotal)}؟ سيظهر المبلغ النهائي الواجب إعادته بعد التأكيد.`,
         variant: "warning",
         confirmLabel: "تأكيد الاسترجاع",
       }))
@@ -765,11 +773,26 @@ export default function POSPage() {
       });
 
       if (res.ok) {
-        toast.success("تم إرجاع الفاتورة بنجاح وإعادة المنتجات للمخزن!");
+        const result = await res.json().catch(() => null);
         setRefundModalOpen(false);
         setRefundSearchId("");
         setRefundTx(null);
         setRefundItems([]);
+        // Tell the cashier exactly what leaves the drawer (server-computed).
+        const amount = Number(result?.amount ?? refundTotal);
+        const cashOut = Number(result?.cashOut ?? amount);
+        const debtPart = Math.max(0, amount - cashOut);
+        await confirm({
+          title: "تم الاسترجاع",
+          message:
+            `أعد للعميل نقداً: ${formatCurrency(cashOut)}` +
+            (debtPart > 0 ? `
+وخُصم من دينه: ${formatCurrency(debtPart)}` : "") +
+            `
+أُعيدت المنتجات إلى المخزن.`,
+          confirmLabel: "تم",
+          variant: "info",
+        });
       } else {
         const data = await res.json();
         toast.error(data.error || "فشل الإرجاع");

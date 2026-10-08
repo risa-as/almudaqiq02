@@ -4,6 +4,10 @@ import { getAuthContext } from '@/lib/api-helpers';
 import { enqueueSync } from '@/lib/sync-enqueue';
 import { logActionAs } from '@/lib/audit';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
+import { canAccessAdmin } from '@/lib/auth';
+import { readBranchId, resolveWriteBranchId } from '@/lib/branch-scope';
+import { foreignRef, invalidOfferValue } from '@/lib/offer-validation';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -15,12 +19,13 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const activeOnly = searchParams.get('active') === 'true';
-        const branchId   = searchParams.get('branchId');
+        // Branch-bound roles get their branch's offers + the org-wide ones.
+        const branchId   = readBranchId(auth, searchParams.get('branchId'));
 
         const now = new Date();
         const andConditions: any[] = [];
 
-        if (branchId && branchId !== 'all') {
+        if (branchId) {
             andConditions.push({ OR: [{ branchId }, { branchId: null }] });
         }
 
@@ -57,6 +62,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const auth = await getAuthContext();
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    // Offers change prices at every till — managers only, never the POS role.
+    if (!canAccessAdmin(auth.role)) return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     const { tenantId, branchId: authBranchId } = auth;
 
     try {
@@ -71,7 +78,16 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const branchId = bodyBranchId || authBranchId || null;
+        const valueError = invalidOfferValue(type, value);
+        if (valueError) return NextResponse.json({ error: valueError }, { status: 400 });
+        if (await foreignRef(tenantId, productId, categoryId)) {
+            return NextResponse.json({ error: 'المنتج أو القسم غير موجود' }, { status: 400 });
+        }
+
+        // No branch = org-wide offer. A requested branch is pinned/validated.
+        const requested = bodyBranchId || authBranchId || null;
+        const branchId = requested ? await resolveWriteBranchId(auth, requested) : null;
+        if (requested && !branchId) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 });
 
         const newOffer = await prisma.offer.create({
             data: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchId } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     const { tenantId } = auth;
 
     const { searchParams } = new URL(request.url);
-    const branchId  = searchParams.get('branchId');
+    const branchId  = readBranchId(auth, searchParams.get('branchId'));
     const branchFilter = branchId && branchId !== 'all' ? { branchId } : {};
     // Customers carry their own branchId (org-level customers have branchId = null).
     // A branch view counts its own customers + the shared org-level ones — never

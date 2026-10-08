@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { resolveOptionalBranchId } from '@/lib/branch-scope'
 import { enqueueSync } from '@/lib/sync-enqueue'
+import { logActionAs } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,13 +25,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
     }
 
+    // The ledger entry is scoped to the caller's branch (staff are pinned to it).
+    const ledgerBranchId = await resolveOptionalBranchId(auth, branchId)
+    if (ledgerBranchId === undefined) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+
     const debtAmount = Number(amount)
 
     const result = await prisma.$transaction(async (tx) => {
       const ledgerEntry = await tx.supplierLedger.create({
         data: {
           supplierId: id,
-          branchId: branchId && branchId !== 'all' ? branchId : null,
+          branchId: ledgerBranchId,
           type:        'PURCHASE',
           amount:      debtAmount,
           description: description || 'رصيد افتتاحي — دين سابق',
@@ -54,6 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       description: result.ledgerEntry.description,
       date:        result.ledgerEntry.date,
     })
+
+    await logActionAs(auth, 'SUPPLIER_DEBT', 'Supplier', id, `${supplier.name} — amount: ${debtAmount}`)
 
     return NextResponse.json({ success: true, data: result })
   } catch (error) {

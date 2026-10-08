@@ -1,25 +1,18 @@
+import { getSuperAdminContext, requireSuperAdmin } from '@/lib/api-helpers'
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyAccessToken, verifyPassword, hashPassword } from "@/lib/auth";
+import { verifyPassword, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 async function getSuperAdminId(): Promise<string | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth-token")?.value;
-    if (!token) return null;
-    const payload = await verifyAccessToken(token);
-    if (payload.role !== "SUPER_ADMIN") return null;
-    return payload.sub;
-  } catch {
-    return null;
-  }
+  return (await getSuperAdminContext())?.superAdminId ?? null;
 }
 
 // GET — fetch current profile
 export async function GET() {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   const id = await getSuperAdminId();
   if (!id) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
@@ -41,6 +34,8 @@ export async function GET() {
 
 // PUT — update profile (username / email / password)
 export async function PUT(request: NextRequest) {
+  const denied = await requireSuperAdmin(); if (denied) return denied
+
   const id = await getSuperAdminId();
   if (!id) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext } from '@/lib/api-helpers'
+import { readBranchId, resolveOptionalBranchId } from '@/lib/branch-scope'
 import { enqueueSync } from '@/lib/sync-enqueue'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
     const { tenantId } = auth
 
-    const branchId = request.nextUrl.searchParams.get('branchId')
+    const branchId = readBranchId(auth, request.nextUrl.searchParams.get('branchId'))
     const specificBranch = branchId && branchId !== 'all' ? branchId : null
 
     const [suppliers, ledgerTotals] = await Promise.all([
@@ -66,8 +67,8 @@ export async function POST(request: NextRequest) {
     const openingBalance = Number(balance) || 0
     // Attribute the opening balance to the active branch so branch-scoped and
     // global views stay consistent. Falls back to the user's branch, else null.
-    const openingBranch =
-      branchId && branchId !== 'all' ? String(branchId) : (auth.branchId ?? null)
+    const openingBranch = await resolveOptionalBranchId(auth, branchId || auth.branchId)
+    if (openingBranch === undefined) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
 
     const { supplier, openingEntry } = await prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.create({

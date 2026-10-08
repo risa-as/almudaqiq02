@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/api-helpers';
+import { getAuthContext } from '@/lib/api-helpers';
+import { readBranchFilter } from '@/lib/branch-scope';
 
 export const dynamic = 'force-dynamic';
 
 const DEFAULT_MIN_STOCK = 10;
 
 export async function GET(req: NextRequest) {
-    const tenantId = await getTenantId();
-    if (!tenantId) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const auth = await getAuthContext();
+    if (!auth) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    const { tenantId } = auth;
 
     try {
         const { searchParams } = new URL(req.url);
-        const branchId = searchParams.get('branchId');
-        const branchFilter = (branchId && branchId !== 'all') ? { branchId } : {};
+        const branchFilter = readBranchFilter(auth, searchParams.get('branchId'));
         // full=1 → the complete low-stock list instead of the 10-row dashboard
         // preview. The full list is computed in memory below either way, so this
         // costs nothing extra; only the trailing slice is skipped.
@@ -51,7 +52,10 @@ export async function GET(req: NextRequest) {
             batchSums.map(b => [b.productId, b._sum.quantity ?? 0])
         );
 
-        // Use batch sum if available, fall back to product.baseStock for products with no batches
+        // Use the batch sum. Only the all-branches view may fall back to
+        // product.baseStock (legacy products without batches): baseStock is the
+        // total over every branch, so in a branch view "no batches here" means 0.
+        const isBranchView = 'branchId' in branchFilter;
         const lowStockAll = allProducts
             .map(p => ({
                 id: p.id,
@@ -59,7 +63,7 @@ export async function GET(req: NextRequest) {
                 minimumStock: p.minimumStock,
                 baseStock: batchStockMap.has(p.id)
                     ? (batchStockMap.get(p.id) ?? 0)
-                    : p.baseStock,
+                    : (isBranchView ? 0 : p.baseStock),
             }))
             .filter(p => {
                 const threshold = p.minimumStock > 0 ? p.minimumStock : DEFAULT_MIN_STOCK;

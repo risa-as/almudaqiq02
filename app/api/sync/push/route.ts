@@ -59,6 +59,36 @@ const PushSchema = z.object({
   operations: z.array(OperationSchema),
 })
 
+/**
+ * Tables whose cloud rows carry a tenantId, keyed by the push `table` name.
+ * Used by the ownership guard below: an op whose id already exists under ANOTHER
+ * tenant is refused before any upsert/delete runs. Several handlers upsert or
+ * delete by bare id (`where: { id }`), which would otherwise let a branch token
+ * overwrite a foreign tenant's product, supplier, offer or user.
+ */
+const TENANT_TABLES: Record<string, string> = {
+  categories:     'category',
+  transactions:   'transaction',
+  expenses:       'expense',
+  cashierShifts:  'cashierShift',
+  stockTransfers: 'stockTransfer',
+  products:       'product',
+  productBatches: 'productBatch',
+  suppliers:      'supplier',
+  offers:         'offer',
+  customers:      'customer',
+  users:          'user',
+}
+
+/**
+ * Roles a branch may create or assign through sync: branch staff only.
+ * A branch token is obtainable by any staff login of that branch (desktop
+ * activation), so letting it write ADMIN/SUPER_ADMIN users — or overwrite an
+ * admin's password hash — would turn a cashier into the tenant owner. Owner
+ * accounts are managed on the web.
+ */
+const SYNCABLE_ROLES = new Set(['BRANCH_MANAGER', 'CASHIER', 'STOCK_KEEPER'])
+
 type OpResult = {
   localId: string | number
   cloudId?: string
@@ -97,6 +127,16 @@ export async function POST(request: NextRequest) {
 
   const { operations } = parsed.data
   const results: OpResult[] = []
+
+  // Branch ids sent in payloads are only honoured when they belong to this
+  // tenant; anything else falls back to the token's own branch.
+  const tenantBranchIds = new Set(
+    (await prisma.branch.findMany({ where: { tenantId }, select: { id: true } })).map(b => b.id),
+  )
+  const ownBranch = (raw: unknown): string =>
+    typeof raw === 'string' && tenantBranchIds.has(raw) ? raw : branchId
+  const ownBranchOrNull = (raw: unknown): string | null =>
+    raw == null ? null : ownBranch(raw)
   const conflicts: unknown[] = []
 
   // Create sync log
@@ -113,6 +153,16 @@ export async function POST(request: NextRequest) {
     const syncId = op.cloudId ?? String(op.localId)
 
     try {
+      // Ownership guard — see TENANT_TABLES.
+      const model = TENANT_TABLES[op.table]
+      if (model) {
+        const owner = await (prisma as any)[model].findUnique({ where: { id: syncId }, select: { tenantId: true } })
+        if (owner && owner.tenantId !== tenantId) {
+          results.push({ localId: op.localId, status: 'error', reason: 'Record belongs to another tenant' })
+          continue
+        }
+      }
+
       switch (op.table) {
         case 'categories': {
           const data = op.payload as Record<string, unknown>
@@ -249,6 +299,41 @@ export async function POST(request: NextRequest) {
                 await txdb.product.updateMany({
                   where: { id: item.productId as string, tenantId },
                   data: { baseStock: { decrement: baseQty } },
+                })
+              }
+            }
+
+            // Mirror the restock of offline refunds/returns into this branch, the
+            // counterpart of the sale decrement above — without it the cloud kept
+            // returned goods out of stock forever.
+            if ((txType === 'REFUND' || txType === 'RETURN') && Array.isArray(data.items)) {
+              for (const item of data.items as any[]) {
+                const product = await txdb.product.findFirst({
+                  where: { id: item.productId as string, tenantId },
+                  select: { id: true, costPrice: true },
+                })
+                if (!product) continue
+                const unit = await txdb.productUnit.findFirst({
+                  where: { id: item.unitId, productId: product.id },
+                  select: { conversionFactor: true },
+                })
+                const baseQty = Math.abs(Number(item.quantity)) * Number(unit?.conversionFactor ?? 1)
+                if (!(baseQty > 0)) continue
+                const recent = await txdb.productBatch.findFirst({
+                  where: { productId: product.id, tenantId, branchId },
+                  orderBy: { createdAt: 'desc' },
+                  select: { id: true },
+                })
+                if (recent) {
+                  await txdb.productBatch.update({ where: { id: recent.id }, data: { quantity: { increment: baseQty } } })
+                } else {
+                  await txdb.productBatch.create({
+                    data: { tenantId, productId: product.id, branchId, quantity: baseQty, costPrice: product.costPrice, batchNumber: `REFUND-${Date.now()}` },
+                  })
+                }
+                await txdb.product.updateMany({
+                  where: { id: product.id, tenantId },
+                  data: { baseStock: { increment: baseQty } },
                 })
               }
             }
@@ -448,6 +533,8 @@ export async function POST(request: NextRequest) {
           if (op.type === 'INSERT' || op.type === 'UPDATE') {
             for (const unit of (data.units as any[] | undefined) ?? []) {
               if (!unit?.id) continue
+              const unitOwner = await prisma.productUnit.findUnique({ where: { id: unit.id }, select: { tenantId: true, productId: true } })
+              if (unitOwner && (unitOwner.tenantId !== tenantId || unitOwner.productId !== syncId)) continue
               await prisma.productUnit.upsert({
                 where: { id: unit.id },
                 create: {
@@ -496,7 +583,7 @@ export async function POST(request: NextRequest) {
             }
 
             const productId    = data.productId  as string
-            const batchBranchId = (data.branchId as string | undefined) ?? branchId
+            const batchBranchId = ownBranch(data.branchId)
             const qtyToAdd     = data.quantity   as number
             const batchCost    = data.costPrice  as number
             // isTransfer = batch created by a stock-transfer (moving existing stock).
@@ -652,6 +739,15 @@ export async function POST(request: NextRequest) {
 
         case 'offers': {
           const data = op.payload as Record<string, unknown>
+          // Product/category refs must be this tenant's; unknown ids become null.
+          const [offerProductId, offerCategoryId] = await Promise.all([
+            data.productId
+              ? prisma.product.findFirst({ where: { id: String(data.productId), tenantId }, select: { id: true } }).then(r => r?.id ?? null)
+              : Promise.resolve(null),
+            data.categoryId
+              ? prisma.category.findFirst({ where: { id: String(data.categoryId), tenantId }, select: { id: true } }).then(r => r?.id ?? null)
+              : Promise.resolve(null),
+          ])
           if (op.type === 'INSERT') {
             await prisma.offer.upsert({
               where: { id: syncId },
@@ -662,9 +758,9 @@ export async function POST(request: NextRequest) {
                 value:       (data.value as number) || 0,
                 buyQuantity: (data.buyQuantity as number | undefined) ?? null,
                 getQuantity: (data.getQuantity as number | undefined) ?? null,
-                productId:   (data.productId  as string | undefined) ?? null,
-                categoryId:  (data.categoryId as string | undefined) ?? null,
-                branchId:    (data.branchId   as string | undefined) ?? null,
+                productId:   offerProductId,
+                categoryId:  offerCategoryId,
+                branchId:    ownBranchOrNull(data.branchId),
                 startDate:   data.startDate ? new Date(data.startDate as string) : new Date(),
                 endDate:     data.endDate   ? new Date(data.endDate   as string) : null,
                 isActive:    (data.isActive as boolean) ?? true,
@@ -675,9 +771,9 @@ export async function POST(request: NextRequest) {
                 value:       (data.value as number) || 0,
                 buyQuantity: (data.buyQuantity as number | undefined) ?? null,
                 getQuantity: (data.getQuantity as number | undefined) ?? null,
-                productId:   (data.productId  as string | undefined) ?? null,
-                categoryId:  (data.categoryId as string | undefined) ?? null,
-                branchId:    (data.branchId   as string | undefined) ?? null,
+                productId:   offerProductId,
+                categoryId:  offerCategoryId,
+                branchId:    ownBranchOrNull(data.branchId),
                 startDate:   data.startDate ? new Date(data.startDate as string) : undefined,
                 endDate:     data.endDate   ? new Date(data.endDate   as string) : null,
                 isActive:    (data.isActive as boolean) ?? true,
@@ -693,8 +789,8 @@ export async function POST(request: NextRequest) {
                 ...(data.isActive   !== undefined ? { isActive:    data.isActive as boolean } : {}),
                 ...(data.startDate  !== undefined ? { startDate:   new Date(data.startDate as string) } : {}),
                 ...(data.endDate    !== undefined ? { endDate:     data.endDate ? new Date(data.endDate as string) : null } : {}),
-                ...(data.productId  !== undefined ? { productId:   (data.productId  as string | undefined) ?? null } : {}),
-                ...(data.categoryId !== undefined ? { categoryId:  (data.categoryId as string | undefined) ?? null } : {}),
+                ...(data.productId  !== undefined ? { productId:   offerProductId } : {}),
+                ...(data.categoryId !== undefined ? { categoryId:  offerCategoryId } : {}),
               },
             })
           } else if (op.type === 'DELETE') {
@@ -761,7 +857,7 @@ export async function POST(request: NextRequest) {
               data: {
                 id:          syncId,
                 supplierId,
-                branchId:    (data.branchId as string | undefined) ?? null,
+                branchId:    ownBranchOrNull(data.branchId),
                 type:        ledgerType,
                 amount,
                 description: (data.description as string | undefined) ?? null,
@@ -801,7 +897,7 @@ export async function POST(request: NextRequest) {
                 address: (data.address as string | undefined) ?? null,
                 balance: (data.balance as number) || 0,
                 creditLimit: (data.creditLimit as number) || 0,
-                ...(data.branchId ? { branchId: data.branchId as string } : {}),
+                ...(data.branchId ? { branchId: ownBranch(data.branchId) } : {}),
               },
             })
             results.push({ localId: op.localId, cloudId: customer.id, status: 'applied' })
@@ -837,6 +933,17 @@ export async function POST(request: NextRequest) {
           // across the identity boundary, so we map any non-null local branchId
           // to THIS branch's cloud id (from the token), and null stays null.
           const userBranchId = data.branchId ? branchId : null
+          // Role comes from the desktop — clamp it to branch-staff roles.
+          if (data.role !== undefined && !SYNCABLE_ROLES.has(String(data.role))) {
+            results.push({ localId: op.localId, status: 'error', reason: `Role not allowed via sync: ${String(data.role)}` })
+            break
+          }
+          // Existing cloud users may only be changed when they are staff of THIS branch.
+          const cloudUser = await prisma.user.findFirst({ where: { id: syncId, tenantId }, select: { role: true, branchId: true } })
+          if (cloudUser && (!SYNCABLE_ROLES.has(cloudUser.role) || cloudUser.branchId !== branchId)) {
+            results.push({ localId: op.localId, status: 'error', reason: 'User is managed on the web, not via branch sync' })
+            break
+          }
 
           if (op.type === 'INSERT') {
             await prisma.user.upsert({

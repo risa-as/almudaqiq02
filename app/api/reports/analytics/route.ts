@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/multi-tenant/prisma';
 import { getAuthContext } from '@/lib/api-helpers';
+import { pinnedBranchId } from '@/lib/branch-scope';
 import { guardFeature } from '@/lib/plan-features';
 import { RELATION_JOIN } from '@/lib/prisma-runtime';
 
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
         const tenantId = auth.tenantId
         const userBranchId = auth.branchId ?? ''
         const { searchParams } = new URL(request.url);
-        const branchId = searchParams.get('branchId') || userBranchId || undefined;
+        const branchId = pinnedBranchId(auth) ?? (searchParams.get('branchId') || userBranchId || undefined);
         const startDateParam = searchParams.get('startDate');
         const endDateParam = searchParams.get('endDate');
 
