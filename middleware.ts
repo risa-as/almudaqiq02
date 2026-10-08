@@ -78,6 +78,16 @@ const STOCK_KEEPER_BLOCKED = [
   '/transfers',
 ]
 
+// Read-only extras for the cashier: the POS prints the branch's store settings
+// on the receipt and filters the catalogue by category. Without these the
+// requests 403 and the receipt shows the generic "المتجر" header. GET only —
+// changing settings or categories stays with managers. Exact path for settings
+// so /api/settings/backup and /restore are not opened up.
+function isCashierReadOnly(pathname: string, method: string): boolean {
+  if (method !== 'GET') return false
+  return pathname === '/api/settings' || pathname === '/api/categories'
+}
+
 function isAllowed(pathname: string, allowList: string[]): boolean {
   return allowList.some(p => pathname.startsWith(p))
 }
@@ -132,7 +142,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Role-based path restrictions ─────────────────────────────────────────
 
-  if (role === 'CASHIER' && !isAllowed(pathname, CASHIER_ALLOWED)) {
+  if (role === 'CASHIER' && !isAllowed(pathname, CASHIER_ALLOWED) && !isCashierReadOnly(pathname, request.method)) {
     return pathname.startsWith('/api/')
       ? NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
       : NextResponse.redirect(new URL('/pos', request.url))

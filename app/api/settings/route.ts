@@ -1,23 +1,15 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { verifyAccessToken } from '@/lib/auth'
+import { getAuthContext } from '@/lib/api-helpers'
 import { enqueueSync } from '@/lib/sync-enqueue'
 import { logAction } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
 async function getAuthPayload(): Promise<{ tenantId: string; branchId: string | null; role: string } | null> {
-  try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get('auth-token')?.value
-    if (!token) return null
-    const payload = await verifyAccessToken(token)
-    if (!payload.tenantId) return null
-    return { tenantId: payload.tenantId, branchId: payload.branchId ?? null, role: payload.role ?? '' }
-  } catch {
-    return null
-  }
+  // Shared helper: accepts the web cookie and the mobile Bearer token alike.
+  const auth = await getAuthContext()
+  return auth ? { tenantId: auth.tenantId, branchId: auth.branchId ?? null, role: auth.role ?? '' } : null
 }
 
 async function firstBranchId(tenantId: string): Promise<string | null> {
