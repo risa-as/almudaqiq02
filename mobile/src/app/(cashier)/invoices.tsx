@@ -212,6 +212,16 @@ ${t.cashBack(Number(res.cashOut ?? res.amount ?? 0), Math.max(0, Number(res.amou
 
   const totalReturnable = detail ? detail.items.reduce((sum, item) => sum + returnableOf(item), 0) : 0
 
+  /**
+   * أسعار البنود قبل خصم الفاتورة، والخادم يوزّع الخصم على البنود بالنسبة نفسها
+   * (lib/returns.ts). نعرض في رسالة التأكيد المبلغ الذي سيُعاد فعلاً لا سعر الرف.
+   */
+  const paidRatio = (() => {
+    if (!detail) return 1
+    const gross = detail.items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0)
+    return gross > 0 ? Math.min(1, Math.max(0, Number(detail.totalAmount) / gross)) : 1
+  })()
+
   const submitReturn = () => {
     if (!detail) return
     const items = detail.items
@@ -224,7 +234,7 @@ ${t.cashBack(Number(res.cashOut ?? res.amount ?? 0), Math.max(0, Number(res.amou
         price: Number(item.price),
       }))
     if (items.length === 0) return
-    const amount = items.reduce((sum, it) => sum + it.price * it.quantity, 0)
+    const amount = items.reduce((sum, it) => sum + it.price * it.quantity, 0) * paidRatio
     appAlert.confirm({
       title: t.confirmReturnTitle,
       message: t.confirmReturnMessage(`${formatMoney(amount)} ${ar.common.currency}`),
@@ -248,7 +258,7 @@ ${t.cashBack(Number(res.cashOut ?? res.amount ?? 0), Math.max(0, Number(res.amou
         cost: Number(item.cost || 0),
       }))
     if (items.length === 0) return
-    const amount = items.reduce((sum, it) => sum + it.price * it.quantity, 0)
+    const amount = items.reduce((sum, it) => sum + it.price * it.quantity, 0) * paidRatio
     appAlert.confirm({
       title: t.confirmRefundTitle,
       message: t.confirmRefundMessage(`${formatMoney(amount)} ${ar.common.currency}`),

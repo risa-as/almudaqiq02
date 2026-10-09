@@ -82,7 +82,8 @@ export function InvoiceCard({
           <View style={styles.invIdCol}>
             <View style={styles.invNumberRow}>
               <Text style={styles.invNumber} numberOfLines={1}>
-                #{tx.receiptNumber ?? tx.id.slice(-6)}
+                {/* الإرجاع بلا رقم إيصال، والقائمة ترسل المعرّف الكامل بدلاً منه — نختصره */}
+                #{tx.receiptNumber && tx.receiptNumber !== tx.id ? tx.receiptNumber : tx.id.slice(-6)}
               </Text>
               {!isSale ? (
                 <View style={styles.typeChip}>

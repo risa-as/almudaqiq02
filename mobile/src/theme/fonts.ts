@@ -1,5 +1,5 @@
 import React from 'react'
-import { StyleSheet, Text, TextInput } from 'react-native'
+import { Platform, StyleSheet, Text, TextInput } from 'react-native'
 import {
   Cairo_400Regular,
   Cairo_500Medium,
@@ -63,6 +63,13 @@ export function applyGlobalFont(): void {
       const fontFamily = familyForWeight(flat?.fontWeight)
       // العائلة أولًا (أدنى أولوية)، ثم أنماط العنصر، ثم إلغاء fontWeight لمنع
       // التثخين الصناعي على iOS مع الحفاظ على الوزن المخبوز داخل العائلة.
+      // على الويب العنصر الناتج <span> حقيقي لا يقبل مصفوفة أنماط (يرمي
+      // "Indexed property setter is not supported")، فنمرّر كائنًا مدمجًا.
+      if (Platform.OS === 'web') {
+        return React.cloneElement(el, {
+          style: { fontFamily, ...(flat ?? {}), fontWeight: 'normal' as const },
+        })
+      }
       return React.cloneElement(el, {
         style: [{ fontFamily }, el.props.style, { fontWeight: 'normal' as const }],
       })

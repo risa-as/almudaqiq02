@@ -99,6 +99,16 @@ export async function planReturn(
   }
   const unitMap = new Map(units.map(u => [u.id, u]))
 
+  // Line prices are pre-discount. Spread the invoice-level discount (offers,
+  // manual discount) over every line, otherwise a partial return of a discounted
+  // invoice pays back the full shelf price — e.g. 1 of 2 items sold at 10% off
+  // refunded 1,250 instead of the 1,125 actually paid. Never scales above 1.
+  let grossSold = 0
+  for (const s of sold.values()) grossSold += s.value
+  const paidRatio = grossSold > 0
+    ? Math.min(1, Math.max(0, Number(originalTx.totalAmount) / grossSold))
+    : 1
+
   const requested = new Map<string, number>()
   for (const it of items) {
     const k = key(it.productId, it.unitId)
@@ -117,7 +127,7 @@ export async function planReturn(
     if (qty > remaining + 1e-9) {
       throw new ReturnError(`الكمية المطلوب إرجاعها تتجاوز المتاح (المتبقّي: ${Math.max(0, remaining)})`)
     }
-    const unitPrice = s.value / s.qty
+    const unitPrice = (s.value / s.qty) * paidRatio
     lines.push({
       productId,
       unitId,
@@ -129,9 +139,9 @@ export async function planReturn(
     })
   }
 
-  // Never give back more than the customer actually paid for this sale. The line
-  // prices are pre-discount, so a full return of a discounted invoice is capped
-  // at the invoice total (minus whatever was already refunded).
+  // Never give back more than the customer actually paid for this sale: capped
+  // at the invoice total minus whatever was already refunded (guards rounding
+  // and any earlier return made before discounts were spread over the lines).
   const alreadyRefunded = priorTxs.reduce(
     (sum, t) => sum + Math.abs(Number(t.totalAmount)),
     0,
